@@ -3,17 +3,23 @@
 ## Executive Summary
 
 This document outlines the architecture and implementation plan for migrating schedulingTBD's Discovery Schema (DS) system to an MCP-based approach. The current system uses a complex internal protocol with message types like CONVERSATION-HISTORY, PURSUE-EADS, etc. We need to redesign this as MCP tools while preserving the sophisticated orchestration and interviewing capabilities.
+The term EADS is deprecated. We use "Discovery Schema" and "DS" instead. I have updated this file to reflect the transition to the new terminology we will try to achieve on implementing.
+We will use the terminology Schema-Conforming Response (SCR) for the interviewers interpretation of the natural language (NL) response from interviewees.
+We will use Aggregregated Schema-Conforming Response (ASCR) for the "best" summary of the SCR's for a given DS.
+The project DB keeps the SCR in the object that also contains the interviewees' natural language response.
+The project DB updates the ASCR (not stored with the NL response; stored elsewhere) after formulating the SCR.
+The best example DB of this working-- we don't have many --is examples/schedulingTBD/data/projects/sur-craft-beer-4script.edn. Look at the db attribute  :project/summary-dstructs
 
 ## Current Architecture Overview
 
 ### Key Components
 
-1. **Orchestrator Agent**
-   - Selects which EADS (Expert-defined Argument Discovery Schema) to pursue
+1. **Orchestrator Agent** (see `examples/schedulingTBD/resources/agents/orchestrator.txt`)
+   - Selects which EADS (Example Annotated Data Structure) to pursue
    - Monitors conversation progress
    - Directs interview flow across four domains: Process, Data, Resources, Optimality
 
-2. **Interviewer Agents** (4 types)
+2. **Interviewer Agents** (4 types) (see `examples/schedulingTBD/resources/agents/iviewrs/base-iviewr-instructions.txt`)
    - Process Interviewer
    - Data Interviewer
    - Resources Interviewer
@@ -53,9 +59,9 @@ This document outlines the architecture and implementation plan for migrating sc
 #### Orchestrator Tools
 
 ```clojure
-;; 1. Get next EADS recommendation
+;; 1. Get next Discovery Schema (was "EADS" now "DS") recommendation
 {:name "get_next_eads"
- :description "Analyzes conversation history and recommends next EADS to pursue"
+ :description "Analyzes conversation history and recommends next DS to pursue"
  :parameters {:project_id :string
               :conversation_id :string}
  :returns {:eads_id :string
@@ -63,9 +69,9 @@ This document outlines the architecture and implementation plan for migrating sc
            :interviewer_type :string ;; "process", "data", etc.
            :priority :number}}
 
-;; 2. Initialize EADS pursuit
+;; 2. Initialize DS pursuit
 {:name "start_eads_pursuit"
- :description "Begins working on a specific EADS"
+ :description "Begins working on a specific DS"
  :parameters {:project_id :string
               :conversation_id :string
               :eads_id :string}
@@ -73,9 +79,9 @@ This document outlines the architecture and implementation plan for migrating sc
            :current_state :object
            :budget :number}}
 
-;; 3. Get EADS library
+;; 3. Get DS library
 {:name "list_available_eads"
- :description "Lists all EADS templates available for a given interviewer type"
+ :description "Lists all DS templates available for a given interviewer type"
  :parameters {:interviewer_type :string ;; "process", "data", etc.
               :completed_eads [:string] ;; already completed
               :project_context :object} ;; optional context
@@ -90,33 +96,35 @@ This document outlines the architecture and implementation plan for migrating sc
 ```clojure
 ;; 1. Get next question
 {:name "get_next_question"
- :description "Determines next question based on EADS and responses so far"
+ :description "Determines next question based on DS and current ASCR"
  :parameters {:project_id :string
               :conversation_id :string
-              :eads_id :string
-              :responses_so_far :object}
+              :ds_id :string}
  :returns {:question :string
            :question_type :string ;; "text", "table", "choice"
            :table_template :string ;; if table type
            :help_text :string
-           :budget_cost :number}}
+           :budget_cost :number
+           :ds_template :object      ;; The full DS template for reference
+           :current_ascr :object}}   ;; Current aggregated SCR
 
 ;; 2. Process answer
-{:name "process_eads_answer"
- :description "Processes user answer and updates EADS data structure"
+{:name "process_ds_answer"
+ :description "Processes user answer and updates DS data structure. Note that we store the SCR"
  :parameters {:project_id :string
               :conversation_id :string
-              :eads_id :string
+              :ds_id :string
               :question_id :string
               :answer :string}
- :returns {:data_structure_update :object
+ :returns {:scr :object                ;; New Schema-Conforming Response
+           :updated_ascr :object       ;; Updated Aggregated SCR
            :commit_notes :string
-           :completeness :number ;; 0.0 to 1.0
-           :next_action :string}} ;; "continue", "complete", "needs_clarification"
+           :completeness :number       ;; 0.0 to 1.0
+           :next_action :string}}      ;; "continue", "complete", "needs_clarification"
 
 ;; 3. Get EADS status
-{:name "get_eads_status"
- :description "Gets current state of EADS completion"
+{:name "get_ds_status"
+ :description "Gets current state of DS completion"
  :parameters {:project_id :string
               :conversation_id :string
               :eads_id :string}
@@ -127,9 +135,9 @@ This document outlines the architecture and implementation plan for migrating sc
            :budget_used :number
            :budget_remaining :number}}
 
-;; 4. Finalize EADS
+;; 4. Finalize DS
 {:name "finalize_eads"
- :description "Marks EADS as complete and stores final data structure"
+ :description "Marks DS as complete and stores final data structure"
  :parameters {:project_id :string
               :conversation_id :string
               :eads_id :string
@@ -200,6 +208,18 @@ Since MCP tools are stateless, we need robust state management:
    - Tool calls trigger state updates
    - Each EADS pursuit is tracked independently
    - Aggregated SCR updated when EADS completes
+
+3. **Key State Management Insights**
+   - **Stateless Tool Challenge**: Every MCP tool call must be provided with both the Discovery Schema template and the current ASCR
+   - **Pure Function Design**: Each tool becomes essentially a pure function: `(DS, ASCR, new_input) → (action, updated_ASCR)`
+   - **State Persistence**: The database must maintain:
+     - Individual SCRs (stored with each NL response in conversation history)
+     - ASCR (best summary, stored separately in `:summary-dstructs` as seen in `examples/schedulingTBD/data/projects/sur-craft-beer-4script.edn`)
+   - **Efficient State Passing**: Tools need strategies for:
+     - Fetching relevant DS templates
+     - Retrieving current ASCR state
+     - Merging new SCRs into existing ASCR
+     - Handling conflicts when SCRs provide different values
 
 ### Integration Strategy
 
@@ -276,24 +296,65 @@ System: [Periodically calls get_next_eads]
 ### Technical Considerations
 
 1. **Tool Response Sizes**
-   - EADS instructions can be large
+   - Discovery Schema (EADS) instructions can be large
    - May need pagination or streaming for large schemas
-   - Consider caching frequently used EADS
+   - Consider caching frequently used Discovery Schema (EADS)
 
 2. **Validation**
-   - EADS completion validation in Clojure
+   - Discovery Schema (EADS) completion validation in Clojure
    - Schema validation for data structures
    - Type checking for refined values
 
 3. **Extensibility**
-   - Plugin architecture for custom EADS
+   - Plugin architecture for custom Discovery Schema (EADS)
    - Domain-specific validators
    - Custom question generators
 
 ### Migration Path
 
-1. **Week 1-2**: Implement core EADS tools
-   - Load EADS from JSON
+#### Pre-Week 1-2 Preparation Tasks
+
+1. **Fix Current Bugs** (30-60 mins)
+   - Fix the `get_interview_answers` null pointer error
+   - Fix the issue where `submit_answer` isn't progressing to the next question properly
+   - These bugs will block testing of the new DS system
+
+2. **Create DS/EADS File Structure** (20 mins)
+   ```bash
+   # Create directories for Discovery Schemas
+   mkdir -p resources/discovery-schemas/process
+   mkdir -p resources/discovery-schemas/data
+   mkdir -p resources/discovery-schemas/resources
+   mkdir -p resources/discovery-schemas/optimality
+
+   # Copy over the existing EADS JSON files from schedulingTBD
+   cp examples/schedulingTBD/resources/agents/iviewrs/EADS/process/*.json \
+      resources/discovery-schemas/process/
+   ```
+
+3. **Document Current State** (30 mins)
+   - Create a debugging guide for the current interview system
+   - Document what's working and what's not in `docs/current-state.md`
+
+4. **Create a Simple DS Loader Spike** (45 mins)
+   - Proof of concept for loading DS from JSON files
+   - Functions: `load-ds-from-file`, `list-available-ds`, `get-ds-by-id`
+   - Test with existing warm-up-with-challenges.json
+
+5. **Review Existing DS/EADS Examples** (20 mins)
+   - Look at 2-3 EADS JSON files in `examples/schedulingTBD/resources/agents/iviewrs/EADS/`
+   - Make notes about structure and patterns
+
+6. **Set Up Development Workflow** (15 mins)
+   - Add helper functions for testing (reset-interview-db!, quick-test-interview)
+   - Create shortcuts for common development tasks
+
+7. **Create a Test Checklist** (10 mins)
+   - Document what needs to work before DS implementation
+   - Basic interview flow, state persistence, database queries, MCP responses
+
+#### Week 1-2: Implement core Discovery Schema (EADS) tools
+   - Load Discovery Schema (EADS) from JSON
    - Basic pursuit tracking
    - Question generation
 
@@ -304,7 +365,7 @@ System: [Periodically calls get_next_eads]
 
 3. **Week 5-6**: Integration
    - Connect with existing interview system
-   - Test with real EADS
+   - Test with real Discovery Schema (EADS)
    - Refine tool interfaces
 
 4. **Week 7-8**: Polish and extend
@@ -312,10 +373,60 @@ System: [Periodically calls get_next_eads]
    - Implement validation
    - Performance optimization
 
+### Testing Strategy with Surrogate Experts
+
+The system includes a comprehensive testing approach using "surrogate experts" - AI agents that simulate domain experts for various manufacturing domains:
+
+1. **Surrogate Expert Implementation** (see `examples/schedulingTBD/src/server/scheduling_tbd/surrogate.clj`)
+   - AI agents configured to act as domain experts in specific industries
+   - Respond to interview questions as if managing a company in that domain
+   - Generate realistic responses about production processes, scheduling challenges, and constraints
+
+2. **How It's Made Integration** (see `examples/schedulingTBD/src/server/scheduling_tbd/how_made.clj`)
+   - Database of ~1600 segments from Science Channel's "How It's Made" show
+   - Each segment represents a different manufacturing process
+   - Provides diverse test cases across many industries
+
+3. **Proposed MCP Testing Tools**
+   ```clojure
+   ;; Create a surrogate expert for testing
+   {:name "create_surrogate_expert"
+    :description "Creates an AI surrogate that acts as a domain expert for testing"
+    :parameters {:product :string        ;; e.g., "craft beer", "ball bearings"
+                 :expertise_level :string ;; "basic", "intermediate", "expert"
+                 :company_size :string}   ;; "small", "medium", "large"
+    :returns {:surrogate_id :string
+              :system_prompt :string
+              :domain_knowledge :object}}
+
+   ;; Run automated interview with surrogate
+   {:name "run_surrogate_interview"
+    :description "Conducts an automated interview with a surrogate expert"
+    :parameters {:surrogate_id :string
+                 :ds_sequence [:string]   ;; List of DS IDs to pursue
+                 :max_questions :number}
+    :returns {:completed_ds [:string]
+              :ascr :object
+              :transcript :object
+              :success_metrics :object}}
+   ```
+
+4. **Testing Scenarios**
+   - **Unit Testing**: Individual DS completion with predefined responses
+   - **Integration Testing**: Full interview flows with surrogate experts
+   - **Stress Testing**: Running interviews for all 1600 "How It's Made" segments
+   - **Validation Testing**: Comparing generated MiniZinc models against known solutions
+
+5. **Benefits of Surrogate Testing**
+   - Rapid iteration without human involvement
+   - Consistent, repeatable test scenarios
+   - Coverage of diverse manufacturing domains
+   - Ability to test edge cases and error handling
+
 ### Success Criteria
 
 1. **Functional Requirements**
-   - [ ] Can load and execute all existing EADS
+   - [ ] Can load and execute all existing Discovery Schema (EADS)
    - [ ] Maintains conversation continuity
    - [ ] Generates valid SCRs
    - [ ] Supports orchestration decisions
@@ -330,9 +441,9 @@ System: [Periodically calls get_next_eads]
 
 1. **Orchestration Complexity**: Should orchestration logic be in tools or in Claude's reasoning?
 2. **State Granularity**: How much state in DB vs. returned in tool responses?
-3. **EADS Evolution**: How to handle EADS version changes?
+3. **Discovery Schema (EADS) Evolution**: How to handle Discovery Schema (EADS) version changes?
 4. **Multi-user**: Support for collaborative interviews?
 
 ### Conclusion
 
-This architecture preserves the sophisticated Discovery Schema system while adapting it to MCP's tool-based paradigm. The key innovation is decomposing the complex protocol into discrete, composable tools that can be orchestrated by either AI agents or automated systems. This provides flexibility while maintaining the domain expertise encoded in the EADS templates.
+This architecture preserves the sophisticated Discovery Schema system while adapting it to MCP's tool-based paradigm. The key innovation is decomposing the complex protocol into discrete, composable tools that can be orchestrated by either AI agents or automated systems. This provides flexibility while maintaining the domain expertise encoded in the Discovery Schema (EADS) templates.
