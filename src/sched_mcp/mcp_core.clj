@@ -3,9 +3,7 @@
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.util :as util]
-   [sched-mcp.sutil :as sutil :refer [log!]]
-   [sched-mcp.tools.iviewr-tools :as itools])
+   [sched-mcp.util :as util :refer [log!]]) ; for mount
   (:import [java.io BufferedReader InputStreamReader PrintWriter]))
 
 (def ^:diag diag (atom nil))
@@ -109,9 +107,8 @@
         (error-response id -32601 (str "Method not found: " method))))))
 
 (defn run-server
-  "Main server loop"
+  "Main server loop. Don't do any output to console here except JSON-RPC!"
   [{:keys [_tool-specs _server-info] :as config}]
-  ;(log! :info "Starting MCP server loop")
   (try
     (loop []
       (if-let [request (read-json-rpc)]
@@ -133,29 +130,16 @@
     (finally
       (log! :info "Server shutting down"))))
 
-(def server-info
-  {:name "schedMCP"
-   :version "0.1.0"})
+(defn start-server
+  "A no-op"
+  []
+  :started)
 
-  ;; Start MCP server with our tools
-(def server-config
-  {:tool-specs itools/tool-specs
-   :server-info server-info})
-
-;;; ToDo: Implement
 (defn stop-server
   []
   (log! :info "Stopping MCP server.")
   (shutdown-agents))
 
-(defn start-server
-  "Start the MCP server with given configuration"
-  []
-  (let [{:keys [_tool-specs server-info]} server-config]
-    ;(util/config-log!)
-    ;(log! :info (str "Starting " (:name server-info) " v" (:version server-info)))
-    (run-server server-config)))
-
 (defstate mcp-core-server
   :start (start-server)
-  :stop (stop-server))
+  :stop  (stop-server))

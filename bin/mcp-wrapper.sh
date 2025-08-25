@@ -19,4 +19,4 @@ mkdir -p "$SCHEDULING_TBD_DB/system"
 cd "$(dirname "$0")/.."
 
 # Start the MCP server
-exec clojure -M -m sched-mcp.main
+exec clojure -M:dev -m sched-mcp.main

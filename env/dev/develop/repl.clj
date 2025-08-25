@@ -28,11 +28,15 @@
    'mount 'mount.core
    ;;'p 'promesa.core
    ;;'px 'promesa.exec
-   ;;'core 'sched-mcp.core
-   'db    'sched-mcp.db
-   'sutil 'sched-mcp.sutil
-   'util  'sched-mcp.util
-   'tel 'taoensso.telemere
+   'iviewr 'sched-mcp.interview
+   'main   'sched-mcp.main
+   'core   'sched-mcp.mcp-core
+   'db     'sched-mcp.db
+   'sutil  'sched-mcp.sutil
+   'itools 'shed-mcp.tools.iviewr-tools
+   'util   'sched-mcp.util
+   'warm   'sched-mcp.warm-up
+   'tel    'taoensso.telemere
    #_#_'openai 'wkok.openai-clojure.api})
 
 (defn ^:diag ns-setup!

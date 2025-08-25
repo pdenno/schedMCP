@@ -7,17 +7,15 @@
    [clojure.string]
    [clojure.spec.alpha :as s]
    [clojure.tools.namespace.repl :as tools-ns :refer [set-refresh-dirs]]
-   [datahike.api :as d]
    [develop.repl :refer [ns-setup! undo-ns-setup!]] ; for use at REPL.
    [develop.dutil]
    [expound.alpha :as expound]
    [mount.core :as mount]
    [lambdaisland.classpath.watch-deps :as watch-deps] ; hot loading for deps.
    ;; ToDo: You need this to work
-   [sched-mcp.core :refer [server]] ; for mount.
    [taoensso.telemere :as tel :refer [log!]]))
 
-[#_server ns-setup! undo-ns-setup!] ; for mount
+[ns-setup! undo-ns-setup!] ; for mount
 
 ;;; If you get stuck do: (clojure.tools.namespace.repl/refresh)
 
@@ -26,15 +24,16 @@
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 (add-tap (bound-fn* clojure.pprint/pprint))
-(set-refresh-dirs "src/server/scheduling_tbd" #_"test/scheduling_tbd") ; Put here as many as you need. test messes with ns-setup!
+(set-refresh-dirs "src/schedMCP" #_"test/schedMCP") ; Put here as many as you need. test messes with ns-setup!
 (s/check-asserts true) ; Error on s/assert, run s/valid? rather than just returning the argument.
 (tel/call-on-shutdown! tel/stop-handlers!)
 
-(defn ^:admin start
-  "Start the web server"
+;;; I don't use this. I start with
+#_(defn ^:admin start
+  "Start the MCP main loop and mount-based services."
   []
   (try
-    (let [res (mount/start)
+    (let [res (main/-main)
           info (str "   " (clojure.string/join ",\n    " (:started res)))]
       (log! :info (str "started:\n" info)))
     (catch Exception e

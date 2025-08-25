@@ -59,3 +59,7 @@ Claude Desktop config (`~/.config/Claude/claude_desktop_config.json`):
 2. Fix the `get_interview_answers` null pointer error
 3. Enhance database inspection tools
 4. Add hot-reload capability to MCP server
+5. **Implement Discovery Schema (EADS)** - The core idea from schedulingTBD
+   - Discovery schema defines expert-defined ways of collecting schema-conforming responses (SCR)
+   - See docs/SERC-AI4SE-2025-denno-v9.pdf for theoretical background
+   - Reference implementation: examples/schedulingTBD/src/server/scheduling_tbd/iviewr/domain/process/warm-up-with-challenges.clj

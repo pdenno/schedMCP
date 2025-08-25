@@ -28,6 +28,7 @@
 
  ;; See .dir-locals.el for some defaults on CIDER C-c M-j
  :aliases {:dev {:extra-paths ["test" "env/dev"]
+                 :jvm-opts ["-Djdk.attach.allowAttachSelf"]
                  :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
                               com.lambdaisland/classpath {:mvn/version "0.6.58"}
                               expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
