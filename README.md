@@ -143,7 +143,7 @@ You can test individual tools in the REPL:
 (require '[sched-mcp.tools.interview :as tools])
 
 ;; Test starting an interview
-((:tool-fn tools/start-interview-tool-spec) 
+((:tool-fn tools/start-interview-tool-spec)
  {:project_name "Test Brewery" :domain "food-processing"})
 
 ;; Test getting context

@@ -1,0 +1,74 @@
+(ns sched-mcp.tools.registry
+  "Central registry for all schedMCP tools"
+  (:require
+   ;; Existing tools
+   [sched-mcp.tools.iviewr-tools :as itools]
+   ;; New tools
+   [sched-mcp.tools.interviewer.core :as interviewer]
+   [sched-mcp.tools.orchestrator.core :as orchestrator]
+   [sched-mcp.tool-system :as tool-system]
+   [sched-mcp.ds-schema :as ds-schema]
+   [sched-mcp.interview :as interview]
+   [datahike.api :as d]))
+
+;;; System atom for sharing state between tools
+(def system-atom (atom {}))
+
+;;; Helper to convert our tool configs to MCP specs
+(defn tool-config->spec
+  "Convert our tool configuration to MCP tool spec"
+  [tool-config]
+  {:name (tool-system/tool-name tool-config)
+   :description (tool-system/tool-description tool-config)
+   :schema (tool-system/tool-schema tool-config)
+   :tool-fn #(tool-system/execute-tool-safe tool-config %)})
+
+;;; Initialize DS schema in project databases
+(defn ensure-ds-schema!
+  "Ensure DS schema is added to project database"
+  [project-id]
+  (try
+    (let [conn (sched-mcp.sutil/connect-atm project-id)]
+      ;; Check if DS schema already added by looking for a DS attribute
+      (when-not (d/entity @conn :pursuit/id)
+        ;; Add DS schema
+        (ds-schema/add-ds-schema! conn)
+        (println "Added DS schema to project" project-id)))
+    (catch Exception e
+      (println "Error adding DS schema:" (.getMessage e)))))
+
+;;; Wrap original tools to add DS schema
+(defn wrap-start-interview
+  "Wrap start-interview to ensure DS schema"
+  [original-fn]
+  (fn [params]
+    (let [result (original-fn params)]
+      (when (:project_id result)
+        (ensure-ds-schema! (keyword (:project_id result))))
+      result)))
+
+;;; Build complete tool registry
+(defn build-tool-registry
+  "Build the complete set of tools for schedMCP"
+  []
+  (let [;; Create new tools
+        interviewer-tools (interviewer/create-interviewer-tools system-atom)
+        orchestrator-tools (orchestrator/create-orchestrator-tools system-atom)
+
+        ;; Convert to specs
+        new-tool-specs (mapv tool-config->spec
+                             (concat interviewer-tools orchestrator-tools))
+
+        ;; Get original tools and wrap start-interview
+        original-specs (mapv (fn [spec]
+                               (if (= (:name spec) "start_interview")
+                                 (update spec :tool-fn wrap-start-interview)
+                                 spec))
+                             itools/tool-specs)]
+    ;; Combine all tools
+    (vec (concat original-specs new-tool-specs))))
+
+;;; Main registry
+(def tool-specs
+  "All tool specifications for schedMCP"
+  (build-tool-registry))

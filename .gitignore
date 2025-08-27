@@ -11,6 +11,7 @@ pom.xml.asc
 /classes/
 /target/
 /checkouts/
+/test/dbs/
 .nrepl-port
 .cpcache/
 .clj-kondo/inline-configs

@@ -92,7 +92,15 @@
       :else
       (let [pid (keyword project_id)
             cid (keyword conversation_id)
-            result (interview/submit-answer pid cid answer question_id)]
+            ;; If no question_id provided, get the current question
+            current-q (when-not question_id
+                        (warm-up/get-next-question pid cid))
+            qid (or question_id
+                    (when current-q (name (:id current-q))))
+            _ (alog! (str "MCP Tool: submit-answer using question_id=" qid))
+            result (if qid
+                     (interview/submit-answer pid cid answer qid)
+                     {:error "No current question to answer"})]
         (alog! (str "MCP Tool: submit-answer result: " (pr-str result)))
         (if (:error result)
           result
@@ -135,13 +143,16 @@
             cid (keyword conversation_id)
             eads-data (warm-up/get-eads-data pid cid)]
         (if eads-data
-          {:phase (name (:phase eads-data))
-           :complete? (:complete? eads-data)
+          {:phase (name (get eads-data :phase :unknown))
+           :complete? (get eads-data :complete? false)
            :answers (reduce-kv (fn [m k v]
                                  (assoc m (name k) v))
                                {}
-                               (:answers eads-data))}
-          {:error "No interview data found"})))
+                               (get eads-data :answers {}))}
+          {:phase "unknown"
+           :complete? false
+           :answers {}
+           :message "No interview data found yet"})))
     (catch Exception e
       {:error (str "Failed to get answers: " (.getMessage e))})))
 

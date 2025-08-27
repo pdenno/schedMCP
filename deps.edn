@@ -19,7 +19,8 @@
         org.clojure/clojure {:mvn/version "1.12.0"}
         org.clojure/core.unify {:mvn/version "0.7.0"}
         org.clojure/data.xml {:mvn/version "0.0.8"}
-        org.clojure/tools.logging {:mvn/version "1.3.0"}}
+        org.clojure/tools.logging {:mvn/version "1.3.0"}
+        net.clojars.wkok/openai-clojure {:mvn/version "0.18.1"}}
 
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl (starts as shown in the :nrepl :alias below.)

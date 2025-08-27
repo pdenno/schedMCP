@@ -2,7 +2,7 @@
   "Main entry point for schedMCP server"
   (:require
    [mount.core :as mount]
-   [sched-mcp.tools.iviewr-tools :as itools]
+   [sched-mcp.tools.registry :as registry]
    [sched-mcp.mcp-core :as mcp-core]))
 
 (def server-info
@@ -11,7 +11,7 @@
 
   ;; Start MCP server with our tools
 (def server-config
-  {:tool-specs itools/tool-specs
+  {:tool-specs registry/tool-specs
    :server-info server-info})
 
 (defn -main

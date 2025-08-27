@@ -17,12 +17,12 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
 - **Boolean variables**: End with `?` (e.g. `inv/active?`, `mock?`)
 - **Mutating functions**: End with `!` (e.g. `update-db!`, `reset-state!`)
 - **Diagnostic definitions**: Tag with `^:diag` metadata for REPL-only usage
-- **File naming**: Filenames should be unique within the project.
+- **File naming**: Filenames should be unique within the project, the exception being core.clj which can occur in each MCP tool directory.
 - **Namespace aliases**: These should be short and `itools` not `interviewer-tools`. The same alias should be used in all files.
 
 ### Data Management
-- **NEVER use dynamic variables** - there is almost never a case where they're needed
-- **Prefer atoms** for persistent state instead of dynamic vars
+- **NEVER use dynamic variables** - There is almost never a case where they're needed.
+- **Prefer atoms** for persistent state instead of dynamic vars.
   ```clojure
   ;;; Good
   (def mock? (atom false))
@@ -32,9 +32,9 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
   ```
 
 ### Data Structures
-- Use maps, vectors, sets, and primitives to store data
-- **Do NOT use lists** (sequences) for data storage
-- Recursive navigation of structures uses `map?` and `vector?`
+- Use maps, vectors, sets, and primitives to store data.
+- **Do NOT use lists** (sequences) for data storage.
+- Recursive navigation of structures uses `map?` and `vector?`.
 
 ### Clojure defn
 - It is (defn "comment" [args] ...) not (defn [args] "comment" ...). Not like common-lisp!
@@ -76,6 +76,14 @@ develop.repl/alias-map                          ; Map of namespaces keyed by con
 (defn update-state! [new-state] ..) ; Mutating function
 (def ^:diag diag (atom nil))        ; Diagnostic helper
 ```
+
+## schedMCP Design Decisions
+
+### Independence from clojure-mcp
+- We DO NOT reference clojure-mcp in our deps.edn
+- Instead, we borrow design patterns and code structures from clojure-mcp
+- Copy and adapt code rather than creating dependencies
+- This keeps schedMCP self-contained and focused on scheduling domain
 
 ---
 *Keep this file under 120 lines for quick loading. Last updated: $(date)*

@@ -1,13 +1,14 @@
 (ns sched-mcp.sutil
   "Server utilities."
   (:require
-   [cheshire.core            :as ches]
-   [clojure.java.io          :as io]
-   [clojure.pprint           :refer [cl-format]]
-   [clojure.string           :as str]
-   [datahike.api             :as d]
-   [datahike.pull-api        :as dp]
-   [taoensso.telemere        :as tel])
+   [cheshire.core :as ches]
+   [clojure.java.basis]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [cl-format]]
+   [clojure.string :as str]
+   [datahike.api :as d]
+   [datahike.pull-api :as dp]
+   [taoensso.telemere :as tel])
   (:import ; ToDo: Why does clj-kondo complain?
    java.net.URI
    java.nio.file.StandardCopyOption
@@ -25,12 +26,12 @@
 
 (defn api-credentials [provider]
   (let [res (case provider
-                :openai {:api-key (System/getenv "OPENAI_API_KEY")}
-                :azure  {:api-key (System/getenv "AZURE_OPENAI_API_KEY")
-                         :api-endpoint "https://myopenairesourcepod.openai.azure.com"
-                         :impl :azure}
-                :meta   {:api-key (System/getenv "NIST_RCHAT")
-                         :api-endpoint "https://rchat.nist.gov/api"})]
+              :openai {:api-key (System/getenv "OPENAI_API_KEY")}
+              :azure {:api-key (System/getenv "AZURE_OPENAI_API_KEY")
+                      :api-endpoint "https://myopenairesourcepod.openai.azure.com"
+                      :impl :azure}
+              :meta {:api-key (System/getenv "NIST_RCHAT")
+                     :api-endpoint "https://rchat.nist.gov/api"})]
     (when-not (:api-key res)
       (log! :error (str "Specify an API key for use of models from " (name provider))))
     res))
@@ -55,8 +56,8 @@
   "Hitchhiker file-based DBs follow this form."
   {:store {:backend :file :path "Provide a value!"} ; This is path to the database's root directory
    :keep-history? false
-   :base-dir "Provide a value!"                     ; For convenience, this is just above the database's root directory.
-   :recreate-dbs? false                             ; If true, it will recreate the system DB and project directories too.
+   :base-dir "Provide a value!" ; For convenience, this is just above the database's root directory.
+   :recreate-dbs? false ; If true, it will recreate the system DB and project directories too.
    :schema-flexibility :write})
 
 ;;; https://cljdoc.org/d/io.replikativ/datahike/0.6.1545/doc/datahike-database-configuration
@@ -66,19 +67,25 @@
      type - the type of DB configuration being make: (:project, :system, or :him, so far)"
   [{:keys [type id in-mem?]}]
   (when (and (= :project type) (not id)) (throw (ex-info "projects need an ID." {})))
-  (let [base-dir (or (-> (System/getenv) (get "SCHEDULING_TBD_DB")) ; "/opt/scheduling" typically.
-                     (throw (ex-info (str "Set the environment variable SCHEDULING_TBD_DB to the directory containing SchedulingTBD databases."
-                                          "\nCreate directories 'projects' and 'system' under it.") {})))
+  (let [;; Check if running in REPL/dev mode
+        nrepl-mode? (some #{:nrepl} (->> (clojure.java.basis/initial-basis) :basis-config :aliases))
+        base-dir (if nrepl-mode?
+                   ;; Use local test directory when in REPL
+                   "./test/dbs"
+                   ;; Otherwise use environment variable
+                   (or (-> (System/getenv) (get "SCHEDULING_TBD_DB"))
+                       (throw (ex-info (str "Set the environment variable SCHEDULING_TBD_DB to the directory containing SchedulingTBD databases."
+                                            "\nCreate directories 'projects' and 'system' under it.") {}))))
         db-dir (->> (case type
-                      :system           "/system"
-                      :project          (str "/projects/" (name id) "/db/")
+                      :system "/system"
+                      :project (str "/projects/" (name id) "/db/")
                       :planning-domains "/planning-domains"
-                      :him              "/etc/other-dbs/him")
+                      :him "/etc/other-dbs/him")
                     (str base-dir))]
     (cond-> db-template
-      true            (assoc :base-dir base-dir)     ; This is not a datahike thing.
-      (not in-mem?)   (assoc :store {:backend :file :path db-dir})
-      in-mem?         (assoc :store {:backend :mem :id (name id)}))))
+      true (assoc :base-dir base-dir) ; This is not a datahike thing.
+      (not in-mem?) (assoc :store {:backend :file :path db-dir})
+      in-mem? (assoc :store {:backend :mem :id (name id)}))))
 
 (defn get-db-cfg
   "Return the cfg map for the given DB."
@@ -114,10 +121,10 @@
 (defn db-type-of
   "Return a Datahike schema :db/valueType object for the argument"
   [obj]
-  (cond (string? obj)  :db.type/string
-        (number? obj)  :db.type/number
+  (cond (string? obj) :db.type/string
+        (number? obj) :db.type/number
         (keyword? obj) :db.type/keyword
-        (map? obj)     :db.type/ref
+        (map? obj) :db.type/ref
         (boolean? obj) :db.type/boolean))
 
 ;;; This seems to cause problems in recursive resolution. (See resolve-db-id)"
@@ -136,9 +143,9 @@
   (let [cyclical? (atom false)
         visited? (atom #{})]
     (letfn [(rem-nil [obj]
-              (cond (map? obj)      (reduce-kv (fn [m k v] (if (nil? v) m (assoc m k (rem-nil v)))) {} obj)
-                    (vector? obj)   (reduce (fn [res v] (if (nil? v) res (conj res (rem-nil v)))) [] obj)
-                    :else           obj))
+              (cond (map? obj) (reduce-kv (fn [m k v] (if (nil? v) m (assoc m k (rem-nil v)))) {} obj)
+                    (vector? obj) (reduce (fn [res v] (if (nil? v) res (conj res (rem-nil v)))) [] obj)
+                    :else obj))
             (resolve-aux [obj]
               (cond
                 (db-ref? obj) (if (@visited? (:db/id obj))
@@ -148,15 +155,15 @@
                                   (swap! visited? conj (:db/id obj))
                                   (if (= res obj) nil (resolve-aux res))))
                 (map? obj) (reduce-kv (fn [m k v]
-                                        (cond (drop-set k)                                    m
-                                              (and (not-empty keep-set) (not (keep-set k)))   m
-                                              :else                                           (assoc m k (resolve-aux v))))
+                                        (cond (drop-set k) m
+                                              (and (not-empty keep-set) (not (keep-set k))) m
+                                              :else (assoc m k (resolve-aux v))))
                                       {}
                                       obj)
-                (vector? obj)      (mapv resolve-aux obj)
-                (set? obj)    (set (mapv resolve-aux obj))
-                (coll? obj)        (map  resolve-aux obj)
-                :else  obj))]
+                (vector? obj) (mapv resolve-aux obj)
+                (set? obj) (set (mapv resolve-aux obj))
+                (coll? obj) (map resolve-aux obj)
+                :else obj))]
       (let [res (resolve-aux form)]
         (if @cyclical? (rem-nil res) res)))))
 
@@ -179,8 +186,8 @@
   "Return a string no longer than n where the last 3 is ellipsis '...' if the string is > n long."
   [s n]
   (let [cnt (count s)]
-    (cond (> n cnt)   s
-          (< n 3)     ""
+    (cond (> n cnt) s
+          (< n 3) ""
           :else (str (subs s 0 (- n 3)) "..."))))
 
 (defn not-nothing
@@ -196,7 +203,7 @@
    This will also replace the target file if it exists since REPLACE_EXISTING is included in the options at the end."
   [source target]
   (let [source-file (java.nio.file.Paths/get (java.net.URI/create (str "file://" source)))
-        target-file (java.nio.file.Paths/get (java.net.URI/create (str "file://"  target)))]
+        target-file (java.nio.file.Paths/get (java.net.URI/create (str "file://" target)))]
     (java.nio.file.Files/move source-file target-file
                               (into-array java.nio.file.CopyOption
                                           [(java.nio.file.StandardCopyOption/ATOMIC_MOVE)
@@ -210,7 +217,7 @@
      (let [m (Throwable->map err)]
        (if-let [msg (-> m :via first :message)]
          (if-let [data (:data m)]
-           (str ": " msg  "\ndata:" data)
+           (str ": " msg "\ndata:" data)
            (str s ": " msg))
          s))
      s)))
@@ -219,7 +226,7 @@
   "Return :yes :no or :unknown based on lexical analysis of the argument answer text."
   [s]
   (cond (or (= s "yes") (= s "Yes") (= s "Yes.") (re-matches #"(?i)\s*yes\s*" s)) :yes
-        (or (= s "no")  (= s "No")  (= s "No.")  (re-matches #"(?i)\s*no\s*"  s)) :no
+        (or (= s "no") (= s "No") (= s "No.") (re-matches #"(?i)\s*no\s*" s)) :no
         :else :unknown))
 
 (defn markdown2html
@@ -267,14 +274,14 @@
      (let [s (remove-preamble s-in)
            m (ches/parse-string s)]
        (letfn [(upk [obj]
-                 (cond (map? obj)    (reduce-kv (fn [m k v] (assoc m (keyword k) (upk v))) {} obj)
+                 (cond (map? obj) (reduce-kv (fn [m k v] (assoc m (keyword k) (upk v))) {} obj)
                        (vector? obj) (mapv upk obj)
-                       :else         obj))]
+                       :else obj))]
          (upk m)))
      (catch Exception _e
        (if (false? throw-error?)
          s-in
-         (throw (ex-info  "Could not read object returned (should be a string containing JSON):" {:s-in s-in })))))))
+         (throw (ex-info "Could not read object returned (should be a string containing JSON):" {:s-in s-in})))))))
 
 (defn clj2json-pretty
   "Return a pprinted string for given clojure object."
@@ -283,9 +290,9 @@
   (ches/generate-string obj {:pretty true}))
 
 #_(defn clj2json-pretty
-  "Return a pprinted string for given clojure object."
-  [obj]
-  (if (nil? obj) nil (ches/generate-string obj {:pretty true})))
+    "Return a pprinted string for given clojure object."
+    [obj]
+    (if (nil? obj) nil (ches/generate-string obj {:pretty true})))
 
 (defn update-resources-EADS-json!
   "Update the resources/agents/iviewrs/EADS directory with a (presumably) new JSON pprint of the argument EADS instructions.
