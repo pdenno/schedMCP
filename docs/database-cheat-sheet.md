@@ -60,7 +60,7 @@ Quick reference for database exploration after restart.
 
 ;; Query example - find all conversations
 (d/q '[:find ?cid ?status
-       :where 
+       :where
        [?c :conversation/id ?cid]
        [?c :conversation/status ?status]]
      @conn)
@@ -81,12 +81,12 @@ Quick reference for database exploration after restart.
 
 ### Current Setup
 - **Datahike**: Persistent storage for projects, conversations, answers
-- **Mount**: Component lifecycle management  
+- **Mount**: Component lifecycle management
 - **MCP**: Communication protocol with Claude Desktop
 
 ### Proposed Enhancement
 - **LangGraph**: Ephemeral conversation state and flow control
-- **Benefits**: 
+- **Benefits**:
   - Cleaner separation of concerns
   - Better conversation flow management
   - Easier to implement complex interview logic

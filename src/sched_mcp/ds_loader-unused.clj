@@ -4,7 +4,7 @@
    [clojure.java.io :as io]
    [clojure.data.json :as json]
    [clojure.string :as str]
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -27,7 +27,7 @@
     (with-open [reader (io/reader file-path)]
       (json/read reader :key-fn keyword))
     (catch Exception e
-      (alog! (str "Failed to load JSON file: " file-path " - " (.getMessage e)) {:level :error})
+      (log! :info (str "Failed to load JSON file: " file-path " - " (.getMessage e)) {:level :error})
       nil)))
 
 (defn ds-id-from-filename

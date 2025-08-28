@@ -5,7 +5,7 @@
    [clojure.java.io :as io]
    [clojure.data.json :as json]
    [clojure.string :as str]
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -21,7 +21,7 @@
     (with-open [reader (io/reader file-path)]
       (json/read reader :key-fn keyword))
     (catch Exception e
-      (alog! (str "Failed to load JSON file: " file-path " - " (.getMessage e)) {:level :error})
+      (log! :info (str "Failed to load JSON file: " file-path " - " (.getMessage e)) {:level :error})
       nil)))
 
 (defn ds-id-from-filename
@@ -58,14 +58,14 @@
       (try
         ;; Check if already loaded
         (when-not (find-ns ns-sym)
-          (alog! (str "Loading namespace: " ns-sym " from " impl-file))
+          (log! :info (str "Loading namespace: " ns-sym " from " impl-file))
           ;; This is tricky - we'd need to ensure the namespace is on classpath
           ;; For now, we'll document this limitation
           nil)
         {:namespace ns-sym
          :source-file impl-file}
         (catch Exception e
-          (alog! (str "Failed to load implementation: " (.getMessage e)) {:level :error})
+          (log! :info (str "Failed to load implementation: " (.getMessage e)) {:level :error})
           nil)))))
 
 (defn extract-combine-fn
@@ -74,7 +74,7 @@
   ;; This would require the namespace to be loaded
   ;; For now, return a placeholder
   (fn [tag pid]
-    (alog! (str "TODO: Implement combine-ds! for " ds-id))
+    (log! :info (str "TODO: Implement combine-ds! for " ds-id))
     {}))
 
 (defn extract-complete-fn
@@ -83,7 +83,7 @@
   ;; This would require the namespace to be loaded
   ;; For now, return a placeholder
   (fn [tag pid]
-    (alog! (str "TODO: Implement ds-complete? for " ds-id))
+    (log! :info (str "TODO: Implement ds-complete? for " ds-id))
     false))
 
 ;;; Unified DS loading
@@ -165,7 +165,7 @@
   "Clear the DS cache"
   []
   (reset! ds-cache {})
-  (alog! "DS cache cleared"))
+  (log! :info "DS cache cleared"))
 
 ;;; For backwards compatibility during transition
 

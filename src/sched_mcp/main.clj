@@ -1,23 +1,13 @@
 (ns sched-mcp.main
   "Main entry point for schedMCP server"
   (:require
-   [mount.core :as mount]
-   [sched-mcp.tools.registry :as registry]
-   [sched-mcp.mcp-core :as mcp-core]))
-
-(def server-info
-  {:name "schedMCP"
-   :version "0.1.0"})
-
-  ;; Start MCP server with our tools
-(def server-config
-  {:tool-specs registry/tool-specs
-   :server-info server-info})
+   [mount.core :as mount]))
 
 (defn -main
-  "Start the schedMCP server"
+  "Start everything including the schedMCP server.
+   If instead, you just want to start or stop the mcp-server use
+    (mount/start #'sched-mcp.mcp-core.mcp-core-server)
+    (mount/stop #'sched-mcp.mcp-core.mcp-core-server)."
   [& _args]
-  ;; Initialize mount components (for database connections, etc.)
-  (mount/start)
-  ;; Run the server loop in the main thread to prevent exit
-  (mcp-core/run-server server-config))
+  ;; Run the server loop in a future to prevent exit and provide stdout.
+  (mount/start))

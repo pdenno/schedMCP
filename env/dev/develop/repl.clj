@@ -2,10 +2,9 @@
   "Tools for repl-based exploration of SchedulingTBD code"
   (:require
    [clojure.pprint :refer [pprint]]
-   ;; require the -test.clj files and eads files to make ns-setup! work.
+   ;; require the _test.clj files to make ns-setup! work.
    ;; ToDo: Use sutil/log! not this:
-   ;[taoensso.telemere :as tel :refer [log!]] ; log is used!
-   [sched-mcp.sutil :refer [log!]]))
+   [sched-mcp.util :refer [log!]]))
 
 (def alias? (atom (-> (ns-aliases *ns*) keys set)))
 
@@ -30,14 +29,16 @@
    ;;'px 'promesa.exec
    'iviewr 'sched-mcp.interview
    'main   'sched-mcp.main
-   'core   'sched-mcp.mcp-core
+   'mcore  'sched-mcp.mcp-core
    'db     'sched-mcp.db
    'sutil  'sched-mcp.sutil
-   'itools 'shed-mcp.tools.iviewr-tools
+   'sysdb  'sched-mcp.system-db
+   'itools 'sched-mcp.tools.iviewr-tools
    'util   'sched-mcp.util
    'warm   'sched-mcp.warm-up
    'tel    'taoensso.telemere
-   #_#_'openai 'wkok.openai-clojure.api})
+   'openai 'wkok.openai-clojure.api})
+
 
 (defn ^:diag ns-setup!
   "Use this to setup useful aliases for working in this NS."

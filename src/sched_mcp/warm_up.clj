@@ -3,7 +3,7 @@
   (:require
    [datahike.api :as d]
    [sched-mcp.sutil :as sutil :refer [connect-atm]]
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 

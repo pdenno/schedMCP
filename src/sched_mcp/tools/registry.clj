@@ -5,7 +5,9 @@
    [sched-mcp.tools.iviewr-tools :as itools]
    ;; New tools
    [sched-mcp.tools.interviewer.core :as interviewer]
+   [sched-mcp.tools.interviewer.advanced :as advanced]
    [sched-mcp.tools.orchestrator.core :as orchestrator]
+   [sched-mcp.tools.surrogate :as surrogate]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.ds-schema :as ds-schema]
    [sched-mcp.interview :as interview]
@@ -53,11 +55,14 @@
   []
   (let [;; Create new tools
         interviewer-tools (interviewer/create-interviewer-tools system-atom)
+        advanced-tools (advanced/create-advanced-interviewer-tools system-atom)
         orchestrator-tools (orchestrator/create-orchestrator-tools system-atom)
 
         ;; Convert to specs
         new-tool-specs (mapv tool-config->spec
-                             (concat interviewer-tools orchestrator-tools))
+                             (concat interviewer-tools
+                                     advanced-tools
+                                     orchestrator-tools))
 
         ;; Get original tools and wrap start-interview
         original-specs (mapv (fn [spec]
@@ -66,7 +71,9 @@
                                  spec))
                              itools/tool-specs)]
     ;; Combine all tools
-    (vec (concat original-specs new-tool-specs))))
+    (vec (concat original-specs
+                 new-tool-specs
+                 surrogate/tool-specs))))
 
 ;;; Main registry
 (def tool-specs

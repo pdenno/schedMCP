@@ -4,13 +4,12 @@
    [clojure.data.json :as json]
    [clojure.java.io :as io]
    [clojure.string :as str]
-   [sched-mcp.util :refer [alog!]])
+   [sched-mcp.util :refer [log!]])
   (:import
    [java.net HttpURLConnection URL]
    [java.io OutputStreamWriter BufferedReader InputStreamReader]))
 
-;;; Configuration
-
+;;; Provider configuration
 (def default-provider (atom :openai))
 
 (def model-config
@@ -18,15 +17,24 @@
   {:openai {:chat "gpt-4o"
             :mini "gpt-4o-mini"
             :extract "gpt-4o"
-            :reason "o1-preview"}})
+            :reason "o1-preview"}
+   :meta {:chat "Llama-4-Maverick-17B-128E-Instruct-FP8"
+          :mini "Llama-4-Maverick-17B-128E-Instruct-FP8" ; Same model for now
+          :extract "Llama-4-Maverick-17B-128E-Instruct-FP8"} ; Same model for now
+   :azure {:chat "mygpt-4"}})
 
 ;;; HTTP API Implementation
 
-(defn api-credentials
-  "Get API credentials for provider"
-  [provider]
+(defn api-credentials [provider]
   (case provider
-    :openai {:api-key (System/getenv "OPENAI_API_KEY")}
+    :openai {:api-key (or (System/getenv "OPENAI_API_KEY")
+                          (throw (ex-info "No OpenAI API key found" {})))}
+    :meta {:api-key (or (System/getenv "NIST_RCHAT")
+                        (throw (ex-info "No NIST RCHAT API key found" {})))}
+    :azure {:api-key (or (System/getenv "AZURE_OPENAI_API_KEY")
+                         (throw (ex-info "No Azure OpenAI API key found" {})))
+            :api-endpoint "https://myopenairesourcepod.openai.azure.com"
+            :impl :azure}
     (throw (ex-info "Unknown LLM provider" {:provider provider}))))
 
 (defn pick-model
@@ -68,6 +76,10 @@
                     temperature 0.7}}]
   (let [creds (api-credentials provider)
         model (pick-model model-class provider)
+        ;; Different endpoint for NIST RCHAT
+        endpoint (case provider
+                   :meta "https://rchat.nist.gov/api/chat/completions"
+                   "https://api.openai.com/v1/chat/completions")
         body (cond-> {:model model
                       :messages messages
                       :temperature temperature}
@@ -75,18 +87,16 @@
                max-tokens (assoc :max_tokens max-tokens))
         body-str (json/write-str body)]
 
-    (alog! (str "LLM call to " model " with " (count messages) " messages"))
+    (log! :info (str "LLM call to " model " with " (count messages) " messages"))
 
     (try
-      (let [response (http-post "https://api.openai.com/v1/chat/completions"
+      (let [response (http-post endpoint
                                 body-str
                                 (:api-key creds))]
         (-> response :choices first :message :content))
       (catch Exception e
-        (alog! (str "LLM error: " (.getMessage e)) {:level :error})
+        (log! :info (str "LLM error: " (.getMessage e)) {:level :error})
         (throw e)))))
-
-;;; JSON-structured responses
 
 (defn complete-json
   "Like complete but parses JSON response"
@@ -100,11 +110,11 @@
     (try
       (json/read-str response :key-fn keyword)
       (catch Exception e
-        (alog! (str "Failed to parse JSON: " response) {:level :error})
+        (log! :info (str "Failed to parse JSON: " response) {:level :error})
         (throw (ex-info "LLM returned invalid JSON"
                         {:response response :error e}))))))
 
-;;; Re-export the same interface as sched-mcp.llm
+;;; Message helpers
 
 (defn system-message [content]
   {:role "system" :content content})
@@ -115,7 +125,11 @@
 (defn assistant-message [content]
   {:role "assistant" :content content})
 
-(defn build-prompt [& {:keys [system examples context user format]}]
+;;; Prompt building
+
+(defn build-prompt
+  "Build a prompt with optional components"
+  [& {:keys [system examples context user format]}]
   (cond-> []
     system (conj (system-message system))
     examples (into (mapcat (fn [{:keys [user assistant]}]
@@ -123,59 +137,88 @@
                               (assistant-message assistant)])
                            examples))
     context (conj (user-message (str "Context:\n" context)))
-    user (conj (user-message
-                (if format
-                  (str user "\n\n" format)
-                  user)))))
+    user (conj (user-message user))
+    format (conj (user-message (str "\n" format)))))
+
+;;; Agent prompt management
 
 (def agent-prompts (atom {}))
 
-(defn load-agent-prompt! [agent-key file-path]
-  (if (.exists (io/file file-path))
-    (let [content (slurp file-path)
-          prompt (second (str/split content #"---\n" 3))]
-      (swap! agent-prompts assoc agent-key prompt)
-      (alog! (str "Loaded agent prompt for " agent-key)))
-    (alog! (str "Agent prompt file not found: " file-path) {:level :warn})))
+(defn load-agent-prompt!
+  "Load an agent prompt from file"
+  [agent-key file-path]
+  (try
+    (let [content (slurp (io/resource file-path))]
+      (swap! agent-prompts assoc agent-key content)
+      (log! :info (str "Loaded agent prompt for " agent-key)))
+    (catch Exception e
+      (log! :error (str "Agent prompt file not found: " file-path) {:level :warn}))))
 
 (defn get-agent-prompt [agent-key]
   (or (get @agent-prompts agent-key)
-      (throw (ex-info "No prompt loaded for agent" {:agent agent-key}))))
+      (throw (ex-info "No prompt loaded for agent"
+                      {:agent agent-key}))))
 
-(defn ds-question-prompt [{:keys [ds ascr _message-history budget-remaining]}]
+;; Enhanced DS prompts with interviewer instructions
+
+(defn load-interviewer-instructions []
+  "Load the base interviewer instructions"
+  (try
+    (slurp (io/resource "prompts/interviewer-instructions.txt"))
+    (catch Exception e
+      (log! :error "Could not load interviewer instructions")
+      ;; Fallback to basic instructions
+      "You are an expert interviewer gathering information about manufacturing scheduling.")))
+
+(defn prepare-ds-context
+  "Prepare context with proper domain translation instructions"
+  [{:keys [ds ascr project-info budget-remaining]}]
+  (let [instructions (load-interviewer-instructions)
+        ;; Extract just the structure, not the example values
+        eads-structure (json/write-str
+                        (into {}
+                              (map (fn [[k v]]
+                                     [k (select-keys v [:comment :type])])
+                                   (:eads ds)))
+                        :indent true)]
+    (-> instructions
+        (str/replace "{{project-domain}}" (or (:domain project-info) "manufacturing"))
+        (str/replace "{{project-name}}" (or (:name project-info) "your project"))
+        (str/replace "{{ds-id}}" (name (:eads-id ds)))
+        (str/replace "{{interview-objective}}" (or (:interview-objective ds) ""))
+        (str/replace "{{ascr-summary}}" (json/write-str ascr :indent true))
+        (str/replace "{{eads-structure}}" eads-structure)
+        (str/replace "{{missing-fields}}"
+                     (str/join ", "
+                               (remove #(contains? ascr %)
+                                       (keys (:eads ds)))))
+        (str/replace "{{budget-remaining}}" (str budget-remaining)))))
+
+(defn ds-question-prompt
+  [{:keys [ds ascr budget-remaining project-info] :as context}]
   (build-prompt
-   :system (get-agent-prompt :process-interviewer)
-   :context (str "Discovery Schema:\n"
-                 (json/write-str (:eads ds) :indent true)
-                 "\n\nCurrent ASCR:\n"
-                 (json/write-str ascr :indent true)
-                 "\n\nBudget remaining: " budget-remaining " questions")
-   :user "Generate the next interview question to gather missing information."
-   :format "Return JSON with fields:
-            - question: The natural language question
-            - help: Additional context or examples
-            - rationale: Why this question now
-            - targets: Array of DS fields this aims to fill"))
+   :system (prepare-ds-context context)
+   :user "Generate the next interview question following the guidelines above."))
 
 (defn ds-interpret-prompt [{:keys [ds question answer]}]
   (build-prompt
-   :system "You are an expert at extracting structured data from natural language."
+   :system "You are an expert at extracting structured data from natural language while preserving nuance and context."
    :context (str "Discovery Schema structure:\n"
                  (json/write-str (:eads ds) :indent true))
    :user (str "Question asked: " question
               "\n\nUser's answer: " answer
-              "\n\nExtract structured data matching the schema.")
+              "\n\nExtract structured data matching the schema. Remember that any examples in the schema are just illustrations - extract based on the actual domain being discussed.")
    :format "Return JSON with:
             - scr: Object with extracted schema fields
             - confidence: 0-1 confidence score
             - ambiguities: Array of unclear items
             - follow_up: Optional clarification needed"))
 
+;;; Initialization
+
 (defn init-llm! []
-  (load-agent-prompt! :process-interviewer "docs/agents/process-interviewer-agent.md")
-  (load-agent-prompt! :data-interviewer "docs/agents/data-interviewer-agent.md")
-  (load-agent-prompt! :resource-interviewer "docs/agents/resource-interviewer-agent.md")
-  (load-agent-prompt! :optimality-interviewer "docs/agents/optimality-interviewer-agent.md")
-  (when-not (api-credentials @default-provider)
-    (throw (ex-info "No API credentials available" {:provider @default-provider})))
-  (alog! "LLM subsystem initialized"))
+  (load-agent-prompt! :process-interviewer "agents/process-interviewer-agent.md")
+  (load-agent-prompt! :data-interviewer "agents/data-interviewer-agent.md")
+  (load-agent-prompt! :resource-interviewer "agents/resource-interviewer-agent.md")
+  (load-agent-prompt! :optimality-interviewer "agents/optimality-interviewer-agent.md")
+  (log! :info "LLM subsystem initialized"))

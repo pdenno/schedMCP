@@ -4,28 +4,31 @@
         cljs-ajax/cljs-ajax {:mvn/version "0.8.4"}
         com.cemerick/url {:mvn/version "0.1.1"}
         com.github.pdenno/mznp {:mvn/version "1.0.89"}
-        com.taoensso/timbre {:mvn/version "6.7.1"}
-        com.taoensso/telemere {:mvn/version "1.0.0"}
-        com.taoensso/telemere-slf4j {:mvn/version "1.0.0"} ; Just adding it here initializes it; try (tel/check-interop).
+        com.taoensso/timbre {:mvn/version "6.8.0"}
+        com.taoensso/telemere {:mvn/version "1.1.0"}
+        com.taoensso/telemere-slf4j {:mvn/version "1.1.0"} ; Just adding it here initializes it; try (tel/check-interop).
+        org.slf4j/slf4j-api {:mvn/version "2.0.16"}
         dk.ative/docjure {:mvn/version "1.21.0"} ; spreadsheets
-        io.github.paintparty/bling {:mvn/version "0.6.0"}
+        io.github.paintparty/bling {:mvn/version "0.8.8"}
         funcool/promesa {:mvn/version "11.0.678"}
-        io.replikativ/datahike {:mvn/version "0.6.1594"}
+        io.replikativ/datahike {:mvn/version "0.6.1603"}
         metosin/jsonista {:mvn/version "0.3.13"}
         mount/mount {:mvn/version "0.1.23"}
-        org.clojure/data.json {:mvn/version "2.4.0"}
-        org.apache.logging.log4j/log4j-core {:mvn/version "2.24.3"} ; Used by jetty
+        org.clojure/data.json {:mvn/version "2.5.1"}
+        org.apache.logging.log4j/log4j-core {:mvn/version "2.25.1"} ; Used by jetty
         org.clj-commons/hickory {:mvn/version "0.7.7"}
-        org.clojure/clojure {:mvn/version "1.12.0"}
+        org.clojure/clojure {:mvn/version "1.12.2"}
         org.clojure/core.unify {:mvn/version "0.7.0"}
         org.clojure/data.xml {:mvn/version "0.0.8"}
         org.clojure/tools.logging {:mvn/version "1.3.0"}
-        net.clojars.wkok/openai-clojure {:mvn/version "0.18.1"}}
+        net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}}
 
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl (starts as shown in the :nrepl :alias below.)
- ;;;  2) clj -X:my-mcp :port 7888 (starts as shown in the :my-mcp alias in ~/.clojure/deps.edn
- ;;;  3) Then you can cider-connect in if you'd like, port 7888.
+ ;;;  2) cider-connect at port 7888 and do (start)
+ ;;;  3) clj -X:my-mcp :port 7888 (starts as shown in the :my-mcp alias in ~/.clojure/deps.edn
+ ;;;  4) claude-desktop
+
 
  ;; See .dir-locals.el for some defaults on CIDER C-c M-j
  :aliases {:dev {:extra-paths ["test" "env/dev"]
@@ -40,7 +43,7 @@
            ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
            ;; Include all paths you want available for development. While running with clojure-mcp/nrepl the server listens on
            ;; port 3301. See resources/system.edn.
-           :nrepl {:extra-paths ["test"]
+           :nrepl {:extra-paths ["test" "env/dev"]
                    :extra-deps {applied-science/js-interop {:mvn/version "0.4.2"}
                                 cider/cider-nrepl {:mvn/version "0.56.0"}
                                 com.lambdaisland/classpath {:mvn/version "0.6.58"}
@@ -60,15 +63,21 @@
                                com.lambdaisland/classpath {:mvn/version "0.6.58"}
                                org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
-           :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.9"}}
+           :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
                    :ns-default build}}}
 
 ;;; clj -X:search/outdated
 ;;;
-;;;   |    :file |                         :name | :current |  :latest |
-;;;   |----------+-------------------------------+----------+----------|
-;;;   | deps.edn |             cider/cider-nrepl |   0.55.7 |   0.56.0 |
-;;;   |          |           com.taoensso/timbre |    6.7.0 |    6.7.1 |
-;;;   |          | io.github.clojure/tools.build |   0.10.8 |   0.10.9 |
-;;;   |          |        io.replikativ/datahike | 0.6.1594 | 0.6.1596 | ; Skip it.
-;;;   |          |                   mount/mount |   0.1.21 |   0.1.23 |
+;;;   |----------+-------------------------------------+----------+----------|
+;;;   | deps.edn |                   cider/cider-nrepl |   0.56.0 |   0.57.0 | not yet
+;;;   |          |                   cider/cider-nrepl |   0.56.0 |   0.57.0 | not yet
+;;;   |          |               com.taoensso/telemere |    1.0.0 |    1.1.0 |
+;;;   |          |         com.taoensso/telemere-slf4j |    1.0.0 |    1.1.0 |
+;;;   |          |                 com.taoensso/timbre |    6.7.1 |    6.8.0 |
+;;;   |          |       io.github.clojure/tools.build |   0.10.9 |  0.10.10 |
+;;;   |          |          io.github.paintparty/bling |    0.6.0 |    0.8.8 |
+;;;   |          |              io.replikativ/datahike | 0.6.1594 | 0.6.1603 |
+;;;   |          |     net.clojars.wkok/openai-clojure |   0.18.1 |   0.23.0 |
+;;;   |          | org.apache.logging.log4j/log4j-core |   2.24.3 |   2.25.1 |
+;;;   |          |                 org.clojure/clojure |   1.12.0 |   1.12.2 |
+;;;   |          |               org.clojure/data.json |    2.4.0 |    2.5.1 |

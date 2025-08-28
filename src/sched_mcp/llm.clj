@@ -5,7 +5,7 @@
    [clojure.data.json :as json]
    [clojure.java.io]
    [clojure.string :as str]
-   [sched-mcp.util :refer [alog!]]
+   [sched-mcp.util :refer [log!]]
    [wkok.openai-clojure.api :as openai]))
 
 ;;; Configuration
@@ -64,7 +64,7 @@
                         :temperature temperature}
                  response-format (assoc :response_format response-format)
                  max-tokens (assoc :max_tokens max-tokens))]
-    (alog! (str "LLM call to " model " with " (count messages) " messages"))
+    (log! :info (str "LLM call to " model " with " (count messages) " messages"))
     (try
       (-> (openai/create-chat-completion params creds)
           :choices
@@ -72,7 +72,7 @@
           :message
           :content)
       (catch Exception e
-        (alog! (str "LLM error: " (.getMessage e)) {:level :error})
+        (log! :error (str "LLM error: " (.getMessage e)))
         (throw e)))))
 
 ;;; JSON-structured responses
@@ -90,7 +90,7 @@
     (try
       (json/read-str response :key-fn keyword)
       (catch Exception e
-        (alog! (str "Failed to parse JSON: " response) {:level :error})
+        (log! :error (str "Failed to parse JSON: " response) {:level :error})
         (throw (ex-info "LLM returned invalid JSON"
                         {:response response :error e}))))))
 
@@ -146,8 +146,8 @@
           ;; Extract content after the frontmatter
           prompt (second (str/split content #"---\n" 3))]
       (swap! agent-prompts assoc agent-key prompt)
-      (alog! (str "Loaded agent prompt for " agent-key)))
-    (alog! (str "Agent prompt file not found: " file-path) {:level :warn})))
+      (log! (str "Loaded agent prompt for " agent-key)))
+    (log! (str "Agent prompt file not found: " file-path) {:level :warn})))
 
 (defn get-agent-prompt
   "Get the system prompt for an agent"
@@ -208,7 +208,7 @@
   (when-not (api-credentials @default-provider)
     (throw (ex-info "No API credentials available"
                     {:provider @default-provider})))
-  (alog! "LLM subsystem initialized"))
+  (log! :info "LLM subsystem initialized"))
 
 ;;; Usage examples in comments
 (comment

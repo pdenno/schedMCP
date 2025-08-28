@@ -1,9 +1,13 @@
 (ns sched-mcp.mcp-core
-  "Core MCP server implementation for schedMCP"
+  "Core MCP server implementation for schedMCP.
+   Top-level system components should be required here so mount can start them."
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.util :as util :refer [log!]]) ; for mount
+   [sched-mcp.db :as db]                       ; For mount
+   [sched-mcp.tools.iviewr-tools :as itools]   ; For mount
+   [sched-mcp.tools.registry :as registry]     ; For mount
+   [sched-mcp.util :as util :refer [log!]])    ; For mount
   (:import [java.io BufferedReader InputStreamReader PrintWriter]))
 
 (def ^:diag diag (atom nil))
@@ -12,8 +16,7 @@
 (def stdin-reader (BufferedReader. (InputStreamReader. System/in)))
 (def stdout-writer (PrintWriter. System/out true))
 
-;;; JSON-RPC message handling
-
+;;; JSON-RPC message handling ----------------------------------
 (defn read-json-rpc
   "Read a JSON-RPC message from stdin"
   []
@@ -40,8 +43,7 @@
    :id id
    :result result})
 
-;;; Tool handling
-
+;;; Tool handling ----------------------------------------------
 (defn tool->mcp-tool
   "Convert internal tool spec to MCP tool format"
   [{:keys [name description schema]}]
@@ -64,7 +66,7 @@
 
 (defn handle-initialize
   "Handle the initialize request"
-  [id params server-info]
+  [id _params server-info]
   (log! :info "MCP server initializing")
   (success-response id
                     {:protocolVersion "2025-06-18" ; Match client's version
@@ -106,38 +108,58 @@
         ;; Unknown method
         (error-response id -32601 (str "Method not found: " method))))))
 
+(def stay-alive? "A switch in the MCP main loop to make it exit (when false)." (atom true))
+(def mcp-main-loop-future "Keep the future running the MCP loop. We use cancel-future on it." (atom nil))
+
 (defn run-server
   "Main server loop. Don't do any output to console here except JSON-RPC!"
   [{:keys [_tool-specs _server-info] :as config}]
   (try
+    (reset! stay-alive? true)
     (loop []
-      (if-let [request (read-json-rpc)]
-        (do
-          (try
-            (let [response (handle-request request config)]
-              ;; Only write response if it's not nil (notifications return nil)
-              (when response
-                (write-json-rpc response)))
-            (catch Exception e
-              (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
-              (when-let [id (:id request)]
-                (write-json-rpc (error-response id -32603 "Internal error")))))
-          (recur))
-        ;; If read-json-rpc returns nil, the connection is closed
-        (log! :info "Connection closed by client")))
+      (when @stay-alive?
+        (if-let [request (read-json-rpc)]
+          (do
+            (try
+              (let [response (handle-request request config)]
+                ;; Only write response if it's not nil (notifications return nil)
+                (when response
+                  (write-json-rpc response)))
+              (catch Exception e
+                (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
+                (when-let [id (:id request)]
+                  (write-json-rpc (error-response id -32603 "Internal error")))))
+            (recur))
+          ;; If read-json-rpc returns nil, the connection is closed
+          (log! :info "Connection closed by client"))))
     (catch Exception e
       (log! :error (str "Server error: " (.getMessage e))))
     (finally
       (log! :info "Server shutting down"))))
 
+(def server-info
+  {:name "schedMCP"
+   :version "0.1.0"})
+
+  ;; Start MCP server with our tools
+(def server-config
+  {:tool-specs registry/tool-specs
+   :server-info server-info})
+
 (defn start-server
-  "A no-op"
+  "Start the server loop in a future."
   []
-  :started)
+  (reset! stay-alive? true)
+  (reset! mcp-main-loop-future (run-server server-config)))
 
 (defn stop-server
   []
   (log! :info "Stopping MCP server.")
+  (reset! stay-alive? false)
+  (Thread/sleep 2000)
+  (when @mcp-main-loop-future
+    (future-cancel @mcp-main-loop-future))
+  (log! :info "Stopped MCP server in REPL...")
   (shutdown-agents))
 
 (defstate mcp-core-server

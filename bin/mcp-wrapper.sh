@@ -8,12 +8,12 @@ export HOME="${HOME:-/home/pdenno}"
 export CLJ_CACHE="${HOME}/.clojure/.cpcache"
 
 # Ensure SCHEDULING_TBD_DB is set
-export SCHEDULING_TBD_DB="${SCHEDULING_TBD_DB:-/opt/scheduling}"
+export SCHED_MCP_DB="${SCHED_MCP_DB:-/home/pdenno/Documents/git/schedMCP/test/dbs}"
 
 # Create necessary directories
 mkdir -p "$HOME/.clojure"
-mkdir -p "$SCHEDULING_TBD_DB/projects"
-mkdir -p "$SCHEDULING_TBD_DB/system"
+mkdir -p "$SCHED_MCP_DB/projects"
+mkdir -p "$SCHED_MCP_DB/system"
 
 # Change to the project directory
 cd "$(dirname "$0")/.."

@@ -1,7 +1,7 @@
 (ns sched-mcp.mcp-utils
   "MCP-specific utility functions for safe logging and output"
   (:require
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (defn mcp-log!
   "Log to stderr for MCP debugging - appears in MCP server logs without corrupting protocol"

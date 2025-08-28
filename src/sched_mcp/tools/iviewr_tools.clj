@@ -4,8 +4,8 @@
    [clojure.string :as str]
    [clojure.spec.alpha :as s]
    [datahike.api :as d]
-   [sched-mcp.sutil :as sutil :refer [log! db-cfg-map register-db connect-atm datahike-schema]]
-   [sched-mcp.util :as util :refer [alog!]]
+   [sched-mcp.sutil :as sutil :refer [db-cfg-map register-db connect-atm datahike-schema]]
+   [sched-mcp.util :as util :refer [log!]]
    [sched-mcp.warm-up :as warm-up]
    [sched-mcp.interview :as interview]))
 
@@ -16,10 +16,10 @@
 (defn start-interview-tool
   "Tool function to start a new scheduling interview"
   [{:keys [project_name domain]}]
-  (alog! (str "MCP Tool: start-interview called with project_name=" project_name ", domain=" domain))
+  (log! :info (str "MCP Tool: start-interview called with project_name=" project_name ", domain=" domain))
   (try
     (let [result (interview/start-interview project_name domain)]
-      (alog! (str "MCP Tool: start-interview result: " (pr-str result)))
+      (log! :info (str "MCP Tool: start-interview result: " (pr-str result)))
       (if (:error result)
         {:error (:error result)}
         {:success true
@@ -32,7 +32,7 @@
                            :help (:help q)
                            :required (:required q)})}))
     (catch Exception e
-      (alog! (str "MCP Tool: start-interview error: " (.getMessage e)) {:level :error})
+      (log! :info (str "MCP Tool: start-interview error: " (.getMessage e)) {:level :error})
       {:error (str "Failed to start interview: " (.getMessage e))})))
 
 (def start-interview-tool-spec
@@ -80,7 +80,7 @@
 (defn submit-answer-tool
   "Submit an answer to current question"
   [{:keys [project_id conversation_id answer question_id]}]
-  (alog! (str "MCP Tool: submit-answer called with project_id=" project_id
+  (log! :info (str "MCP Tool: submit-answer called with project_id=" project_id
               ", conversation_id=" conversation_id
               ", question_id=" question_id
               ", answer=" (subs answer 0 (min 50 (count answer))) "..."))
@@ -97,11 +97,11 @@
                         (warm-up/get-next-question pid cid))
             qid (or question_id
                     (when current-q (name (:id current-q))))
-            _ (alog! (str "MCP Tool: submit-answer using question_id=" qid))
+            _ (log! :info (str "MCP Tool: submit-answer using question_id=" qid))
             result (if qid
                      (interview/submit-answer pid cid answer qid)
                      {:error "No current question to answer"})]
-        (alog! (str "MCP Tool: submit-answer result: " (pr-str result)))
+        (log! :info (str "MCP Tool: submit-answer result: " (pr-str result)))
         (if (:error result)
           result
           {:success true
@@ -113,7 +113,7 @@
                              :help (:help q)
                              :required (:required q)})})))
     (catch Exception e
-      (alog! (str "MCP Tool: submit-answer error: " (.getMessage e)) {:level :error})
+      (log! :info (str "MCP Tool: submit-answer error: " (.getMessage e)) {:level :error})
       {:error (str "Failed to submit answer: " (.getMessage e))})))
 
 (def submit-answer-tool-spec

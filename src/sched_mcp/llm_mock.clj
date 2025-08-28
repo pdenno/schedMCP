@@ -3,7 +3,7 @@
   (:require
    [clojure.data.json :as json]
    [clojure.string :as str]
-   [sched-mcp.util :refer [alog!]]))
+   [sched-mcp.util :refer [log!]]))
 
 ;;; Mock implementations that don't require OpenAI
 
@@ -23,7 +23,7 @@
   [messages & opts]
   (let [last-msg (last messages)
         content (:content last-msg)]
-    (alog! "Mock LLM call")
+    (log! :info "Mock LLM call")
     (cond
       (str/includes? content "question")
       "What are the main steps in your production process?"
@@ -74,7 +74,7 @@
 
 (defn load-agent-prompt! [agent-key file-path]
   (swap! agent-prompts assoc agent-key (str "Mock prompt for " agent-key))
-  (alog! (str "Mock loaded agent prompt for " agent-key)))
+  (log! :info (str "Mock loaded agent prompt for " agent-key)))
 
 (defn get-agent-prompt [agent-key]
   (or (get @agent-prompts agent-key)
@@ -93,4 +93,4 @@
   (load-agent-prompt! :data-interviewer "mock")
   (load-agent-prompt! :resource-interviewer "mock")
   (load-agent-prompt! :optimality-interviewer "mock")
-  (alog! "Mock LLM subsystem initialized"))
+  (log! :info "Mock LLM subsystem initialized"))

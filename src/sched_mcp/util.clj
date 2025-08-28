@@ -2,6 +2,7 @@
   "Do lowest level configuration (logging, etc.) used by both the server and app."
   (:require
    [bling.core :as bling :refer [bling print-bling]] ; print-pling is used (clj)!
+   [clojure.pprint :refer [pprint]]
    [clojure.string :as str]
    [taoensso.telemere.tools-logging :as tel-log]
    [mount.core :as mount :refer [defstate]]
@@ -47,7 +48,7 @@
                     (or stbd-file file)))
            line (:line location)
            msg (if-let [s (not-empty (force msg_))] s "\"\"")
-           heading (-> (str "\n" (name kind) "/" (name level) " ") str/upper-case)]
+           heading (-> (str (name kind) "/" (name level) " ") str/upper-case)]
        (cond (= :error level) (print-bling (bling [:bold.red.white-bg heading] " " [:red (str file ":" line " - " msg)]))
              (= :warn level) (print-bling (bling [:bold.blue heading] " " [:yellow (str file ":" line " - " msg)]))
              :else (print-bling (bling [:bold.blue heading] " " [:olive (str file ":" line " - " msg)])))))))
@@ -58,17 +59,17 @@
   []
   ;; Remove any default console handler that might exist
   (tel/remove-handler! :default/console)
-  ;; Use *err* for console (e.g. REPL) printing. Keep *out* free for MCP loop.
-  (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn}))
+  (tel/add-handler! :default/console (tel/handler:console {:output-fn custom-console-output-fn}))
   (tel/add-handler! :agent/log (tel/handler:file {:output-fn agents-log-output-fn
                                                   :path "./logs/agents-log.edn"
                                                   :interval :daily}))
   (tel-log/tools-logging->telemere!) ;; Send tools.logging through telemere. Check this with (tel/check-interop)
-  (tel/streams->telemere!) ;; likewise for *out* and *err* but "Note that Clojure's *out*, *err* are not necessarily automatically affected."
+  (tel/streams->telemere!)
+  (tel/event! ::config-log {:level :info :msg (str "Logging configured:\n" (with-out-str (pprint (tel/check-interop))))})
   ;; The following is needed because of datahike; no timbre-logging->telemere!
   (timbre/set-config! (assoc timbre/*config* :min-level [[#{"datahike.*"} :error]
                                                          [#{"konserve.*"} :error]]))
-  (alog! (str "======= Starting. config-log! executed " (now) " ==========")))
+  (log! :info (str "======= Starting. config-log! executed " (now) " ==========")))
 
 (defn ^:diag unconfig-log!
   "Set :default/console back to its default handler. Typically done at REPL."

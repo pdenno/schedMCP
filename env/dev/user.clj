@@ -1,25 +1,21 @@
 (ns user
-  "For REPL-based start/stop of the server.
-   This file isn't used in cljs and is a problem for shadow-cljs without the
-   :clj compiler directives."
+  "Development namespace for schedMCP"
   (:require
    [clojure.pprint]
-   [clojure.string]
    [clojure.spec.alpha :as s]
-   [clojure.tools.namespace.repl :as tools-ns :refer [set-refresh-dirs]]
+   [clojure.tools.namespace.repl :as tools-ns :refer [refresh set-refresh-dirs]]
    [develop.repl :refer [ns-setup! undo-ns-setup!]] ; for use at REPL.
-   [develop.dutil]
    [expound.alpha :as expound]
-   [mount.core :as mount]
    [lambdaisland.classpath.watch-deps :as watch-deps] ; hot loading for deps.
-   ;; ToDo: You need this to work
-   [taoensso.telemere :as tel :refer [log!]]))
+   [mount.core :as mount]
+   [sched-mcp.tools.iviewr-tools :as itools]
+   [sched-mcp.mcp-core] ; for mount
+   [sched-mcp.util :refer [log!]]
+   [taoensso.telemere :as tel]))
 
 [ns-setup! undo-ns-setup!] ; for mount
 
-;;; If you get stuck do: (clojure.tools.namespace.repl/refresh)
-
-;; uncomment to enable hot loading for deps
+;;; uncomment to enable hot loading for deps
 (watch-deps/start! {:aliases [:dev :test]})
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
@@ -28,30 +24,38 @@
 (s/check-asserts true) ; Error on s/assert, run s/valid? rather than just returning the argument.
 (tel/call-on-shutdown! tel/stop-handlers!)
 
-;;; I don't use this. I start with
-#_(defn ^:admin start
-  "Start the MCP main loop and mount-based services."
+(defn ^:diag start
+  "Start the schedMCP system for development"
   []
-  (try
-    (let [res (main/-main)
-          info (str "   " (clojure.string/join ",\n    " (:started res)))]
-      (log! :info (str "started:\n" info)))
-    (catch Exception e
-      (log! :error (str "start might fail with a UnresolvedAddressException if the internet connection is bad.\n" e)))))
+  (mount/start)
+  (log! :info "Mount components started. System ready for MCP connections.")
+  (log! :info "To start MCP server, run: clojure -M -m sched-mcp.main")
+  :started)
 
 (defn stop
-  "Stop the web server"
+  "Stop the system"
   []
-  (mount/stop))
+  (mount/stop)
+  :stopped)
 
-(defn ^:admin restart
-  "Stop, reload code, and restart the server. If there is a compile error, use:
-
-  ```
-  (tools-ns/refresh)
-  ```
-
-  to recompile, and then use `start` once things are good."
+(defn ^:diag restart
+  "Stop, refresh code, and start again"
   []
   (stop)
-  (tools-ns/refresh :after 'user/start))
+  (refresh :after 'user/start))
+
+;; Helpful development functions
+(defn ^:diag test-interview-start
+  "Test starting an interview directly"
+  []
+  (require '[sched-mcp.tools.interview :as tools])
+  (let [tool-fn (:tool-fn itools/start-interview-tool-spec)]
+    (tool-fn {:project_name "REPL Test Brewery"
+              :domain "food-processing"})))
+
+(defn ^:diag test-get-context
+  "Test getting interview context"
+  [project-id]
+  (require '[sched-mcp.tools.interview :as tools])
+  (let [tool-fn (:tool-fn itools/get-interview-context-tool-spec)]
+    (tool-fn {:project_id project-id})))

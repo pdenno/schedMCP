@@ -2,9 +2,9 @@
   "Interview management for scheduling domain"
   (:require
    [clojure.string :as str]
-   [clojure.spec.alpha :as s]
    [datahike.api :as d]
-   [sched-mcp.sutil :as sutil :refer [log! db-cfg-map register-db connect-atm datahike-schema]]
+   [sched-mcp.sutil :as sutil :refer [db-cfg-map register-db connect-atm datahike-schema]]
+   [sched-mcp.util :as util :refer [log!]]
    [sched-mcp.warm-up :as warm-up]))
 
 (def ^:diag diag (atom nil))

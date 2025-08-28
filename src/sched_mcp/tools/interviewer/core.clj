@@ -7,7 +7,7 @@
    [sched-mcp.ds-loader :as ds]
    [sched-mcp.ds-combine :as combine]
    [sched-mcp.llm-direct :as llm] ; Using direct HTTP implementation
-   [sched-mcp.util :refer [alog!]]
+   [sched-mcp.util :refer [log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]))
 
@@ -82,7 +82,7 @@
                        :budget-remaining budget-remaining})
               result (llm/complete-json prompt :model-class :chat)
               question-id (keyword (str "q-" (System/currentTimeMillis)))]
-          (alog! (str "Generated question for " ds-id " in " conversation-id))
+          (log! :info (str "Generated question for " ds-id " in " conversation-id))
           {:question {:id (name question-id)
                       :text (:question result)
                       :ds_id ds-id
@@ -98,7 +98,7 @@
                      :rationale (:rationale result)
                      :targets (:targets result)}})
         (catch Exception e
-          (alog! (str "LLM error in formulate-question: " (.getMessage e)) {:level :error})
+          (log! :info (str "LLM error in formulate-question: " (.getMessage e)) {:level :error})
           ;; Fallback to simple question
           {:question {:id (str "q-" (System/currentTimeMillis))
                       :text "Can you tell me more about your process?"
@@ -150,7 +150,7 @@
               result (llm/complete-json prompt :model-class :extract)
               ;; Store SCR in message
               scr (:scr result)]
-          (alog! (str "Interpreted response for " ds-id " in " conversation-id))
+          (log! :info (str "Interpreted response for " ds-id " in " conversation-id))
           {:scr (merge {:answered-at (java.util.Date.)
                         :question question-asked
                         :raw-answer answer}
@@ -160,7 +160,7 @@
            :follow_up (:follow_up result)
            :commit-notes (str "Extracted: " (keys scr))})
         (catch Exception e
-          (alog! (str "LLM error in interpret-response: " (.getMessage e)) {:level :error})
+          (log! :info (str "LLM error in interpret-response: " (.getMessage e)) {:level :error})
           ;; Fallback SCR
           {:scr {:answered-at (java.util.Date.)
                  :question question-asked

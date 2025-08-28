@@ -27,7 +27,7 @@ Now that we have the core infrastructure working, we'll add intelligence to the 
 - [ ] Parse LLM response into structured question format
 - [ ] Add contextual help generation
 
-#### Day 3-4: Interpret Response Tool  
+#### Day 3-4: Interpret Response Tool
 - [ ] Create extraction prompt template
 - [ ] Map natural language to DS schema fields
 - [ ] Handle ambiguous responses

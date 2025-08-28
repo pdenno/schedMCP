@@ -3,11 +3,12 @@
   (:require
    [clojure.pprint :refer [pprint]]
    [datahike.api :as d]
+   [mount.core :as mount :refer [defstate]]
    [sched-mcp.sutil :as sutil :refer [databases-atm connect-atm]]
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.system-db :as sys-db]
+   [sched-mcp.util :as util :refer [log!]]))
 
 ;;; Database listing and inspection functions
-
 (defn list-all-dbs
   "List all registered databases with their configurations"
   []
@@ -58,10 +59,10 @@
    (if-let [conn (connect-atm db-id :error? false)]
      (let [db @conn
            q (if attr-filter
-               [:find ?e ?v
-                :where [?e attr-filter ?v]]
-               [:find ?e
-                :where [?e :db/ident _]])]
+               '[:find ?e ?v
+                 :where [?e attr-filter ?v]]
+               '[:find ?e
+                 :where [?e :db/ident _]])]
        (d/q q db))
      (println (str "Could not connect to database: " db-id)))))
 
@@ -95,38 +96,25 @@
 (defn list-projects
   "List all projects from the system database"
   []
-  (when-let [conn (connect-atm :system :error? false)]
-    (let [db @conn
-          projects (d/q '[:find ?id ?name ?cid
-                          :where
-                          [?p :project/id ?id]
-                          [?p :project/name ?name]
-                          [?p :project/conversation-id ?cid]]
-                        db)]
-      (println "\n=== Projects in System DB ===")
-      (doseq [[id name cid] (sort projects)]
-        (println (str id " - \"" name "\" (conversation: " cid ")")))
-      projects)))
+  (sys-db/ensure-system-db!)
+  (let [projects (sys-db/list-projects)]
+    (println "\n=== Projects in System DB ===")
+    (doseq [{:project/keys [id name domain status created-at]} projects]
+      (println (str id " - \"" name "\" (" domain ") [" status "]")))
+    projects))
 
 (defn get-project-info
   "Get detailed project information from system database"
   [project-id]
-  (when-let [conn (connect-atm :system :error? false)]
-    (let [db @conn
-          pid (keyword project-id)
-          project (d/q '[:find ?p .
-                         :in $ ?pid
-                         :where [?p :project/id ?pid]]
-                       db pid)]
-      (when project
-        (d/pull db '[*] project)))))
+  (sys-db/ensure-system-db!)
+  (sys-db/get-project project-id))
 
 ;;; Conversation update functions for LangGraph integration
 
 (defn update-conversation-state!
   "Update conversation state - designed for LangGraph integration"
   [project-id conversation-id updates]
-  (alog! (str "Updating conversation state: " project-id "/" conversation-id " with " updates))
+  (log! :info (str "Updating conversation state: " project-id "/" conversation-id " with " updates))
   (when-let [conn (connect-atm (keyword project-id) :error? false)]
     (let [cid (keyword conversation-id)]
       (d/transact conn
@@ -136,7 +124,7 @@
 (defn add-conversation-message!
   "Add a message to a conversation"
   [project-id conversation-id message]
-  (alog! (str "Adding message to " project-id "/" conversation-id ": " (select-keys message [:from :content])))
+  (log! :info (str "Adding message to " project-id "/" conversation-id ": " (select-keys message [:from :content])))
   (when-let [conn (connect-atm (keyword project-id) :error? false)]
     (let [db @conn
           cid (keyword conversation-id)
@@ -184,7 +172,7 @@
 (defn update-eads!
   "Update the current EADS for a conversation"
   [project-id conversation-id eads-id]
-  (alog! (str "Updating EADS for " project-id "/" conversation-id " to " eads-id))
+  (log! :info (str "Updating EADS for " project-id "/" conversation-id " to " eads-id))
   (when-let [conn (connect-atm (keyword project-id) :error? false)]
     (d/transact conn
                 [{:conversation/id (keyword conversation-id)
@@ -220,3 +208,95 @@
       (catch Exception e
         (println (str "\n" db-id ": Error - " (.getMessage e))))))
   :done)
+
+;;; Testing helper functions
+
+(defn create-test-project!
+  "Create a test project with sample data"
+  [& {:keys [name domain]
+      :or {name "Test Project"
+           domain "food-processing"}}]
+  (let [project-id (str "test-" (System/currentTimeMillis))]
+    (sys-db/create-project! {:project-id project-id
+                             :project-name name
+                             :domain domain})
+    (println (str "\nCreated test project: " project-id))
+    project-id))
+
+(defn reset-system-db!
+  "Reset the system database - WARNING: This deletes all data!"
+  []
+  (println "\n⚠️  WARNING: This will delete all system and project data!")
+  (print "Are you sure? (yes/no): ")
+  (flush)
+  (when (= "yes" (read-line))
+    (let [base-path (or (System/getenv "SCHED_MCP_DB") "/tmp/scheduling")]
+      ;; Close all connections
+      (doseq [db-id (keys @databases-atm)]
+        (try
+          (when-let [conn (connect-atm db-id :error? false)]
+            (.close conn))
+          (catch Exception _)))
+
+      ;; Clear the atom
+      (reset! databases-atm {})
+
+      ;; Delete directories
+      (sutil/delete-directory-recursive base-path)
+
+      ;; Reinitialize
+      (sys-db/init-system-db!)
+      (println "\n✅ System database reset complete"))
+    true))
+
+(defn test-interview-flow
+  "Test creating a project and running through interview phases"
+  []
+  (let [project-id (create-test-project! :name "Test Brewery" :domain "beverage")]
+    (println "\nTesting interview flow...")
+
+    ;; Show project info
+    (println "\nProject info:")
+    (pprint (get-project-info project-id))
+
+    ;; Show conversations
+    (println "\nConversations:")
+    (pprint (find-conversations (keyword project-id)))
+
+    ;; Show database stats
+    (println "\nDatabase stats:")
+    (db-stats)
+
+    project-id))
+
+;;; Database initialization with Mount
+
+(defn register-project-dbs!
+  "Register all project databases from the system database"
+  []
+  (sys-db/ensure-system-db!)
+  (when-let [projects (sys-db/list-projects)]
+    (doseq [{:project/keys [id _name]} projects]
+      (let [proj-cfg (sutil/db-cfg-map {:type :project :id id})]
+        (when (d/database-exists? proj-cfg)
+          (log! :info (str "Registering project database: " id))
+          (sutil/register-db id proj-cfg))))))
+
+(defn init-all-dbs!
+  "Initialize system database and register all project databases"
+  []
+  (log! :info "Initializing all databases...")
+
+  ;; Ensure system database exists
+  (sys-db/ensure-system-db!)
+
+  ;; Register all project databases
+  (register-project-dbs!)
+
+  {:system-db (sutil/db-cfg-map {:type :system :id :system})
+   :project-count (count (sys-db/list-projects))})
+
+;; Mount defstate for automatic database initialization
+(defstate system-and-project-dbs
+  :start (init-all-dbs!)
+  :stop (log! :info "Shutting down database connections..."))

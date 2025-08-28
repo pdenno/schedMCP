@@ -19,8 +19,9 @@ The system exposes scheduling interview capabilities through MCP tools:
 1. **Clojure** (1.11+)
 2. **Environment Variables**:
    ```bash
-   export SCHEDULING_TBD_DB=/opt/scheduling  # Directory for project databases
-   export OPENAI_API_KEY=sk-...              # If using OpenAI for future features
+   export SCHED_MCP_DB=./test/dbs      # Where the system and project DBs are stored
+   export OPENAI_API_KEY=sk-...        # If using OpenAI for future features
+   export NIST_RCHAT=sk-...            # If using NIST RChat
    ```
 
 ## Installation
@@ -50,8 +51,7 @@ clojure -M -m sched-mcp.main
 clojure -M:dev
 
 ;; In the REPL
-(require '[sched-mcp.core :as core])
-(core/start)  ; This will start mount components and the server
+(user/start)  ; This will start mount components and the server
 ```
 
 ## Configuring Claude Desktop
@@ -69,7 +69,7 @@ Add to your Claude Desktop configuration file:
       "args": ["-M", "-m", "sched-mcp.main"],
       "cwd": "/path/to/schedMCP",
       "env": {
-        "SCHEDULING_TBD_DB": "/opt/scheduling"
+        "SCHED_MCP_DB": <path to directory, possibly in the project ./test/dbs/"
       }
     }
   }

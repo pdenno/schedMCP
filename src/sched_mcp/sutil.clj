@@ -8,18 +8,13 @@
    [clojure.string :as str]
    [datahike.api :as d]
    [datahike.pull-api :as dp]
-   [taoensso.telemere :as tel])
+   [sched-mcp.util :refer [log!]])
   (:import ; ToDo: Why does clj-kondo complain?
    java.net.URI
    java.nio.file.StandardCopyOption
    java.nio.file.Paths))
 
 (def ^:diag diag (atom nil))
-
-(defn log!
-  "This is to keep cider stepping from stumbling over the telemere log! macro."
-  [log-key s]
-  (tel/log! log-key s))
 
 ;(def llm-provider "Default provider to use. Choices are #{:openai :azure}." :openai) ; Values are azure and :openai
 (def default-llm-provider "Default provider to use. Choices are #{:openai :azure}." (atom :openai)) ; Values are azure and :openai
@@ -73,8 +68,8 @@
                    ;; Use local test directory when in REPL
                    "./test/dbs"
                    ;; Otherwise use environment variable
-                   (or (-> (System/getenv) (get "SCHEDULING_TBD_DB"))
-                       (throw (ex-info (str "Set the environment variable SCHEDULING_TBD_DB to the directory containing SchedulingTBD databases."
+                   (or (-> (System/getenv) (get "SCHED_MCP_DB"))
+                       (throw (ex-info (str "Set the environment variable SCHED_MCP_DB to the directory containing SchedulingTBD databases."
                                             "\nCreate directories 'projects' and 'system' under it.") {}))))
         db-dir (->> (case type
                       :system "/system"
