@@ -48,32 +48,13 @@ The `examples/schedulingTBD/` directory contains the original system that we're 
 
 ## Development Status
 
-### Current Phase
-Early implementation - fixing foundational bugs and establishing core architecture
-
-### Completed
-- Architecture design document
-- Basic interview infrastructure
-- Development guidelines
-
-### In Progress
-- Surrogate testing
-- Bug fixes for interview flow
-- Discovery Schema loading system
-- Tool implementation using MCP
-
-### Upcoming
-- Orchestrator tools
-- Discovery Schema pursuit logic
-- SCR/ASCR management
-- Integration with existing DS templates
+- See docs/
 
 ## Key Architectural Decisions
 
 1. **MCP Tools are Stateless** - All state lives in the database; tools receive complete context
-2. **Dual DS Format** - JSON for templates/instructions, Clojure for logic/validation
-3. **Independent from clojure-mcp** - We borrow patterns but maintain no dependencies
-4. **Flexible Orchestration** - Tools provide information, not prescriptions, preserving LLM reasoning
+2. **Independent from clojure-mcp** - We borrow patterns but maintain no dependencies
+3. **Flexible Orchestration** - Tools provide information, not prescriptions, preserving LLM reasoning
 
 ## For AI Assistants
 

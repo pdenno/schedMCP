@@ -23,7 +23,6 @@ The term EADS is deprecated. We use "Discovery Schema" and "DS" instead. I have 
 3. **Core Concepts**
    - **EADS**: Template data structures with instructions for completion (now called Discovery Schema)
    - **SCR**: Schema-Conforming Responses filled by interviewers
-   - **DSR**: Data Structure Refinement messages containing completed schemas
 
 ### Current Protocol Flow
 
@@ -442,26 +441,6 @@ System: [Periodically calls get_next_ds]
    - Document what needs to work before DS implementation
    - Basic interview flow, state persistence, database queries, MCP responses
    - See `docs/test-checklist.md`
-
-#### Week 1-2: Implement core Discovery Schema (EADS) tools
-   - Load Discovery Schema (EADS) from JSON
-   - Basic pursuit tracking
-   - Question generation
-
-2. **Week 3-4**: Orchestration logic
-   - Recommendation engine
-   - State management
-   - Budget tracking
-
-3. **Week 5-6**: Integration
-   - Connect with existing interview system
-   - Test with real Discovery Schema (EADS)
-   - Refine tool interfaces
-
-4. **Week 7-8**: Polish and extend
-   - Add remaining interviewers
-   - Implement validation
-   - Performance optimization
 
 ### Testing Strategy with Surrogate Experts
 

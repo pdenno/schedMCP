@@ -1,6 +1,6 @@
 # schedMCP Current State Documentation
 
-*Last Updated: January 2025*
+*Last Updated: August 29, 2025*
 
 ## Overview
 
@@ -18,16 +18,45 @@ schedMCP is in early implementation phase, migrating the schedulingTBD Discovery
 - Datahike integration for persistent storage
 - Project-specific databases created in `dbs/projects/`
 - Schema supports projects, conversations, messages, and EADS data
+- Clean project ID naming: `:craft-beer`, `:craft-beer-1`, `:sur-craft-beer`
 
 ### MCP Integration
 - Basic tool definitions following clojure-mcp patterns
-- Four working tools: `start_interview`, `get_interview_context`, `submit_answer`, `get_interview_answers`
+- Working interview tools plus surrogate tools
 - Tools properly handle errors and return structured responses
 
-### Warm-up Phase
-- Simple warm-up interview with three questions implemented
-- Questions about scheduling challenges, products/services, and additional context
-- Progress tracking and completion detection
+### Surrogate Expert System (Phase 2 Complete) ✅
+
+#### Overview
+The surrogate expert system successfully simulates domain experts for testing and development of Discovery Schemas without requiring human participants.
+
+#### Key Capabilities
+1. **Domain-Specific Expertise**
+   - Surrogates can simulate experts in: craft-beer, plate-glass, metal-fabrication, food-processing, textiles
+   - Each surrogate maintains consistent domain knowledge throughout the interview
+
+2. **Realistic Interview Behavior**
+   - Provides specific, consistent information about production processes, equipment, scheduling challenges
+   - Automatically formats complex data in HTML tables when appropriate
+   - Maintains conversation context across multiple questions
+
+3. **State Management**
+   - In-memory state for fast access during active interviews
+   - Database persistence with proper attribution (`:message/from :surrogate`)
+   - Clean project IDs using `:sur-<domain>` format
+
+#### Example: Craft Beer Surrogate Interview
+A typical surrogate expert (Cascade Craft Brewery) provides:
+- **Production**: 100 HL/week (5 batches of 20 HL)
+- **Products**: 8 beers (4 year-round, 4 seasonal)
+- **Equipment**: 10 fermentation tanks, 8 conditioning tanks, 2 brite tanks
+- **Process Times**: Fermentation (7-14 days), Conditioning (7-21 days)
+- **Challenges**: Variable fermentation times, limited tank capacity, packaging bottlenecks
+
+### LLM Integration
+- Unified `llm.clj` supporting multiple providers
+- Working with OpenAI GPT-4 and NIST_RCHAT (Meta)
+- `query-llm` function compatible with schedulingTBD patterns
 
 ## What's Not Working Yet ❌
 
@@ -45,7 +74,6 @@ schedMCP is in early implementation phase, migrating the schedulingTBD Discovery
 
 ### Advanced Features
 - No MiniZinc generation
-- No surrogate expert testing
 - No visualization of collected data
 - No export/import of interview sessions
 
@@ -57,27 +85,36 @@ src/
 │   ├── core.clj          # MCP server setup (minimal)
 │   ├── interview.clj     # Interview management
 │   ├── warm_up.clj       # Warm-up phase implementation
+│   ├── surrogate.clj     # Surrogate expert implementation
+│   ├── llm.clj           # LLM integration (OpenAI, NIST_RCHAT)
+│   ├── system_db.clj     # System database management
 │   ├── sutil.clj         # Database utilities
 │   ├── util.clj          # General utilities
 │   └── tools/
-│       └── iviewr_tools.clj  # Interview MCP tools
+│       ├── iviewr_tools.clj  # Interview MCP tools
+│       └── surrogate.clj     # Surrogate MCP tools
 ```
-
-## Known Issues
-
-### Recently Fixed ✅
-1. **Null pointer in `get_interview_answers`** - Fixed by adding defensive defaults
-2. **`submit_answer` not progressing** - Fixed by auto-detecting current question
-
-### Still Outstanding
-1. **No DS JSON loading** - Need to implement DS loader
-2. **Limited to warm-up** - Need to support full Discovery Schema system
-3. **No state beyond EADS** - Need proper SCR/ASCR management
-4. **No tool registration** - core.clj needs proper tool setup
 
 ## Testing the Current System
 
-### Quick Test Sequence
+### Surrogate Expert Test
+```clojure
+;; Start a surrogate interview
+(surrogate/start-surrogate-interview
+  {:domain :craft-beer
+   :company-name "Mountain Peak Brewery"})
+;; Creates project :sur-craft-beer (replaces if exists)
+
+;; Ask questions
+(surrogate/surrogate-answer-question
+  {:project-id :sur-craft-beer
+   :question "What are your main scheduling challenges?"})
+
+;; View conversation history
+(surrogate/get-conversation-history :sur-craft-beer)
+```
+
+### Quick Interview Test
 ```clojure
 ;; In REPL
 (require '[sched-mcp.tools.iviewr-tools :as tools])
@@ -86,36 +123,25 @@ src/
 (tools/start-interview-tool {:project_name "Test Brewery" :domain "food-processing"})
 ;; Returns: {:project_id "test-brewery", :conversation_id "conv-xxx", ...}
 
-;; 2. Get context
-(tools/get-interview-context-tool {:project_id "test-brewery"})
-;; Returns: current question
-
-;; 3. Submit answer
-(tools/submit-answer-tool {:project_id "test-brewery"
-                          :conversation_id "conv-xxx"
-                          :answer "We have bottlenecks at packaging"})
-
-;; 4. Get all answers
-(tools/get-interview-answers-tool {:project_id "test-brewery"
-                                  :conversation_id "conv-xxx"})
+;; 2-4. Get context, submit answers, retrieve answers...
 ```
 
-### What Should Happen
-1. Interview starts with warm-up phase
-2. Three questions asked in sequence
-3. After all required questions answered, interview marks as complete
-4. Answers stored and retrievable
+## Project Naming Convention
+
+- **Surrogate Projects**: `:sur-<domain>` (e.g., `:sur-craft-beer`)
+  - Always replaces existing project with same ID
+  - Ensures only one surrogate per domain at a time
+
+- **Human Projects**: Simple incremental naming
+  - First project: `:craft-beer`
+  - Subsequent projects: `:craft-beer-1`, `:craft-beer-2`, etc.
 
 ## Next Implementation Steps
 
-### Immediate (Pre-Week 1-2 Tasks)
-- [x] Fix critical bugs
-- [x] Create DS file structure
-- [x] Document current state (this document)
-- [ ] Create DS loader spike
-- [ ] Review existing DS examples
-- [ ] Set up dev workflow helpers
-- [ ] Create test checklist
+### Immediate - Phase 3 (Table-Based Communication)
+- [ ] Enhanced table parsing and validation
+- [ ] Complex multi-table scenarios
+- [ ] Interactive table editing workflows
 
 ### Near-term (Week 1-2)
 - [ ] Implement DS JSON loader
@@ -132,18 +158,19 @@ src/
 ## Development Notes
 
 ### Database Location
-- System DB: `dbs/system/sched-mcp-db`
-- Project DBs: `dbs/projects/{project-name}/`
+- System DB: `test/dbs/system/`
+- Project DBs: `test/dbs/projects/{project-id}/`
 
 ### Logging
 - Agent logs: `logs/agent-log.edn`
 - Use `alog!` for MCP tool logging
 - Use `log!` for system logging
+- Surrogate responses logged with 🟠 orange indicator
 
 ### Key Files to Understand
 1. `examples/schedulingTBD/` - Reference implementation
 2. `examples/clojure-mcp/` - MCP patterns to follow
-3. `resources/discovery-schemas/` - DS templates (just copied)
+3. `resources/discovery-schemas/` - DS templates
 4. `docs/agents/` - Agent descriptions for interviewers
 
 ## Debugging Tips
@@ -155,21 +182,22 @@ src/
 
 ### REPL Helpers
 ```clojure
-;; Check project DB
-(require '[datahike.api :as d])
-(require '[sched-mcp.sutil :refer [connect-atm]])
+;; Check all projects
+(sys-db/list-projects)
+;; => [:craft-beer :craft-beer-1 :sur-craft-beer :sur-plate-glass]
 
-;; Query all conversations
-(d/q '[:find ?cid ?status
-       :where [?c :conversation/id ?cid]
-              [?c :conversation/status ?status]]
-     @(connect-atm :test-brewery))
+;; Check surrogate sessions
+(keys @surrogate/expert-sessions-atom)
 
-;; Check EADS data
-(require '[sched-mcp.warm-up :as warm-up])
-(warm-up/get-eads-data :test-brewery :conv-xxx)
+;; Query conversation messages
+(d/q '[:find ?from ?type ?content
+       :where
+       [?e :message/from ?from]
+       [?e :message/type ?type]
+       [?e :message/content ?content]]
+     @(connect-atm :sur-craft-beer))
 ```
 
 ## Summary
 
-The foundation is in place with basic interview flow working. The main gap is the Discovery Schema system itself - we need to move beyond the simple warm-up phase to the full DS-based interview system. With bugs fixed and file structure ready, we're positioned to start implementing the core DS functionality.
+The foundation is solid with basic interview flow working and surrogate experts providing realistic domain expertise. The surrogate system demonstrates we can effectively simulate manufacturing experts for automated testing. The main gap is the Discovery Schema system itself - we need to move beyond the simple warm-up phase to the full DS-based interview system. With Phase 2 (Surrogate Experts) complete, we're ready for Phase 3 (Table-Based Communication) and then full DS implementation.
