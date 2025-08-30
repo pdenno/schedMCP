@@ -1,62 +1,42 @@
 (ns sched-mcp.schema
-  "Database schemas for system and project databases"
+  "Database schemas for system and project databases
+   Adapted from schedulingTBD with EADS -> DS renaming"
   (:require
    [sched-mcp.sutil :as sutil :refer [datahike-schema]]))
 
 (def db-schema-sys+
-  "System database schema - manages projects and system-level information"
-  {;; Project management
+  "System database schema - manages projects"
+  {;; Project registry
    :project/id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
         :unique :db.unique/identity
-        :doc "Unique keyword identifier for a project"}
+        :doc "Project identifier"}
 
    :project/name
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/string
         :doc "Human-readable project name"}
 
-   :project/domain
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/string
-        :doc "Manufacturing domain (e.g., 'food-processing', 'metalworking')"}
-
    :project/created-at
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/instant
-        :doc "Timestamp when project was created"}
+        :doc "When project was created"}
+
+   :project/domain
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/string
+        :doc "Manufacturing domain (e.g., food-processing, metalworking)"}
 
    :project/status
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
-        :doc "Project status: :active, :archived, :deleted"}
-
-   :project/conversation-id
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/keyword
-        :doc "Primary conversation ID for the project"}
-
-   ;; System configuration
-   :system/name
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/string
-        :unique :db.unique/identity
-        :doc "System identifier - always 'SYSTEM'"}
-
-   :system/projects
-   #:db{:cardinality :db.cardinality/many
-        :valueType :db.type/ref
-        :doc "References to all known projects"}
-
-   :system/default-project
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/keyword
-        :doc "Default project ID for new users"}})
+        :doc "Project status: :active, :archived, :deleted"}})
 
 (def db-schema-proj+
-  "Project database schema - manages conversations and interview state"
-  {;; Project identification
+  "Project database schema - manages conversations and interview state
+   Adapted from schedulingTBD schema with EADS renamed to DS"
+  {;; ---------------------- project
    :project/id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
@@ -68,7 +48,37 @@
         :valueType :db.type/string
         :doc "Human-readable project name"}
 
-   ;; Conversation management
+   :project/conversations
+   #:db{:cardinality :db.cardinality/many
+        :valueType :db.type/ref
+        :doc "The conversations of this project"}
+
+   :project/active-conversation
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/keyword
+        :doc "The conversation most recently active"}
+
+   :project/active-ds-id
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/keyword
+        :doc "The most recently pursued DS in the project"}
+
+   :project/summary-dstructs
+   #:db{:cardinality :db.cardinality/many
+        :valueType :db.type/ref
+        :doc "Summary data structures indexed by their DS-id"}
+
+   :project/surrogate
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/ref
+        :doc "The project's surrogate object, if any"}
+
+   :project/surrogate?
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/boolean
+        :doc "True if domain expertise is provided by a surrogate"}
+
+   ;; ---------------------- conversation
    :conversation/id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
@@ -83,24 +93,23 @@
    :conversation/status
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
-        :doc "Conversation status: :active, :paused, :complete"}
+        :doc "Conversation status: :active, :paused, :complete, :ds-exhausted"}
 
-   :conversation/current-ds
+   :conversation/active-ds-id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
-        :doc "Current Discovery Schema being pursued"}
+        :doc "The id of the DS currently being pursued in this conversation"}
 
-   :conversation/completed-ds
-   #:db{:cardinality :db.cardinality/many
-        :valueType :db.type/keyword
-        :doc "List of completed Discovery Schemas"}
+   :conversation/active-pursuit
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/ref
+        :doc "Reference to the active pursuit"}
 
    :conversation/messages
    #:db{:cardinality :db.cardinality/many
         :valueType :db.type/ref
-        :doc "References to conversation messages"}
+        :doc "The messages between interviewer and interviewees"}
 
-   ;; Surrogate support
    :conversation/expert-type
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
@@ -109,9 +118,9 @@
    :conversation/surrogate-config
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/string
-        :doc "EDN string of surrogate configuration (domain, company-name, etc.)"}
+        :doc "EDN string of surrogate configuration"}
 
-   ;; Message tracking
+   ;; ---------------------- message (from schedulingTBD)
    :message/id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
@@ -131,71 +140,84 @@
    :message/from
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
-        :doc "The agent issuing the message: :human, :surrogate, or :system"}
-
-   :message/type
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/keyword
-        :doc "Message type: :question, :answer, :system"}
+        :doc "The agent issuing the message: :user, :human, :surrogate, or :system"}
 
    :message/content
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/string
         :doc "Message content"}
 
-   :message/ds-id
+   :message/type
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
-        :doc "Associated Discovery Schema ID"}
+        :doc "Message type: :question, :answer, :system"}
 
-   ;; Discovery Schema tracking
-   :ds/id
+   :message/pursuing-ds
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/keyword
+        :doc "The DS being pursued by this question or answer"}
+
+   :message/ds-data-structure
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/string
+        :doc "EDN string of DS data structure inferred from conversation"}
+
+   :message/question-type
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/keyword
+        :doc "A label from interview instructions for this Q&A"}
+
+   :message/answers-question
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/ref
+        :doc "Reference to the message this answers"}
+
+   :message/table
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/string
+        :doc "Optional table in response"}
+
+   :message/scr
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/string
+        :doc "Schema-Conforming Response as EDN string"}
+
+   :message/pursuit
+   #:db{:cardinality :db.cardinality/one
+        :valueType :db.type/ref
+        :doc "Reference to the pursuit this message belongs to"}
+
+   ;; ---------------------- summary data structures (EADS -> DS)
+   :dstruct/id
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/keyword
         :unique :db.unique/identity
-        :doc "Discovery Schema identifier"}
+        :doc "The DS-id uniquely identifying the summary data structure"}
 
-   :ds/ascr
+   :dstruct/str
    #:db{:cardinality :db.cardinality/one
         :valueType :db.type/string
-        :doc "Aggregated Schema-Conforming Response (as EDN string)"}
+        :doc "EDN string of the data structure"}
 
-   :ds/status
+   :dstruct/budget-left
    #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/keyword
-        :doc "DS status: :active, :complete, :abandoned"}
+        :valueType :db.type/double
+        :doc "The amount of budget left for questioning"}})
 
-   :ds/questions-asked
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/long
-        :doc "Number of questions asked for this DS"}
+(def db-schema-sys
+  "Complete system database schema as Datahike schema list"
+  (datahike-schema db-schema-sys+))
 
-   :ds/budget-remaining
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/long
-        :doc "Questions remaining in budget"}
-
-   ;; Project-level surrogate support (following schedulingTBD pattern)
-   :project/surrogate
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/ref
-        :doc "Reference to the project's conversation with surrogate"}
-
-   :project/surrogate?
-   #:db{:cardinality :db.cardinality/one
-        :valueType :db.type/boolean
-        :doc "True if domain expertise is provided by a surrogate"}})
-
-;; Convert to Datahike format
-(def db-schema-sys (datahike-schema db-schema-sys+))
-(def db-schema-proj (datahike-schema db-schema-proj+))
+(def db-schema-proj
+  "Complete project database schema as Datahike schema list"
+  (datahike-schema db-schema-proj+))
 
 (defn project-schema-key?
-  "Check if a key belongs to the project schema"
+  "Check if a keyword is part of the project schema"
   [k]
   (contains? db-schema-proj+ k))
 
 (defn system-schema-key?
-  "Check if a key belongs to the system schema"
+  "Check if a keyword is part of the system schema"
   [k]
   (contains? db-schema-sys+ k))

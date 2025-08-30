@@ -1,13 +1,17 @@
 (ns sched-mcp.project-db
-  "Database functions for projects"
+  "Database functions for projects - includes backup/restore for schema migrations"
   (:require
-   [clojure.java.io     :as io]
-   [datahike.api        :as d]
-   [mount.core          :as mount :refer [defstate]]
-   [sched-mcp.schema    :as schema]
-   [sched-mcp.sutil     :as sutil :refer [databases-atm connect-atm mocking? resolve-db-id shadow-pid]]
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
+   [clojure.string :as str]
+   [datahike.api :as d]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.schema :as schema :refer [project-schema-key? system-schema-key?]]
+   [sched-mcp.sutil :as sutil :refer [databases-atm connect-atm mocking?
+                                      resolve-db-id shadow-pid root-entities]]
    [sched-mcp.system-db :as sysdb]
-   [sched-mcp.util      :as util :refer [log!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (defn project-exists?
   "If a project with argument :project/id (a keyword) exists, return the root entity ID of the project
@@ -222,6 +226,113 @@
       {:project-id pid
        :status :archived})))
 
+;;; -------------------- Schema Migration Functions --------------------
+
+(defn clean-project-for-schema
+  "Remove attributes that are no longer in the schema and nil values"
+  [proj]
+  (letfn [(clean [x]
+            (cond
+              (map? x)
+              (reduce-kv (fn [m k v]
+                           (cond
+                             (nil? v) m ; Drop nil values
+                             (not (project-schema-key? k))
+                             (do (log! :warn (str "Dropping obsolete attr: " k)) m)
+                             :else (assoc m k (clean v))))
+                         {} x)
+
+              (vector? x)
+              (->> (mapv clean x) (remove nil?) vec)
+
+              :else x))]
+    (clean proj)))
+
+(defn backup-project-db
+  "Backup a project database to EDN file"
+  [pid & {:keys [target-dir clean?]
+          :or {target-dir "data/projects/" clean? true}}]
+  (io/make-parents (str target-dir "dummy")) ; Ensure dir exists
+  (let [filename (str target-dir (name pid) ".edn")
+        proj (cond-> (get-project pid)
+               clean? clean-project-for-schema)
+        s (with-out-str
+            (println "[")
+            (pprint proj)
+            (println "]"))]
+    (log! :info (str "Writing project to " filename))
+    (spit filename s)))
+
+(defn backup-all-projects
+  "Backup all project databases"
+  [& {:keys [target-dir] :or {target-dir "data/projects/"}}]
+  (doseq [pid (list-projects)]
+    (backup-project-db pid :target-dir target-dir)))
+
+(defn recreate-project-db!
+  "Recreate a project database from EDN backup
+   Can provide content directly or read from backup file"
+  ([pid] (recreate-project-db! pid nil))
+  ([pid content]
+   (let [backup-file (format "data/projects/%s.edn" (name pid))]
+     (if (or content (.exists (io/file backup-file)))
+       (let [cfg (sutil/db-cfg-map {:type :project :id pid})
+             pname (or (when content (:project/name content))
+                       ;; Generate name from pid if not in content
+                       (as-> (name pid) ?s
+                         (str/replace ?s #"-" " ")
+                         (str/split ?s #"\s+")
+                         (map str/capitalize ?s)
+                         (str/join " " ?s)))]
+
+         ;; Delete existing DB if present
+         (when (d/database-exists? cfg)
+           (d/delete-database cfg))
+
+         ;; Create new database
+         (d/create-database cfg)
+         (sutil/register-db pid cfg)
+
+         ;; Add to system DB if not already there
+         (when-let [sys-conn (connect-atm :system :error? false)]
+           (when-not (d/q '[:find ?e . :in $ ?pid :where [?e :project/id ?pid]]
+                          @sys-conn pid)
+             (d/transact sys-conn
+                         [{:project/id pid
+                           :project/name pname
+                           :project/created-at (java.util.Date.)
+                           :project/status :active}])))
+
+         ;; Load content
+         (let [content (if content
+                         (-> content
+                             (assoc :project/id pid)
+                             (assoc :project/name pname))
+                         (->> backup-file slurp edn/read-string first))]
+
+           ;; Transact schema and content
+           (d/transact (connect-atm pid) schema/db-schema-proj)
+           (d/transact (connect-atm pid) [content]))
+
+         (log! :info (str "Recreated project DB: " pid))
+         cfg)
+       (log! :error (str "Not recreating DB - backup file missing: " backup-file))))))
+
+(defn update-project-for-schema!
+  "Backup and recreate a project to update its schema"
+  [pid]
+  (backup-project-db pid)
+  (recreate-project-db! pid))
+
+(defn update-all-projects-for-schema!
+  "Update all projects for new schema"
+  []
+  (log! :info "Updating all projects for new schema...")
+  (doseq [pid (list-projects)]
+    (try
+      (update-project-for-schema! pid)
+      (catch Exception e
+        (log! :error (str "Failed to update " pid ": " (.getMessage e)))))))
 
 ;;; -------------------------- Starting and stopping....
 (defn register-project-dbs!

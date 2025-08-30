@@ -30,7 +30,7 @@ schedMCP is a Model Context Protocol (MCP) implementation of schedulingTBD's Dis
 
 ### Living Documents (in `/docs/`)
 These documents evolve as the project develops:
-- `mcp-discovery-schema-design.md` - Current architecture and implementation plans
+- `new-development-plan.md` - Current architecture and implementation plans
 - `development-guidelines.md` - Coding standards and practices
 - Other design documents as needed
 

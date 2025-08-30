@@ -117,7 +117,7 @@
     (try
       (json/read-str response :key-fn keyword)
       (catch Exception e
-        (log! :error (str "Failed to parse JSON: " response) {:level :error})
+        (log! :error (str "Failed to parse JSON: " response))
         (throw (ex-info "LLM returned invalid JSON"
                         {:response response :error e}))))))
 
@@ -173,8 +173,8 @@
           ;; Extract content after the frontmatter
           prompt (second (str/split content #"---\n" 3))]
       (swap! agent-prompts assoc agent-key prompt)
-      (log! (str "Loaded agent prompt for " agent-key)))
-    (log! (str "Agent prompt file not found: " file-path) {:level :warn})))
+      (log! :info (str "Loaded agent prompt for " agent-key)))
+    (log! :warn (str "Agent prompt file not found: " file-path))))
 
 (defn get-agent-prompt
   "Get the system prompt for an agent"

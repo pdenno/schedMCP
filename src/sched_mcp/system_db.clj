@@ -52,3 +52,23 @@
   []
   (or (connect-atm :system :error? false)
       (init-system-db!)))
+
+(defn backup-system-db
+  "Backup the system database to an EDN file"
+  [& {:keys [target-dir] :or {target-dir "data/"}}]
+  (io/make-parents (str target-dir "dummy"))
+  (let [conn-atm (connect-atm :system)
+        filename (str target-dir "system-db.edn")
+        s (with-out-str
+            (println "[")
+            (doseq [ent-id (root-entities conn-atm)]
+              (let [obj (resolve-db-id {:db/id ent-id} conn-atm)]
+                ;; Skip schema elements and transaction markers
+                (when-not (and (map? obj)
+                               (or (contains? obj :db/ident)
+                                   (contains? obj :db/txInstant)))
+                  (pprint obj)
+                  (println))))
+            (println "]"))]
+    (log! :info (str "Writing system DB to " filename))
+    (spit filename s)))

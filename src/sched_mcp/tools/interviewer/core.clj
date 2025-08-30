@@ -98,7 +98,7 @@
                      :rationale (:rationale result)
                      :targets (:targets result)}})
         (catch Exception e
-          (log! :info (str "LLM error in formulate-question: " (.getMessage e)) {:level :error})
+          (log! :error (str "LLM error in formulate-question: " (.getMessage e)))
           ;; Fallback to simple question
           {:question {:id (str "q-" (System/currentTimeMillis))
                       :text "Can you tell me more about your process?"
@@ -134,7 +134,10 @@
 
 (defmethod tool-system/execute-tool :interpret-response
   [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id answer question-asked]}]
-  (let [ds (ds/get-cached-ds (keyword ds-id))]
+  (let [ds (ds/get-cached-ds (keyword ds-id))
+        project-kw (keyword project-id)
+        conv-kw (keyword conversation-id)
+        ds-kw (keyword ds-id)]
     (if-not ds
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
@@ -148,20 +151,78 @@
                        :question question-asked
                        :answer answer})
               result (llm/complete-json prompt :model-class :extract)
-              ;; Store SCR in message
-              scr (:scr result)]
-          (log! :info (str "Interpreted response for " ds-id " in " conversation-id))
-          {:scr (merge {:answered-at (java.util.Date.)
-                        :question question-asked
-                        :raw-answer answer}
-                       scr)
-           :confidence (or (:confidence result) 0.8)
-           :ambiguities (or (:ambiguities result) [])
-           :follow_up (:follow_up result)
-           :commit-notes (str "Extracted: " (keys scr))})
+              scr (:scr result)
+
+              ;; Get the active pursuit
+              conn (connect-atm project-kw)
+              pursuit-eid (d/q '[:find ?p .
+                                 :in $ ?cid ?ds-id
+                                 :where
+                                 [?c :conversation/id ?cid]
+                                 [?c :conversation/active-pursuit ?p]
+                                 [?p :pursuit/ds-id ?ds-id]]
+                               @conn conv-kw ds-kw)
+
+              ;; Store message with SCR
+              message-id (keyword (str "msg-" (System/currentTimeMillis) "-" (rand-int 1000)))
+              message-data {:message/id message-id
+                            :message/conversation conv-kw
+                            :message/pursuit pursuit-eid
+                            :message/type :answer
+                            :message/from :user
+
+                            :message/content answer
+                            :message/scr (pr-str scr) ; Store as EDN string
+                            :message/timestamp (java.util.Date.)}]
+
+          ;; Store the message
+          (when pursuit-eid
+            (d/transact conn [message-data])
+            (log! :info (str "Stored SCR for " ds-id " in " conversation-id)))
+
+          ;; Trigger ASCR update
+          (let [updated-ascr (combine/combine-ds! ds-kw project-kw)
+                complete? (combine/ds-complete? ds-kw project-kw)]
+
+            ;; Update pursuit status if complete
+            (when (and pursuit-eid complete?)
+              (d/transact conn [{:db/id pursuit-eid
+                                 :pursuit/status :complete
+                                 :pursuit/completed-at (java.util.Date.)}])
+              (log! :info (str "DS " ds-id " marked complete")))
+
+            ;; Return comprehensive result
+            {:scr (merge {:answered-at (java.util.Date.)
+                          :question question-asked
+                          :raw-answer answer}
+                         scr)
+             :confidence (or (:confidence result) 0.8)
+             :ambiguities (or (:ambiguities result) [])
+             :follow_up (:follow_up result)
+             :commit-notes (str "Extracted: " (keys scr))
+             :updated_ascr updated-ascr
+             :ds_complete complete?
+             :completeness (if complete?
+                             1.0
+                             (/ (count (keys updated-ascr))
+                                (count (keys (:eads ds)))))}))
         (catch Exception e
-          (log! :info (str "LLM error in interpret-response: " (.getMessage e)) {:level :error})
-          ;; Fallback SCR
+          (log! :error (str "Error in interpret-response: " (.getMessage e)))
+          ;; Still try to store raw answer
+          (try
+            (let [conn (connect-atm project-kw)
+                  message-id (keyword (str "msg-" (System/currentTimeMillis)))
+                  message-data {:message/id message-id
+                                :message/conversation conv-kw
+                                :message/type :answer
+                                :message/from :user
+
+                                :message/content answer
+                                :message/timestamp (java.util.Date.)}]
+              (d/transact conn [message-data]))
+            (catch Exception e2
+              (log! :error (str "Failed to store fallback message: " (.getMessage e2)))))
+          ;; Return error response
           {:scr {:answered-at (java.util.Date.)
                  :question question-asked
                  :raw-answer answer
