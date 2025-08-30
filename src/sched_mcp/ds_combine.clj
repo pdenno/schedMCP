@@ -5,7 +5,7 @@
    [clojure.spec.alpha :as s]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]
-   [sched-mcp.util :refer [alog!]]))
+   [sched-mcp.util :refer [log!]]))
 
 ;;; Multimethods for DS operations
 
@@ -104,14 +104,14 @@
 
 (defmethod combine-ds! :default
   [ds-id project-id]
-  (alog! (str "Using default combine for " ds-id))
+  (log! :info (str "Using default combine for " ds-id))
   (let [scrs (get-stored-scrs project-id ds-id)]
     ;; Simple merge for default
     (reduce merge {} scrs)))
 
 (defmethod ds-complete? :default
   [ds-id project-id]
-  (alog! (str "Using default complete check for " ds-id))
+  (log! :info (str "Using default complete check for " ds-id))
   false)
 
 ;;; Specific DS implementations

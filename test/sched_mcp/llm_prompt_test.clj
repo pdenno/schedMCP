@@ -4,7 +4,7 @@
   (:require
    [clojure.test :refer [deftest testing is]]
    [clojure.string :as str]
-   [sched-mcp.llm-direct :as llm]
+   [sched-mcp.llm :as llm]
    [sched-mcp.ds-loader :as ds]
    [sched-mcp.util :refer [alog!]]))
 

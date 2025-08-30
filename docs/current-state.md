@@ -91,12 +91,12 @@ src/
 ;; Returns: current question
 
 ;; 3. Submit answer
-(tools/submit-answer-tool {:project_id "test-brewery" 
+(tools/submit-answer-tool {:project_id "test-brewery"
                           :conversation_id "conv-xxx"
                           :answer "We have bottlenecks at packaging"})
 
 ;; 4. Get all answers
-(tools/get-interview-answers-tool {:project_id "test-brewery" 
+(tools/get-interview-answers-tool {:project_id "test-brewery"
                                   :conversation_id "conv-xxx"})
 ```
 

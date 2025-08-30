@@ -4,13 +4,15 @@
    ;; Existing tools
    [sched-mcp.tools.iviewr-tools :as itools]
    ;; New tools
+   [sched-mcp.ds-schema :as ds-schema]
+   [sched-mcp.interview :as interview]
+   [sched-mcp.sutil :as sutil :refer [connect-atm]]
    [sched-mcp.tools.interviewer.core :as interviewer]
    [sched-mcp.tools.interviewer.advanced :as advanced]
    [sched-mcp.tools.orchestrator.core :as orchestrator]
    [sched-mcp.tools.surrogate :as surrogate]
-   [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.ds-schema :as ds-schema]
-   [sched-mcp.interview :as interview]
+   [sched-mcp.tool-system :as toolsys]
+   [sched-mcp.util :refer [log!]]
    [datahike.api :as d]))
 
 ;;; System atom for sharing state between tools
@@ -20,24 +22,24 @@
 (defn tool-config->spec
   "Convert our tool configuration to MCP tool spec"
   [tool-config]
-  {:name (tool-system/tool-name tool-config)
-   :description (tool-system/tool-description tool-config)
-   :schema (tool-system/tool-schema tool-config)
-   :tool-fn #(tool-system/execute-tool-safe tool-config %)})
+  {:name (toolsys/tool-name tool-config)
+   :description (toolsys/tool-description tool-config)
+   :schema (toolsys/tool-schema tool-config)
+   :tool-fn #(toolsys/execute-tool-safe tool-config %)})
 
 ;;; Initialize DS schema in project databases
 (defn ensure-ds-schema!
   "Ensure DS schema is added to project database"
   [project-id]
   (try
-    (let [conn (sched-mcp.sutil/connect-atm project-id)]
+    (let [conn (connect-atm project-id)]
       ;; Check if DS schema already added by looking for a DS attribute
       (when-not (d/entity @conn :pursuit/id)
         ;; Add DS schema
         (ds-schema/add-ds-schema! conn)
-        (println "Added DS schema to project" project-id)))
+        (log! :info (str "Added DS schema to project" project-id))))
     (catch Exception e
-      (println "Error adding DS schema:" (.getMessage e)))))
+      (log! :error (str "Error adding DS schema:" (.getMessage e))))))
 
 ;;; Wrap original tools to add DS schema
 (defn wrap-start-interview

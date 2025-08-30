@@ -11,6 +11,11 @@ The new project performs the same work as schedulingTBD but
 Note that some of the instructions in this file concern schedulingTBD as it is implemented in examples/schedulingTBD.
 We will write a new schedMCP/CLAUDE.md once we have a modest implementation in schedMCP/src.
 
+## Starting up
+- The system, including its MCP loop, is probably running when you join. If you clojure_eval `(develop.repl/ns-setup!)` you will have the same NS aliases that I typically use.
+  You can then evaluate `(sutil/connect-atm :system)`. If that returns a connection object, such as `#<Connection@1840adbd: #datahike/DB {:max-tx 536870914 :max-eid 10}>`, you
+  should be ready to work.
+
 ## Coding Rules
 
 ### Naming Conventions
@@ -20,9 +25,23 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
 - **File naming**: Filenames should be unique within the project, the exception being core.clj which can occur in each MCP tool directory.
 - **Namespace aliases**: These should be short and `itools` not `interviewer-tools`. The same alias should be used in all files.
 
+### Do not use println
+- Do no use println. Currently, it interferes with MCP's JSON-RPC communication. Use log! instead (see util.clj). And remember: it takes two args:
+ ```clojure
+     ;;; First arg is reporting level. If more than two args, or just one more arg and it isn't a string, wrap them in str like this:
+     (log! :info (str "Some text = " the-text))
+     ```
+
+
+### Short names for aliases
+- alias names should be short, about 2-7 characters long.
+ ```clojure
+     (require '[sched-mcp.interviewers :as iviewrs])
+     ;; NOT
+     (require '[sched-mcp.interviewers :as interviewers])
+     ```
 ### Data Management
-- **NEVER use dynamic variables** - There is almost never a case where they're needed.
-- **Prefer atoms** for persistent state instead of dynamic vars.
+- **Prefer atoms** to dynamic variable for persistent state.
   ```clojure
   ;;; Good
   (def mock? (atom false))
@@ -32,12 +51,28 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
   ```
 
 ### Data Structures
-- Use maps, vectors, sets, and primitives to store data.
-- **Do NOT use lists** (sequences) for data storage.
-- Recursive navigation of structures uses `map?` and `vector?`.
+- Use maps, vectors, sets, and primitive data types to store data.
+- **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.
 
 ### Clojure defn
-- It is (defn "comment" [args] ...) not (defn [args] "comment" ...). Not like common-lisp!
+- The comment comes before the arguments:
+  ```clojure
+      (defn my-fn
+      "comment"
+       [args]
+      ...)
+
+      ;; NOT
+      (defn bad-fn [args]
+        "comment"
+        ...) ; It is not like common-lisp!
+      ```
+- **Use :diag or :admin metadata** on function definitions that are not referenced by other code and are only used at by developers and in the REPL.
+  ```clojure
+    (defn ^:diag run-me-in-repl
+    []
+    "Hi, Peter! No code calls me.")
+    ```
 
 ## Editing Etiquette
 

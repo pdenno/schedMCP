@@ -5,7 +5,7 @@
    [sched-mcp.ds-loader :as ds]
    [sched-mcp.ds-combine :as combine]
    [sched-mcp.ds-schema :as ds-schema]
-   [sched-mcp.util :refer [alog!]]
+   [sched-mcp.util :refer [log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]))
 
@@ -173,7 +173,7 @@
                            :conversation/active-pursuit]])
         ;; Log final notes if provided
         (when final-notes
-          (alog! (str "DS completed with notes: " final-notes)))
+          (log! :info (str "DS completed with notes: " final-notes)))
         {:success true
          :ds_id (str (namespace ds-id) "/" (name ds-id))
          :final_ascr ascr

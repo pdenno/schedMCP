@@ -55,6 +55,25 @@
    :recreate-dbs? false ; If true, it will recreate the system DB and project directories too.
    :schema-flexibility :write})
 
+(defn run-mode?
+  "Return a set of aliases that were present at startup."
+  []
+  (->> (clojure.java.basis/initial-basis) :basis-config :aliases set))
+
+(defn db-base-path
+  "Get the path for system and project DBs.
+   This is from the environment variable SCHED_MCP_DB unless running in nREPL mode,
+   in which case it is ./test/dbs. This function creates parents in necessary."
+  []
+  (let [bpath
+        (if ((run-mode?) :nrepl)
+          (str (System/getenv "PWD") "/test/dbs")
+          (or (System/getenv "SCHED_MCP_DB")
+              (throw (ex-info "SCHED_MCP_DB environment var not set and not running in nrepl mode." {}))))]
+    (io/make-parents (str bpath "/system/dummy"))
+    (io/make-parents (str bpath "/projects/dummy"))
+    bpath))
+
 ;;; https://cljdoc.org/d/io.replikativ/datahike/0.6.1545/doc/datahike-database-configuration
 (defn db-cfg-map
   "Return a datahike configuration map for argument database (or its base).
@@ -62,15 +81,7 @@
      type - the type of DB configuration being make: (:project, :system, or :him, so far)"
   [{:keys [type id in-mem?]}]
   (when (and (= :project type) (not id)) (throw (ex-info "projects need an ID." {})))
-  (let [;; Check if running in REPL/dev mode
-        nrepl-mode? (some #{:nrepl} (->> (clojure.java.basis/initial-basis) :basis-config :aliases))
-        base-dir (if nrepl-mode?
-                   ;; Use local test directory when in REPL
-                   "./test/dbs"
-                   ;; Otherwise use environment variable
-                   (or (-> (System/getenv) (get "SCHED_MCP_DB"))
-                       (throw (ex-info (str "Set the environment variable SCHED_MCP_DB to the directory containing SchedulingTBD databases."
-                                            "\nCreate directories 'projects' and 'system' under it.") {}))))
+  (let [base-dir (db-base-path)
         db-dir (->> (case type
                       :system "/system"
                       :project (str "/projects/" (name id) "/db/")
@@ -78,7 +89,8 @@
                       :him "/etc/other-dbs/him")
                     (str base-dir))]
     (cond-> db-template
-      true (assoc :base-dir base-dir) ; This is not a datahike thing.
+      ;true (assoc :allow-unsafe-config true) ; ToDo: This is a new problem with Datahike 0.6.1603; it wasn't a problem in 0.6.1594
+      true (assoc :base-dir base-dir)
       (not in-mem?) (assoc :store {:backend :file :path db-dir})
       in-mem? (assoc :store {:backend :mem :id (name id)}))))
 
@@ -307,3 +319,37 @@
               (run! ddr (.listFiles file)))
             (io/delete-file file))]
     (-> path java.io.File. ddr)))
+
+(defn mcp-loop-running?
+  "Check if the MCP server loop is running.
+   Returns true if the MCP future exists and is in :pending state."
+  []
+  (when-let [mcp-future-var (try
+                              (requiring-resolve 'sched-mcp.mcp-core/mcp-main-loop-future)
+                              (catch Exception _ nil))]
+    (when-let [mcp-atom @mcp-future-var]
+      (when-let [future-val @mcp-atom]
+        (and (future? future-val)
+             (not (future-done? future-val)))))))
+
+;;;--------------------------------------- Shared stuff for mocking ----------------
+(def mocking?
+  "This is set to true when we start mocking a project execution."
+  (atom false))
+
+(defn shadow-pid
+  "Return a shadow pid, if the argument is a shadow-pid, return the argument."
+  [pid]
+  (when pid
+    (let [[success? _normal-pid] (re-matches #"^(.+)\-\-temp$" (name pid))]
+      (if success?
+        pid
+        (-> pid name (str "--temp") keyword)))))
+
+(defn normal-pid
+  "When given a shadow-pid, return the normal pid."
+  [pid]
+  (let [[success? normal-pid] (re-matches #"^(.+)\-\-temp$" (name pid))]
+    (if success?
+      (keyword normal-pid)
+      pid)))

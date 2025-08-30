@@ -36,6 +36,12 @@
   [log-key s]
   (tel/log! log-key s))
 
+(defn print-bling*
+  "Like print-bling but outputs to *err* instead of *out*"
+  [bling-form]
+  (binding [*out* *err*]
+    (print-bling bling-form)))
+
 (defn custom-console-output-fn
   "I don't want to see hostname and time, etc. in console logging."
   ([] :can-be-a-no-op) ; for shutdown, at least.
@@ -49,9 +55,9 @@
            line (:line location)
            msg (if-let [s (not-empty (force msg_))] s "\"\"")
            heading (-> (str (name kind) "/" (name level) " ") str/upper-case)]
-       (cond (= :error level) (print-bling (bling [:bold.red.white-bg heading] " " [:red (str file ":" line " - " msg)]))
-             (= :warn level) (print-bling (bling [:bold.blue heading] " " [:yellow (str file ":" line " - " msg)]))
-             :else (print-bling (bling [:bold.blue heading] " " [:olive (str file ":" line " - " msg)])))))))
+       (cond (= :error level) (print-bling* (bling [:bold.red.white-bg heading] " " [:red (str file ":" line " - " msg)]))
+             (= :warn level) (print-bling* (bling [:bold.blue heading] " " [:yellow (str file ":" line " - " msg)]))
+             :else (print-bling* (bling [:bold.blue heading] " " [:olive (str file ":" line " - " msg)])))))))
 
 (defn config-log!
   "Configure Telemere: set reporting levels and specify a custom :output-fn.
@@ -59,7 +65,7 @@
   []
   ;; Remove any default console handler that might exist
   (tel/remove-handler! :default/console)
-  (tel/add-handler! :default/console (tel/handler:console {:output-fn custom-console-output-fn}))
+  (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn}))
   (tel/add-handler! :agent/log (tel/handler:file {:output-fn agents-log-output-fn
                                                   :path "./logs/agents-log.edn"
                                                   :interval :daily}))

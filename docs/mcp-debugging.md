@@ -13,7 +13,7 @@
   (mcp-core/run-server mcp-core/server-config))  ; Blocks main thread
 ```
 
-### 2. JSON-RPC Parse Errors  
+### 2. JSON-RPC Parse Errors
 **Symptom**: "Unexpected token" errors in MCP log
 
 **Causes & Solutions**:
@@ -44,7 +44,7 @@
 (require '[sched-mcp.tools.iviewr-tools] :reload)
 
 ;; Update server config
-(alter-var-root #'mcp/server-config 
+(alter-var-root #'mcp/server-config
   (fn [old] (assoc old :tool-specs tools/tool-specs)))
 ```
 
@@ -55,7 +55,7 @@
 
 **Check**:
 1. Handler is configured: `(tel/get-handlers)`
-2. File handler exists: Look for `:agent/log` 
+2. File handler exists: Look for `:agent/log`
 3. Force flush: `(tel/stop-handlers!)` then restart
 
 ### 6. Database Connection Errors

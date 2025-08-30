@@ -4,35 +4,43 @@
    [clojure.pprint :refer [pprint]]
    ;; require the _test.clj files to make ns-setup! work.
    ;; ToDo: Use sutil/log! not this:
+   [develop.dutil :as dutil] ; for alias-map
    [sched-mcp.util :refer [log!]]))
+
+dutil/learn-schema!
 
 (def alias? (atom (-> (ns-aliases *ns*) keys set)))
 
 (defn safe-alias
   [al ns-sym]
   (try (alias al ns-sym)
-       (catch Exception _e (log! :error (str "safe-alias failed on al= " al " ns-sym = " ns-sym)))))
+       (catch Exception _e (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym)))))
 
 (def alias-map
   {;'ches 'cheshire.core
-   ;'io 'clojure.java.io
+   'io 'clojure.java.io
    's 'clojure.spec.alpha
    ;'uni 'clojure.core.unify
    'edn 'clojure.edn
    'str 'clojure.string
    'd 'datahike.api
    'dp 'datahike.pull-api
-   'dutil 'develop.dutil
-   'repl 'develop.repl
+   ;'dutil 'develop.dutil
+   ;'repl 'develop.repl
    'mount 'mount.core
    ;;'p 'promesa.core
    ;;'px 'promesa.exec
    'iviewr 'sched-mcp.interview
-   'main   'sched-mcp.main
+   ;;'main   'sched-mcp.main ; This isn't used in development
+   'pdb    'sched-mcp.project-db
+   'dsld   'sched-mcp.ds-loader
+   'dssch  'sched-mcp.ds-schema
    'mcore  'sched-mcp.mcp-core
-   'db     'sched-mcp.db
+   'ork    'sched-mcp.orchestration
+   'sur    'sched-mcp.surrogate
    'sutil  'sched-mcp.sutil
-   'sysdb  'sched-mcp.system-db
+   'schema 'sched-mcp.schema
+   'sdb    'sched-mcp.system-db
    'itools 'sched-mcp.tools.iviewr-tools
    'util   'sched-mcp.util
    'warm   'sched-mcp.warm-up

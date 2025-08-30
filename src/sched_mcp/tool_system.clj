@@ -4,7 +4,7 @@
   (:require
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [sched-mcp.util :as util :refer [alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 ;;; Tool definition multimethods
 ;;; Each tool implementation must provide these methods
@@ -74,7 +74,7 @@
   "Execute a tool with error handling and logging"
   [tool-config inputs]
   (try
-    (alog! (str "Executing tool: " (tool-name tool-config)
+    (log! :info (str "Executing tool: " (tool-name tool-config)
                 " with inputs: " (pr-str inputs)))
     (let [;; Convert underscore keys to hyphenated keywords
           inputs (keywordize-keys inputs)
@@ -84,10 +84,10 @@
           results (execute-tool tool-config validated)
           ;; Format
           formatted (format-results tool-config results)]
-      (alog! (str "Tool " (tool-name tool-config) " completed successfully"))
+      (log! :info (str "Tool " (tool-name tool-config) " completed successfully"))
       formatted)
     (catch Exception e
-      (alog! (str "Tool " (tool-name tool-config) " failed: " (.getMessage e))
+      (log! :info (str "Tool " (tool-name tool-config) " failed: " (.getMessage e))
              {:level :error})
       {:error (.getMessage e)
        :tool-type (:tool-type tool-config)})))
@@ -106,7 +106,7 @@
   "Register a tool configuration for use with MCP"
   [tool-config]
   (let [spec (create-tool-spec tool-config)]
-    (alog! (str "Registered tool: " (:name spec)))
+    (log! :info (str "Registered tool: " (:name spec)))
     spec))
 
 ;;; Common schemas

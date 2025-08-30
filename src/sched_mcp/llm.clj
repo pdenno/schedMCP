@@ -18,7 +18,9 @@
             :mini "gpt-4o-mini"
             :extract "gpt-4o" ; For SCR extraction
             :reason "o1-preview"} ; For complex reasoning
-   :azure {:chat "mygpt-4"}})
+   :azure {:chat "mygpt-4"}
+   :meta {:chat "Llama-4-Maverick-17B-128E-Instruct-FP8"
+          :mini "Llama-4-Maverick-17B-128E-Instruct-FP8"}})
 
 ;;; Credentials (from sutil)
 
@@ -30,6 +32,8 @@
     :azure {:api-key (System/getenv "AZURE_OPENAI_API_KEY")
             :api-endpoint "https://myopenairesourcepod.openai.azure.com"
             :impl :azure}
+    :meta {:api-key (System/getenv "NIST_RCHAT")
+           :api-endpoint "https://rchat.nist.gov/api"}
     (throw (ex-info "Unknown LLM provider" {:provider provider}))))
 
 ;;; Core LLM Interface
@@ -41,6 +45,29 @@
    (or (get-in model-config [provider model-class])
        (throw (ex-info "No model configured"
                        {:provider provider :class model-class})))))
+
+(defn query-llm
+  "Given the vector of messages that is the argument, return a string (default)
+   or Clojure map (:raw-text? = false) that is read from the string created by the LLM.
+   This is the main function from schedulingTBD that the tests expect."
+  [messages & {:keys [model-class raw-text? llm-provider response-format]
+               :or {model-class :chat
+                    raw-text? true
+                    llm-provider @default-provider}}]
+  (log! :debug (str "llm-provider = " llm-provider))
+  (let [res (-> (openai/create-chat-completion
+                 {:model (pick-model model-class llm-provider)
+                  :response_format response-format
+                  :messages messages}
+                 (api-credentials llm-provider))
+                :choices
+                first
+                :message
+                :content
+                (cond-> (not raw-text?) json/read-str))]
+    (if (or (map? res) (string? res))
+      res
+      (throw (ex-info "Did not produce a map nor string." {:result res})))))
 
 (defn complete
   "Core LLM completion function

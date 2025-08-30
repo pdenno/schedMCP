@@ -17,6 +17,15 @@ schedMCP is a Model Context Protocol (MCP) implementation of schedulingTBD's Dis
 3. **Schema-Conforming Response (SCR)** - Structured data extracted from each user answer
 4. **Aggregated SCR (ASCR)** - Combined knowledge from all SCRs for a given Discovery Schema
 
+## Checking Running Status
+1. Evaluate `env/dev/develop/repl.clj` so that we can both use the same namespace aliases.
+2. Execute `(develop.repl/ns-setup!)` for the same reason.
+3. Check that `(sutil/mcp-loop-running?)` returns true. If not, run `(mount/start)`.
+
+### Known Issues (if MCP tools aren't available):
+- The MCP server runs in the REPL but Claude Desktop might not be connected to it.
+- Check if the `start_surrogate_expert` tool is available.
+
 ## Project Structure
 
 ### Living Documents (in `/docs/`)
@@ -48,6 +57,7 @@ Early implementation - fixing foundational bugs and establishing core architectu
 - Development guidelines
 
 ### In Progress
+- Surrogate testing
 - Bug fixes for interview flow
 - Discovery Schema loading system
 - Tool implementation using MCP

@@ -4,10 +4,11 @@
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.db :as db]                       ; For mount
-   [sched-mcp.tools.iviewr-tools :as itools]   ; For mount
-   [sched-mcp.tools.registry :as registry]     ; For mount
-   [sched-mcp.util :as util :refer [log!]])    ; For mount
+   [sched-mcp.project-db]                    ; For mount
+   [sched-mcp.system-db]                     ; For mount
+   [sched-mcp.tools.iviewr-tools :as itools] ; For mount
+   [sched-mcp.tools.registry :as registry]   ; For mount
+   [sched-mcp.util :as util :refer [log!]])  ; For mount
   (:import [java.io BufferedReader InputStreamReader PrintWriter]))
 
 (def ^:diag diag (atom nil))
@@ -112,30 +113,32 @@
 (def mcp-main-loop-future "Keep the future running the MCP loop. We use cancel-future on it." (atom nil))
 
 (defn run-server
-  "Main server loop. Don't do any output to console here except JSON-RPC!"
+  "Main server loop. Don't do any output to console here except JSON-RPC!
+   Returns a future of the server loop."
   [{:keys [_tool-specs _server-info] :as config}]
-  (try
-    (reset! stay-alive? true)
-    (loop []
-      (when @stay-alive?
-        (if-let [request (read-json-rpc)]
-          (do
-            (try
-              (let [response (handle-request request config)]
-                ;; Only write response if it's not nil (notifications return nil)
-                (when response
-                  (write-json-rpc response)))
-              (catch Exception e
-                (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
-                (when-let [id (:id request)]
-                  (write-json-rpc (error-response id -32603 "Internal error")))))
-            (recur))
-          ;; If read-json-rpc returns nil, the connection is closed
-          (log! :info "Connection closed by client"))))
-    (catch Exception e
-      (log! :error (str "Server error: " (.getMessage e))))
-    (finally
-      (log! :info "Server shutting down"))))
+  (future
+    (try
+      (reset! stay-alive? true)
+      (loop []
+        (when @stay-alive?
+          (if-let [request (read-json-rpc)]
+            (do
+              (try
+                (let [response (handle-request request config)]
+                  ;; Only write response if it's not nil (notifications return nil)
+                  (when response
+                    (write-json-rpc response)))
+                (catch Exception e
+                  (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
+                  (when-let [id (:id request)]
+                    (write-json-rpc (error-response id -32603 "Internal error")))))
+              (recur))
+            ;; If read-json-rpc returns nil, the connection is closed
+            (log! :info "Connection closed by client"))))
+      (catch Exception e
+        (log! :error (str "Server error: " (.getMessage e))))
+      (finally
+        (log! :info "Server shutting down")))))
 
 (def server-info
   {:name "schedMCP"
@@ -164,4 +167,4 @@
 
 (defstate mcp-core-server
   :start (start-server)
-  :stop  (stop-server))
+  :stop (stop-server))

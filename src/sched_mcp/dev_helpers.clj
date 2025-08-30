@@ -4,6 +4,7 @@
    [clojure.pprint :as pp]
    [datahike.api :as d]
    [sched-mcp.sutil :as sutil :refer [connect-atm db-cfg-map]]
+   [sched-mcp.util :refer [log!]]
    [sched-mcp.interview :as interview]
    [sched-mcp.tools.iviewr-tools :as tools]
    [sched-mcp.ds-loader :as ds]))
@@ -13,15 +14,15 @@
   [project-id]
   (let [cfg (db-cfg-map {:type :project :id project-id})]
     (when (d/database-exists? cfg)
-      (println "Deleting database for" project-id)
+      (log! :info (str "Deleting database for" project-id))
       (d/delete-database cfg))
-    (println "Database reset for" project-id)))
+    (log! :info (str "Database reset for" project-id))))
 
-(defn quick-test-interview
+(defn ^:diag quick-test-interview
   "Quick test of interview flow with automated answers"
   [project-name & [domain]]
-  (println "\n=== Quick Interview Test ===")
-  (println "Project:" project-name "\n")
+  (log! :info "\n=== Quick Interview Test ===")
+  (log! :info (str "Project:" project-name "\n"))
 
   ;; Start interview
   (let [start-result (tools/start-interview-tool
@@ -34,7 +35,7 @@
 
     (when-not (:error start-result)
       ;; Answer first question
-      (println "\nAnswering scheduling challenges...")
+      (log! :info "\nAnswering scheduling challenges...")
       (let [answer1 (tools/submit-answer-tool
                      {:project_id project-id
                       :conversation_id conv-id
@@ -42,7 +43,7 @@
         (pp/pprint answer1))
 
       ;; Answer second question
-      (println "\nAnswering product/service...")
+      (log! :info "\nAnswering product/service...")
       (let [answer2 (tools/submit-answer-tool
                      {:project_id project-id
                       :conversation_id conv-id
@@ -50,7 +51,7 @@
         (pp/pprint answer2))
 
       ;; Answer third question
-      (println "\nAnswering one more thing...")
+      (log! :info "\nAnswering one more thing...")
       (let [answer3 (tools/submit-answer-tool
                      {:project_id project-id
                       :conversation_id conv-id
@@ -58,19 +59,19 @@
         (pp/pprint answer3))
 
       ;; Get all answers
-      (println "\nFinal answers collected:")
+      (log! :info "\nFinal answers collected:")
       (pp/pprint (tools/get-interview-answers-tool
                   {:project_id project-id
                    :conversation_id conv-id})))))
 
-(defn inspect-db
+(defn ^:diag inspect-db
   "Inspect the contents of a project database"
   [project-id]
   (let [conn (connect-atm project-id)]
-    (println "\n=== Database Inspection for" project-id "===\n")
+    (log! :info (str "=== Database Inspection for" project-id "==="))
 
     ;; Projects
-    (println "Projects:")
+    (log! :info "Projects:")
     (pp/pprint (d/q '[:find ?id ?name
                       :where
                       [?e :project/id ?id]
@@ -78,7 +79,7 @@
                     @conn))
 
     ;; Conversations
-    (println "\nConversations:")
+    (log! :info "\nConversations:")
     (pp/pprint (d/q '[:find ?cid ?status ?eads
                       :where
                       [?c :conversation/id ?cid]
@@ -87,64 +88,64 @@
                     @conn))
 
     ;; Messages
-    (println "\nMessage count:")
-    (println (d/q '[:find (count ?m) .
-                    :where [?m :message/id]]
-                  @conn))))
+    (log! :info "\nMessage count:")
+    (log! :info (str (d/q '[:find (count ?m) .
+                            :where [?m :message/id]]
+                          @conn)))))
 
-(defn list-all-ds
+(defn ^:diag list-all-ds
   "List all available Discovery Schemas"
   []
-  (println "\n=== Available Discovery Schemas ===")
+  (log! :info "\n=== Available Discovery Schemas ===")
   (let [all-ds (ds/list-available-ds)]
     (doseq [[domain schemas] all-ds]
-      (println (str "\n" (name domain) " (" (count schemas) " schemas):"))
+      (log! :info (str "\n" (name domain) " (" (count schemas) " schemas):"))
       (doseq [schema schemas]
-        (println (str "  " (:ds-id schema)))))))
+        (log! :info (str "  " (:ds-id schema)))))))
 
-(defn show-ds
+(defn ^:diag show-ds
   "Show details of a specific Discovery Schema"
   [ds-id]
   (if-let [ds (ds/get-ds-by-id ds-id)]
     (do
-      (println "\n=== Discovery Schema:" ds-id "===")
-      (println "\nObjective:" (:interview-objective ds))
-      (println "\nStructure:")
+      (log! :info (str "\n=== Discovery Schema:" ds-id "==="))
+      (log! :info (str "\nObjective:" (:interview-objective ds)))
+      (log! :info "\nStructure:")
       (pp/pprint (:EADS ds)))
-    (println "Discovery Schema not found:" ds-id)))
+    (log! :info (str "Discovery Schema not found:" ds-id))))
 
-(defn current-state
+(defn ^:diag current-state
   "Show current state of an interview"
   [project-id]
-  (println "\n=== Current Interview State ===")
+  (log! :info "\n=== Current Interview State ===")
   (let [context (tools/get-interview-context-tool {:project_id (name project-id)})]
     (if (:error context)
-      (println "Error:" (:error context))
+      (log! :info (str "Error:" (:error context)))
       (do
-        (println "Status:" (:status context))
-        (println "Phase:" (:current_phase context))
-        (println "Progress:" (:progress context))
+        (log! :info (str "Status:" (:status context)))
+        (log! :info (str "Phase:" (:current_phase context)))
+        (log! :info (str "Progress:" (:progress context)))
         (when-let [q (:next_question context)]
-          (println "\nNext Question:")
-          (println "ID:" (:id q))
-          (println "Text:" (:text q))
-          (println "Help:" (:help q)))))))
+          (log! :info "\nNext Question:")
+          (log! :info (str "ID:" (:id q)))
+          (log! :info (str "Text:" (:text q)))
+          (log! :info (str "Help:" (:help q))))))))
 
-(defn cleanup-test-projects!
+(defn ^:diag cleanup-test-projects!
   "Remove all test project databases"
   []
-  (println "Cleaning up test databases...")
+  (log! :info "Cleaning up test databases...")
   (doseq [project-id [:test-brewery :test-factory :quick-test]]
     (try
       (reset-interview-db! project-id)
       (catch Exception e
-        (println "Failed to reset" project-id ":" (.getMessage e))))))
+        (log! :info (str "Failed to reset" project-id ":" (.getMessage e)))))))
 
 ;; Usage instructions
-(defn help
+(defn ^:diag help
   "Show available helper functions"
   []
-  (println "
+  (log! :info "
 === schedMCP Development Helpers ===
 
 Testing:
@@ -165,4 +166,4 @@ Remember to require this namespace:
 "))
 
 ;; Print help on load
-(println "Development helpers loaded. Use (help) for available functions.")
+(log! :info "Development helpers loaded. Use (help) for available functions.")

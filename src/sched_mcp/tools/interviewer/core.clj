@@ -6,7 +6,7 @@
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.ds-loader :as ds]
    [sched-mcp.ds-combine :as combine]
-   [sched-mcp.llm-direct :as llm] ; Using direct HTTP implementation
+   [sched-mcp.llm :as llm] ; Using the main LLM implementation
    [sched-mcp.util :refer [log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]))
