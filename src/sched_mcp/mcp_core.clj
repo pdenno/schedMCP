@@ -4,9 +4,10 @@
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.project-db]                    ; For mount
-   [sched-mcp.system-db]                     ; For mount
-   [sched-mcp.tools.iviewr-tools :as itools] ; For mount
+   [sched-mcp.project-db] ; For mount
+   [sched-mcp.system-db] ; For mount
+   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
+   [sched-mcp.tools.iviewr-tools]            ; For mount
    [sched-mcp.tools.registry :as registry]   ; For mount
    [sched-mcp.util :as util :refer [log!]])  ; For mount
   (:import [java.io BufferedReader InputStreamReader PrintWriter]))
@@ -109,8 +110,13 @@
         ;; Unknown method
         (error-response id -32601 (str "Method not found: " method))))))
 
-(def stay-alive? "A switch in the MCP main loop to make it exit (when false)." (atom true))
-(def mcp-main-loop-future "Keep the future running the MCP loop. We use cancel-future on it." (atom nil))
+;;;  A switch in the MCP main loop to make it exit (when false).
+(defonce stay-alive?
+  (atom true))
+
+;;;"Keep the future running the MCP loop. We use cancel-future on it."
+(defonce mcp-main-loop-future
+  (atom nil))
 
 (defn run-server
   "Main server loop. Don't do any output to console here except JSON-RPC!

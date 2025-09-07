@@ -1,13 +1,13 @@
 (ns sched-mcp.surrogate
   "Surrogate expert agent implementation for automated interview testing"
   (:require
-   [clojure.string       :as str]
-   [datahike.api         :as d]
-   [sched-mcp.llm        :as llm]
-   [sched-mcp.sutil      :as sutil :refer [connect-atm]]
+   [clojure.string :as str]
+   [datahike.api :as d]
+   [sched-mcp.llm :as llm]
+   [sched-mcp.sutil :as sutil :refer [connect-atm]]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.util       :as util :refer [log!]]
-   [taoensso.telemere    :as tel]))
+   [sched-mcp.util :as util :refer [log!]]
+   [taoensso.telemere :as tel]))
 
 ;;; System instruction components
 
@@ -59,9 +59,9 @@
 
 ;;; Conversation state management
 
-;;;   "Active expert sessions indexed by project-id"
-(defonce expert-sessions-atom
-  (atom {}))
+;;;   "Single active expert session"
+(defonce current-expert-session
+  (atom nil))
 
 (defn init-expert-session
   "Initialize a new expert session"
@@ -69,18 +69,20 @@
   (let [session {:expert-persona expert-persona
                  :conversation-history []
                  :session-start (util/now)
-                 :conversation-id conversation-id}]
-    (swap! expert-sessions-atom assoc project-id session)
+                 :conversation-id conversation-id
+                 :project-id project-id}]
+    (reset! current-expert-session session)
     session))
 
 (defn update-session-history
   "Add a Q&A pair to the session history"
   [project-id question answer]
-  (swap! expert-sessions-atom update-in
-         [project-id :conversation-history]
-         conj {:question question
-               :answer answer
-               :timestamp (util/now)}))
+  (when (and @current-expert-session
+             (= (:project-id @current-expert-session) project-id))
+    (swap! current-expert-session update :conversation-history
+           conj {:question question
+                 :answer answer
+                 :timestamp (util/now)})))
 
 (defn persist-message!
   "Persist a message to the project database"
@@ -131,33 +133,33 @@
 (defn generate-expert-response
   "Generate a response from the surrogate expert"
   [project-id question]
-  (if-let [session (get @expert-sessions-atom project-id)]
-    (let [persona (:expert-persona session)
-          context (build-conversation-context session)
-          system-prompt (system-instruction (:domain persona) (:company-name persona))
+  (if-let [session @current-expert-session]
+    (when (= (:project-id session) project-id)
+      (let [persona (:expert-persona session)
+            context (build-conversation-context session)
+            system-prompt (system-instruction (:domain persona) (:company-name persona))
 
-          user-prompt (str context "\n\n"
-                           "Current question: " question
-                           "\n\nRemember to be specific and consistent with previous answers.")
+            user-prompt (str context "\n\n"
+                             "Current question: " question
+                             "\n\nRemember to be specific and consistent with previous answers.")
 
-          response (llm/query-llm [{:role "system" :content system-prompt}
-                                   {:role "user" :content user-prompt}]
-                                  :model-class :chat
-                                  :llm-provider @sched-mcp.sutil/default-llm-provider)]
+            response (llm/query-llm [{:role "system" :content system-prompt}
+                                     {:role "user" :content user-prompt}]
+                                    :model-class :chat
+                                    :llm-provider @sched-mcp.sutil/default-llm-provider)]
 
-      ;; Update session history
-      (update-session-history project-id question response)
+        ;; Update session history
+        (update-session-history project-id question response)
 
-      ;; Store in database if we have a conversation ID
-      (when-let [conversation-id (:conversation-id session)]
-        (store-surrogate-exchange! project-id conversation-id question response))
+        ;; Store in database if we have a conversation ID
+        (when-let [conversation-id (:conversation-id session)]
+          (store-surrogate-exchange! project-id conversation-id question response))
 
-      ;; Return response with orange color indicator
-      {:response response
-       :expert-id (get-in session [:expert-persona :expert-id])
-       :display-color "orange"})
-
-    {:error "No expert session found for this project"}))
+        ;; Return response with orange color indicator
+        {:response response
+         :expert-id (get-in session [:expert-persona :expert-id])
+         :display-color "orange"}))
+    {:error (str "No active expert session for project " project-id)}))
 
 ;;; MCP Tool interfaces
 
@@ -168,12 +170,11 @@
   (log! :info (str "Starting surrogate interview for " domain))
 
   ;; Create project with sur- prefix and force replace
-  (let [project-id (str "sur-" (name domain))
-        project-result (pdb/create-project! {:project-id project-id
-                                                :project-name (or project-name
-                                                                  (str "Surrogate " (name domain) " Interview"))
-                                                :domain (name domain)
-                                                :force-replace? true})
+  (let [pid (as-> domain ?s (str/trim ?s) (str/lower-case ?s) (str/replace ?s #"\s+" "-") (str "sur-" ?s) (keyword ?s))
+        project-result (pdb/create-project-db! {:pid pid
+                                             :project-name (or project-name
+                                                               (str "Surrogate " (name domain) " Interview"))
+                                             :force-replace? true})
 
         ;; Create expert persona
         persona (create-expert-persona {:domain domain
@@ -181,7 +182,7 @@
 
         ;; Initialize session with conversation ID
         _session (init-expert-session (:project-id project-result) persona
-                                      :conversation-id (:conversation-id project-result))]
+                                      :conversation-id (:cid project-result))]
 
     {:project-id (:project-id project-result)
      :conversation-id (name (:conversation-id project-result))
@@ -198,14 +199,11 @@
   (generate-expert-response project-id question))
 
 (defn get-surrogate-session
-  "Get current session state for debugging/inspection"
+  "Get the current session if it matches the project-id"
   [project-id]
-  (get @expert-sessions-atom project-id))
-
-(defn list-surrogate-sessions
-  "List all active surrogate sessions"
-  []
-  (keys @expert-sessions-atom))
+  (when-let [session @current-expert-session]
+    (when (= (:project-id session) project-id)
+      session)))
 
 (defn get-conversation-history
   "Retrieve conversation history from the database"

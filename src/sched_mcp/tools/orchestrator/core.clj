@@ -2,9 +2,9 @@
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
    [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.ds-loader :as ds]
-   [sched-mcp.ds-combine :as combine]
-   [sched-mcp.ds-schema :as ds-schema]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.ds-util :as dsu]
+   [sched-mcp.orchestration :as orch]
    [sched-mcp.util :refer [log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]))
@@ -29,20 +29,30 @@
   {:tool-type :complete-ds
    :system-atom system-atom})
 
+(defn create-get-progress-tool
+  "Creates the tool for getting overall interview progress"
+  [system-atom]
+  {:tool-type :get-progress
+   :system-atom system-atom})
+
 ;;; Get Next DS Tool
 
 (defmethod tool-system/tool-name :get-next-ds [_]
-  "get_next_ds")
+  "orch_get_next_ds")
 
+;;; ToDo: This seems quite inadequate. Should talk about SCRs and ASCR.
 (defmethod tool-system/tool-description :get-next-ds [_]
   "Analyzes conversation history and recommends the next Discovery Schema to pursue. Uses orchestration logic to determine the best progression path.")
 
+;;; ToDo: Verify that conversation ID is simply one of :process, :data :resource, or :optimality
 (defmethod tool-system/tool-schema :get-next-ds [_]
   {:type "object"
    :properties {:project_id tool-system/project-id-schema
                 :conversation_id tool-system/conversation-id-schema}
    :required ["project_id" "conversation_id"]})
 
+;;; ToDo: Ugh! This is where I would expect an agent! This is far too rigid.
+;;; Note also that it isn't checking completeness. The whole idea that it is 'get-next-ds'
 (defmethod tool-system/execute-tool :get-next-ds
   [{:keys [_system-atom]} {:keys [project-id conversation-id]}]
   (let [conn (connect-atm (keyword project-id))
@@ -51,8 +61,8 @@
                          :in $ ?cid
                          :where
                          [?c :conversation/id ?cid]
-                         [?c :conversation/completed-ds ?ds]]
-                       @conn (keyword conversation-id))]
+                         [?c :conversation/completed-ds ?ds]] ; <====== I have :project/summary-dstructs :conversation/active-EADS-id, :message/pursuing-EADS, :project/active-EADS-id but not this.
+                       @conn (keyword conversation-id))] ; :project/summary-dstructs is not necessarily completed.
     ;; Simple orchestration logic
     (cond
       ;; If nothing completed, start with warm-up
@@ -86,7 +96,7 @@
 ;;; Start DS Pursuit Tool
 
 (defmethod tool-system/tool-name :start-ds-pursuit [_]
-  "start_ds_pursuit")
+  "orch_start_ds_pursuit")
 
 (defmethod tool-system/tool-description :start-ds-pursuit [_]
   "Begins working on a specific Discovery Schema. Initializes pursuit tracking and returns DS instructions.")
@@ -133,7 +143,7 @@
 ;;; Complete DS Tool
 
 (defmethod tool-system/tool-name :complete-ds [_]
-  "complete_ds")
+  "orch_complete_ds")
 
 (defmethod tool-system/tool-description :complete-ds [_]
   "Marks a Discovery Schema pursuit as complete and stores the final ASCR.")
@@ -161,7 +171,7 @@
       {:error "No active pursuit to complete"}
       (let [[pursuit-eid ds-id] pursuit-data
             ;; Get final ASCR
-            ascr (combine/combine-ds! ds-id (keyword project-id))]
+            ascr (dsu/combine-ds! ds-id (keyword project-id))]
         ;; Mark pursuit complete
         (d/transact conn [{:db/id pursuit-eid
                            :pursuit/status :complete}])
@@ -179,6 +189,28 @@
          :final_ascr ascr
          :validation_results {:valid true}}))))
 
+;;; Get Progress Tool
+
+(defmethod tool-system/tool-name :get-progress [_]
+  "orch_get_progress")
+
+(defmethod tool-system/tool-description :get-progress [_]
+  "Returns overall interview progress including completed Discovery Schemas and current phase.")
+
+(defmethod tool-system/tool-schema :get-progress [_]
+  {:type "object"
+   :properties {:project_id tool-system/project-id-schema}
+   :required ["project_id"]})
+
+(defmethod tool-system/execute-tool :get-progress
+  [{:keys [_system-atom]} {:keys [project-id]}]
+  (try
+    (let [progress (pdb/get-interview-progress (keyword project-id))]
+      progress)
+    (catch Exception e
+      (log! :error (str "Error in get-progress: " (.getMessage e)))
+      {:error (.getMessage e)})))
+
 ;;; Helper to create all orchestrator tools
 
 (defn create-orchestrator-tools
@@ -186,4 +218,5 @@
   [system-atom]
   [(create-get-next-ds-tool system-atom)
    (create-start-ds-pursuit-tool system-atom)
-   (create-complete-ds-tool system-atom)])
+   (create-complete-ds-tool system-atom)
+   (create-get-progress-tool system-atom)])

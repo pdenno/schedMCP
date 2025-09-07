@@ -301,17 +301,20 @@
     [obj]
     (if (nil? obj) nil (ches/generate-string obj {:pretty true})))
 
-(defn update-resources-EADS-json!
+#_(defn update-resources-DS-json!
   "Update the resources/agents/iviewrs/EADS directory with a (presumably) new JSON pprint of the argument EADS instructions.
    These are needed by the orchestrator; they are put in its vector store."
-  [eads-instructions]
-  (let [id (-> eads-instructions :EADS :EADS-id)
+  [ds-instructions]
+  (let [id (-> ds-instructions :DS :DS-id)
         [nam ns] ((juxt name namespace) id)
-        eads-json-fname (cl-format nil "resources/agents/iviewrs/EADS/~A/~A.json" ns nam)]
-    (spit eads-json-fname (clj2json-pretty eads-instructions))))
+        ds-json-fname (cl-format nil "resources/agents/iviewrs/discovery-schema/~A/~A.json" ns nam)]
+    (io/make-parents ds-json-fname)
+    (spit ds-json-fname (clj2json-pretty ds-instructions))))
+
+(defn update-resources-DS-json! [& _] (throw (ex-info "This should no longer be needed." {})))
 
 ;;;https://gist.github.com/olieidel/c551a911a4798312e4ef42a584677397
-(defn delete-directory-recursive
+(defn ^:admin delete-directory-recursive
   "Recursively delete a directory."
   [path]
   (letfn [(ddr [file]
@@ -320,7 +323,7 @@
             (io/delete-file file))]
     (-> path java.io.File. ddr)))
 
-(defn mcp-loop-running?
+(defn ^:diag mcp-loop-running?
   "Check if the MCP server loop is running.
    Returns true if the MCP future exists and is in :pending state."
   []

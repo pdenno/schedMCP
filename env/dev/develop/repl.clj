@@ -30,11 +30,11 @@ dutil/learn-schema!
    'mount 'mount.core
    ;;'p 'promesa.core
    ;;'px 'promesa.exec
-   'iviewr 'sched-mcp.interview
+   ;'iviewr 'sched-mcp.interview
    ;;'main   'sched-mcp.main ; This isn't used in development
    'pdb    'sched-mcp.project-db
-   'dsld   'sched-mcp.ds-loader
-   'dssch  'sched-mcp.ds-schema
+   ;'dsld   'sched-mcp.ds-loader
+   ;'dssch  'sched-mcp.ds-schema
    'mcore  'sched-mcp.mcp-core
    'ork    'sched-mcp.orchestration
    'sur    'sched-mcp.surrogate
@@ -42,11 +42,12 @@ dutil/learn-schema!
    'schema 'sched-mcp.schema
    'sdb    'sched-mcp.system-db
    'itools 'sched-mcp.tools.iviewr-tools
+   'orm    'sched-mcp.tools.iviewr.domain.data.orm
+   'reg    'sched-mcp.tools.registry
    'util   'sched-mcp.util
-   'warm   'sched-mcp.warm-up
+   ;'warm   'sched-mcp.warm-up
    'tel    'taoensso.telemere
    'openai 'wkok.openai-clojure.api})
-
 
 (defn ^:diag ns-setup!
   "Use this to setup useful aliases for working in this NS."

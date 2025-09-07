@@ -2,10 +2,13 @@
   "System database initialization and management.
    The system database tracks all projects and global configuration."
   (:require
-   [datahike.api :as d]
+   [clojure.edn      :as edn]
+   [clojure.java.io  :as io]
+   [clojure.pprint   :refer [pprint]]
+   [datahike.api     :as d]
    [sched-mcp.schema :as schema]
-   [sched-mcp.sutil :as sutil :refer [db-cfg-map register-db connect-atm]]
-   [sched-mcp.util :as util :refer [log!]]))
+   [sched-mcp.sutil  :as sutil :refer [db-cfg-map register-db connect-atm resolve-db-id root-entities]]
+   [sched-mcp.util   :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -53,7 +56,67 @@
   (or (connect-atm :system :error? false)
       (init-system-db!)))
 
-(defn backup-system-db
+;;; ---- Discovery schema management (Discovery Schema are stored in the system DB.)
+(defn system-DS?
+  "Return a set of DS-ids (keywords) known to the system db. (Often used as a predicate.)"
+  []
+  (-> (d/q '[:find [?ds-id ...]
+             :where [_ :DS/id ?ds-id]]
+           @(sutil/connect-atm :system))
+      set))
+
+(defn put-DS-instructions!
+  "Update the system DB with a (presumably) new version of the argument DS instructions.
+   Of course, this is a development-time activity."
+  [{:keys [DS budget-decrement] :as ds-instructions}]
+  (let [id (:DS-id DS)
+        db-obj {:DS/id id
+                :DS/budget-decrement (or budget-decrement 0.05)
+                :DS/msg-str (str ds-instructions)}
+        conn (connect-atm :system)
+        eid (d/q '[:find ?e . :where [?e :system/name "SYSTEM"]] @conn)]
+    (log! :info (str "Writing DS instructions to system DB: " id))
+    (d/transact conn {:tx-data [{:db/id eid :system/DS db-obj}]}))
+  nil)
+
+(defn get-DS-instructions
+  "Return the full DS instructions object maintained in the system DB
+   (the EDN structure from edn/read-string of :DS/msg-str).
+   Returns the empty string when the DS ID is not known."
+  [ds-id]
+  (assert (keyword? ds-id))
+  (if-let [msg-str (d/q '[:find ?msg-str .
+                          :in $ ?ds-id
+                          :where
+                          [?e :DS/id ?ds-id]
+                          [?e :DS/msg-str ?msg-str]]
+                        @(connect-atm :system) ds-id)]
+    (edn/read-string msg-str)
+    ""))
+
+(defn same-DS-instructions?
+  "Return true if the argument ds-instructions (an EDN object) is exactly what the system already maintains."
+  [ds-instructions]
+  (let [id (-> ds-instructions :DS :DS-id)]
+    (= ds-instructions (get-DS-instructions id))))
+
+(defn ^:admin update-all-DS-json!
+  "Copy JSON versions of the system DB's DS instructions to the files in resources/agents/iviewrs/DS."
+  []
+  (doseq [ds-id (system-DS?)]
+    (if-let [ds-instructions (-> ds-id get-DS-instructions not-empty)]
+      (sutil/update-resources-DS-json! ds-instructions)
+      (log! :error (str "No such DS instructions " ds-id)))))
+
+(defn ^:admin get-system
+  "Return the project structure.
+   Throw an error if :error is true (default) and project does not exist."
+  []
+  (let [conn-atm (connect-atm :system)]
+    (when-let [eid (d/q '[:find ?eid . :where [?eid :system/name "SYSTEM"]] @conn-atm)]
+      (resolve-db-id {:db/id eid} conn-atm))))
+
+(defn ^:admin  backup-system-db
   "Backup the system database to an EDN file"
   [& {:keys [target-dir] :or {target-dir "data/"}}]
   (io/make-parents (str target-dir "dummy"))
@@ -72,3 +135,32 @@
             (println "]"))]
     (log! :info (str "Writing system DB to " filename))
     (spit filename s)))
+
+(defn recreate-system-db!
+  "Recreate the system database from an EDN file."
+  [& {:keys [target-dir]
+      :or {target-dir "data/"}}]
+  (if (.exists (io/file (str target-dir "system-db.edn")))
+    (let [cfg (db-cfg-map {:type :system})]
+      (log! :info "Recreating the system database.")
+      (when (d/database-exists? cfg) (d/delete-database cfg))
+      (d/create-database cfg)
+      (register-db :system cfg)
+      (let [conn (connect-atm :system)]
+        (d/transact conn schema/db-schema-sys)
+        (d/transact conn (-> "data/system-db.edn" slurp edn/read-string))
+        cfg))
+    (log! :error "Not recreating system DB: No backup file.")))
+
+(defn get-discovery-schema-JSON
+  "Return the JSON of the discovery schema from the system DB."
+  [ds-id]
+  (assert (keyword? ds-id))
+  (if-let [s (d/q '[:find ?str .
+                    :in $ ?ds-id
+                    :where
+                    [?e :DS/id ?ds-id]
+                    [?e :DS/msg-str ?str]]
+                  @(connect-atm :system) ds-id)]
+    (-> s edn/read-string :DS sutil/clj2json-pretty)
+    (throw (ex-info "No such discovery-schema" {:ds-id ds-id}))))

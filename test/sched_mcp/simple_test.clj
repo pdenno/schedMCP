@@ -4,7 +4,7 @@
    [clojure.test :refer [deftest testing is]]
    [sched-mcp.ds-loader-v2 :as ds]
    [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.tools.interviewer.core :as interviewer]
+   [sched-mcp.tools.iviewr.core :as interviewer]
    [sched-mcp.tools.orchestrator.core :as orchestrator]))
 
 (deftest test-ds-loading

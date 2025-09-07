@@ -26,7 +26,7 @@
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl (starts as shown in the :nrepl :alias below.)
  ;;;  2) cider-connect at port 7888 and do (start)
- ;;;  3) clj -X:my-mcp :port 7888 (starts as shown in the :my-mcp alias in ~/.clojure/deps.edn
+ ;;;  3) clj -X:mcp :port 7888 (starts as shown in the :mcp alias in ~/.clojure/deps.edn. Also my-mcp, but that only additionally includes shadow-cljs, not used currently.
  ;;;  4) claude-desktop
 
 

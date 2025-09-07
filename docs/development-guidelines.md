@@ -46,22 +46,26 @@ This document outlines the development practices, architectural decisions, and c
 ```
 schedMCP/
 ├── src/
-│   ├── schedmcp/
-│   │   ├── core.clj              # MCP server setup
-│   │   ├── tool_system.clj       # Multimethod definitions
-│   │   ├── db.clj                # Database operations
-│   │   └── tools/                # Individual tool implementations
-│   │       ├── orchestrator/     # Orchestration tools
-│   │       ├── interviewer/      # Interview tools
-│   │       └── utility/          # Helper tools
-├── resources/
-│   └── discovery-schemas/        # DS JSON files
-│       ├── process/
-│       ├── data/
-│       ├── resources/
-│       └── optimality/
+│   ├── sched-mcp/
+│   │   ├── core.clj               # MCP server setup
+│   │   ├── tool_system.clj        # Multimethod definitions
+│   │   ├── db.clj                 # Database operations
+│   │   |── tools/                 # Individual tool implementations
+│   │       ├── domain/            # Top-level directory for discovery schema
+│   │               ├── process/   # Discovery schema for interviewing about processes
+│   │               ├── data/      # Discovery schema for interviewing about data
+│   │               ├── resources  # Discovery schema for interviewing about resources (currently empty)
+│   │               ├── optimality # Discovery schema for interviewing about what is sought in good schedules (currently empty)
+│   │       ├── orchestrator/      # Orchestration tools
+│   │       ├── interviewer/       # Interview tools
+│   │       └── utility/           # Helper tools
 └── test/
 ```
+### Discovery Schema
+- When `mount/start` (the tool used to load/reload the project into the REPL environment) is executed the system evalutes the `.clj` files
+  in the `src/sched-mcp/tools/domain` directory and compares the discovery schema object against created against the one in the system DB.
+  If it is different, the system DB is automatically updated.
+- Whenever a discovery schema is required, it can be obtained by running `(sdb/get-discovery-schema-JSON).
 
 ### Naming Conventions
 Follow Clojure conventions with these additions:

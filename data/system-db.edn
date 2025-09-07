@@ -1,0 +1,4 @@
+[
+#:system{:default-project-id :blank-project,
+         :name "SYSTEM"}
+]

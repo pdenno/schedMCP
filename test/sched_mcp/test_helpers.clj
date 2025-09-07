@@ -5,7 +5,7 @@
    [mount.core :as mount]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.tools.interviewer.core :as itools]
+   [sched-mcp.tools.iviewr.core :as itools]
    [sched-mcp.util :as util :refer [log!]]))
 
 (defn start-test-system!
@@ -25,17 +25,17 @@
 (defn create-sample-projects!
   "Create several sample projects for testing"
   []
-  (let [projects [{:project-id "brewery-1"
+  (let [projects [{:pid "brewery-1"
                    :project-name "Craft Beer Brewery"
                    :domain "food-processing"}
-                  {:project-id "glass-factory"
+                  {:pid "glass-factory"
                    :project-name "Specialty Glass Manufacturing"
                    :domain "glass-manufacturing"}
-                  {:project-id "pencil-factory"
+                  {:pid "pencil-factory"
                    :project-name "Premium Pencil Production"
                    :domain "wood-products"}]]
     (doseq [proj projects]
-      (pdb/create-project! proj)
+      (pdb/create-projectdb! proj)
       (log! :info (str "Created project: " (:project-id proj))))
     projects))
 

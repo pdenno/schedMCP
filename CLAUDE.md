@@ -24,6 +24,9 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
 - **Diagnostic definitions**: Tag with `^:diag` metadata for REPL-only usage
 - **File naming**: Filenames should be unique within the project, the exception being core.clj which can occur in each MCP tool directory.
 - **Namespace aliases**: These should be short and `itools` not `interviewer-tools`. The same alias should be used in all files.
+- **Some specific variables**:
+      `pid` should be the only variable name used to refer to a project ID. Its value is a keyword.
+      `cid` should be the only variable name used to refer to a conversation ID. Its value is a keyword in #{:process :data :resources :optimality}.
 
 ### Do not use println
 - Do no use println. Currently, it interferes with MCP's JSON-RPC communication. Use log! instead (see util.clj). And remember: it takes two args:
@@ -31,8 +34,6 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
      ;;; First arg is reporting level. If more than two args, or just one more arg and it isn't a string, wrap them in str like this:
      (log! :info (str "Some text = " the-text))
      ```
-
-
 ### Short names for aliases
 - alias names should be short, about 2-7 characters long.
  ```clojure

@@ -7,8 +7,7 @@
    [sched-mcp.ds-schema :as ds-schema]
    [sched-mcp.interview :as interview]
    [sched-mcp.sutil :as sutil :refer [connect-atm]]
-   [sched-mcp.tools.interviewer.core :as interviewer]
-   [sched-mcp.tools.interviewer.advanced :as advanced]
+   [sched-mcp.tools.iviewr.core :as interviewer]
    [sched-mcp.tools.orchestrator.core :as orchestrator]
    [sched-mcp.tools.surrogate :as surrogate]
    [sched-mcp.tool-system :as toolsys]
@@ -57,13 +56,11 @@
   []
   (let [;; Create new tools
         interviewer-tools (interviewer/create-interviewer-tools system-atom)
-        advanced-tools (advanced/create-advanced-interviewer-tools system-atom)
         orchestrator-tools (orchestrator/create-orchestrator-tools system-atom)
 
         ;; Convert to specs
         new-tool-specs (mapv tool-config->spec
                              (concat interviewer-tools
-                                     advanced-tools
                                      orchestrator-tools))
 
         ;; Get original tools and wrap start-interview
