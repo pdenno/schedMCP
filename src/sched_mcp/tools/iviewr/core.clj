@@ -2,17 +2,17 @@
   "Core interviewer tools for Discovery Schema based interviews
    These tools use LLMs to formulate questions and interpret responses"
   (:require
-   [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.project-db  :as pdb]
-   [sched-mcp.ds-util   :as dsu]
-   [sched-mcp.llm :as llm] ; Using the main LLM implementation
-   [sched-mcp.orchestration :as orch]
-   [sched-mcp.util :refer [log!]]
-   [datahike.api :as d]
-   [sched-mcp.sutil :refer [connect-atm]]))
+   [clojure.edn                   :as edn]
+   [datahike.api                  :as d]
+   [sched-mcp.llm                 :as llm]
+   [sched-mcp.project-db          :as pdb]
+   [sched-mcp.sutil               :refer [connect-atm]]
+   [sched-mcp.system-db           :as sdb]
+   [sched-mcp.tools.orch.ds-util  :as dsu]
+   [sched-mcp.tool-system         :as tool-system]
+   [sched-mcp.util                :refer [log!]]))
 
 ;;; Tool configurations
-
 (defn create-formulate-question-tool
   "Creates the tool for formulating interview questions"
   [system-atom]
@@ -56,36 +56,26 @@
   (tool-system/validate-required-params inputs [:project-id :conversation-id :ds-id]))
 
 (defmethod tool-system/execute-tool :formulate-question
-  [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id]}]
-  (let [;; Load the DS
-        ds (ds/get-cached-ds (keyword ds-id))
+  [_ {:keys [project-id conversation-id ds-id]}]
+  (let [pid (keyword project-id)
+        ds-id (keyword ds-id)
+        ds (sdb/get-discovery-schema-JSON ds-id)
         ;; Get current ASCR
-        ascr (pdb/get-ASCR (keyword project-id) (keyword ds-id))
-        ;; Get budget info
-        conn (connect-atm (keyword project-id))
-        budget-info (d/q '[:find [?allocated ?used]
-                           :in $ ?ds-id
-                           :where
-                           [?p :pursuit/ds-id ?ds-id]
-                           [?p :pursuit/status :active]
-                           [?p :pursuit/budget-allocated ?allocated]
-                           [?p :pursuit/budget-used ?used]]
-                         @conn (keyword ds-id))
-        [allocated used] (or budget-info [10 0])
-        budget-remaining (- allocated used)]
+        {:ascr/keys [str budget-left]} (pdb/get-ASCR pid ds-id)
+        ascr (edn/read-string str)]
 
     (if-not ds
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
         ;; Initialize LLM if needed
-        (when-not (seq @llm/agent-prompts)
+        (when-not (seq @llm/agent-prompts) ; <============================== Fix this!
           (llm/init-llm!))
 
         ;; Generate question using LLM
         (let [prompt (llm/ds-question-prompt
                       {:ds ds
                        :ascr ascr
-                       :budget-remaining budget-remaining})
+                       :budget-remaining budget-left})
               result (llm/complete-json prompt :model-class :chat)
               question-id (keyword (str "q-" (System/currentTimeMillis)))]
           (log! :info (str "Generated question for " ds-id " in " conversation-id))
@@ -95,12 +85,12 @@
                       :help (or (:help result)
                                 "Provide detailed information to help complete the schema")}
            :context {:ds_objective (:interview-objective ds)
-                     :fields_remaining (- (count (keys (:eads ds)))
+                     :fields_remaining (- (count (keys (:eads ds))) ; <=================================
                                           (count (keys ascr)))
                      :ascr_summary (if (empty? ascr)
                                      "No data collected yet"
                                      (str (count ascr) " fields filled"))
-                     :budget_remaining budget-remaining
+                     :budget_remaining budget-left
                      :rationale (:rationale result)
                      :targets (:targets result)}})
         (catch Exception e
@@ -140,10 +130,10 @@
 
 (defmethod tool-system/execute-tool :interpret-response
   [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id answer question-asked]}]
-  (let [ds (ds/get-cached-ds (keyword ds-id))
-        project-kw (keyword project-id)
-        conv-kw (keyword conversation-id)
-        ds-kw (keyword ds-id)]
+  (let [pid (keyword project-id)
+        cid (keyword conversation-id)
+        ds-id (keyword ds-id)
+        ds (sdb/get-discovery-schema-JSON ds-id)]
     (if-not ds
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
@@ -157,55 +147,30 @@
                        :question question-asked
                        :answer answer})
               result (llm/complete-json prompt :model-class :extract)
-              scr (:scr result)
-
-              ;; Get the active pursuit
-              conn (connect-atm project-kw)
-              pursuit-eid (d/q '[:find ?p .
-                                 :in $ ?cid ?ds-id
-                                 :where
-                                 [?c :conversation/id ?cid]
-                                 [?c :conversation/active-pursuit ?p]
-                                 [?p :pursuit/ds-id ?ds-id]]
-                               @conn conv-kw ds-kw)
-
-              ;; Store message with SCR
-              message-id (keyword (str "msg-" (System/currentTimeMillis) "-" (rand-int 1000)))
-              message-data {:message/id message-id
-                            :message/conversation conv-kw
-                            :message/pursuit pursuit-eid
-                            :message/type :answer
-                            :message/from :user
-
-                            :message/content answer
-                            :message/scr (pr-str scr) ; Store as EDN string
-                            :message/timestamp (java.util.Date.)}]
-
-          ;; Store the message
-          (when pursuit-eid
-            (d/transact conn [message-data])
-            (log! :info (str "Stored SCR for " ds-id " in " conversation-id)))
+              SCR (:scr result)
+              mid (pdb/add-msg {:pid pid :cid cid :from :user :content answer :pursuing-DS ds-id})]
+          ;(pdb/update-msg pid cid mid {:message/answers-question :not-yet-implemented})
 
           ;; Trigger ASCR update
-          (let [updated-ascr (dsu/combine-ds! ds-kw project-kw)
-                complete? (dsu/ds-complete? ds-kw project-kw)]
+          (let [updated-ascr (dsu/combine-ds! ds-id pid)
+                complete? (dsu/ds-complete? ds-id pid)]
 
             ;; Update pursuit status if complete
-            (when (and pursuit-eid complete?)
+            (when (and pursuit-eid complete?) ; <=================================
               (d/transact conn [{:db/id pursuit-eid
                                  :pursuit/status :complete
                                  :pursuit/completed-at (java.util.Date.)}])
               (log! :info (str "DS " ds-id " marked complete")))
 
-            ;; Return comprehensive result
+            ;; Return comprehensive result ; <================================= Whole completeness thing!
             {:scr (merge {:answered-at (java.util.Date.)
                           :question question-asked
                           :raw-answer answer}
-                         scr)
+                         SCR)
              :confidence (or (:confidence result) 0.8)
              :ambiguities (or (:ambiguities result) [])
              :follow_up (:follow_up result)
-             :commit-notes (str "Extracted: " (keys scr))
+             :commit-notes (str "Extracted: " (keys SCR))
              :updated_ascr updated-ascr
              :ds_complete complete?
              :completeness (if complete?
@@ -216,10 +181,10 @@
           (log! :error (str "Error in interpret-response: " (.getMessage e)))
           ;; Still try to store raw answer
           (try
-            (let [conn (connect-atm project-kw)
+            (let [conn (connect-atm pid)
                   message-id (keyword (str "msg-" (System/currentTimeMillis)))
                   message-data {:message/id message-id
-                                :message/conversation conv-kw
+                                :message/conversation cid
                                 :message/type :answer
                                 :message/from :user
 

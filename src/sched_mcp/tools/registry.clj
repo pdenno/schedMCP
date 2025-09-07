@@ -4,8 +4,6 @@
    ;; Existing tools
    [sched-mcp.tools.iviewr-tools :as itools]
    ;; New tools
-   [sched-mcp.ds-schema :as ds-schema]
-   [sched-mcp.interview :as interview]
    [sched-mcp.sutil :as sutil :refer [connect-atm]]
    [sched-mcp.tools.iviewr.core :as interviewer]
    [sched-mcp.tools.orchestrator.core :as orchestrator]
@@ -26,22 +24,8 @@
    :schema (toolsys/tool-schema tool-config)
    :tool-fn #(toolsys/execute-tool-safe tool-config %)})
 
-;;; Initialize DS schema in project databases
-(defn ensure-ds-schema!
-  "Ensure DS schema is added to project database"
-  [project-id]
-  (try
-    (let [conn (connect-atm project-id)]
-      ;; Check if DS schema already added by looking for a DS attribute
-      (when-not (d/entity @conn :pursuit/id)
-        ;; Add DS schema
-        (ds-schema/add-ds-schema! conn)
-        (log! :info (str "Added DS schema to project" project-id))))
-    (catch Exception e
-      (log! :error (str "Error adding DS schema:" (.getMessage e))))))
-
 ;;; Wrap original tools to add DS schema
-(defn wrap-start-interview
+#_(defn wrap-start-interview
   "Wrap start-interview to ensure DS schema"
   [original-fn]
   (fn [params]
@@ -64,13 +48,14 @@
                                      orchestrator-tools))
 
         ;; Get original tools and wrap start-interview
-        original-specs (mapv (fn [spec]
-                               (if (= (:name spec) "start_interview")
-                                 (update spec :tool-fn wrap-start-interview)
-                                 spec))
-                             itools/tool-specs)]
+        ;;original-specs (mapv (fn [spec]
+        ;;                       (if (= (:name spec) "start_interview")
+        ;;                        (update spec :tool-fn wrap-start-interview)
+        ;;                         spec))
+        ;;                     itools/tool-specs)]
+        ]
     ;; Combine all tools
-    (vec (concat original-specs
+    (vec (concat #_original-specs
                  new-tool-specs
                  surrogate/tool-specs))))
 

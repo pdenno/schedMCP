@@ -1,13 +1,9 @@
 (ns sched-mcp.tools.iviewr-tools
   "Interview management tools for scheduling domain"
   (:require
-   [clojure.string :as str]
-   [clojure.spec.alpha :as s]
-   [datahike.api :as d]
-   [sched-mcp.sutil :as sutil :refer [db-cfg-map register-db connect-atm datahike-schema]]
-   [sched-mcp.util :as util :refer [log!]]
-   [sched-mcp.warm-up :as warm-up]
-   [sched-mcp.interview :as interview]))
+   [sched-mcp.interview  :as iview]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.util       :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -18,7 +14,7 @@
   [{:keys [project_name domain]}]
   (log! :info (str "MCP Tool: start-interview called with project_name=" project_name ", domain=" domain))
   (try
-    (let [result (interview/start-interview project_name domain)]
+    (let [result (iview/start-interview project_name domain)]
       (log! :info (str "MCP Tool: start-interview result: " (pr-str result)))
       (if (:error result)
         {:error (:error result)}
@@ -32,7 +28,7 @@
                            :help (:help q)
                            :required (:required q)})}))
     (catch Exception e
-      (log! :info (str "MCP Tool: start-interview error: " (.getMessage e)) {:level :error})
+      (log! :error (str "MCP Tool: start-interview error: " (.getMessage e)))
       {:error (str "Failed to start interview: " (.getMessage e))})))
 
 (def start-interview-tool-spec
@@ -53,12 +49,12 @@
     (if-not project_id
       {:error "No project_id provided"}
       (let [pid (keyword project_id)
-            context (interview/get-interview-context pid)]
+            context (iview/get-interview-context pid)]
         (if (:error context)
           context
           {:conversation_id (name (:conversation-id context))
            :status (name (:status context))
-           :current_phase (name (:current-eads context))
+           :current_phase (name (:current-ds context))
            :progress (:progress context)
            :next_question (when-let [q (:next-question context)]
                             {:id (name (:id q))
@@ -77,31 +73,33 @@
             :required ["project_id"]}
    :tool-fn get-interview-context-tool})
 
-(defn submit-answer-tool
-  "Submit an answer to current question"
-  [{:keys [project_id conversation_id answer question_id]}]
-  (log! :info (str "MCP Tool: submit-answer called with project_id=" project_id
+(defn submit-response-tool
+  "Submit an response to current question"
+  [{:keys [project_id conversation_id response question_id]}]
+  (log! :info (str "MCP Tool: submit-response called with project_id=" project_id
               ", conversation_id=" conversation_id
               ", question_id=" question_id
-              ", answer=" (subs answer 0 (min 50 (count answer))) "..."))
+              ", response=" (subs response 0 (min 50 (count response))) "..."))
   (try
     (cond
       (not project_id) {:error "No project_id provided"}
       (not conversation_id) {:error "No conversation_id provided"}
-      (not answer) {:error "No answer provided"}
+      (not response) {:error "No response provided"}
       :else
       (let [pid (keyword project_id)
             cid (keyword conversation_id)
             ;; If no question_id provided, get the current question
             current-q (when-not question_id
-                        (warm-up/get-next-question pid cid))
+                        ;; If you need to generate a question, use the interview agent!
+                        :not-yet-implemented!
+                        #_(warm-up/get-next-question pid cid))
             qid (or question_id
                     (when current-q (name (:id current-q))))
-            _ (log! :info (str "MCP Tool: submit-answer using question_id=" qid))
+            _ (log! :info (str "MCP Tool: submit-response using question_id=" qid))
             result (if qid
-                     (interview/submit-answer pid cid answer qid)
-                     {:error "No current question to answer"})]
-        (log! :info (str "MCP Tool: submit-answer result: " (pr-str result)))
+                     (iview/submit-response pid cid response qid)
+                     {:error "No current question to response"})]
+        (log! :info (str "MCP Tool: submit-response result: " (pr-str result)))
         (if (:error result)
           result
           {:success true
@@ -113,26 +111,26 @@
                              :help (:help q)
                              :required (:required q)})})))
     (catch Exception e
-      (log! :info (str "MCP Tool: submit-answer error: " (.getMessage e)) {:level :error})
-      {:error (str "Failed to submit answer: " (.getMessage e))})))
+      (log! :error (str "MCP Tool: submit-response error: " (.getMessage e)))
+      {:error (str "Failed to submit response: " (.getMessage e))})))
 
-(def submit-answer-tool-spec
-  {:name "submit_answer"
-   :description "Submit an answer to the current interview question. The system will process the answer and provide the next question if available."
+(def submit-response-tool-spec
+  {:name "submit_response"
+   :description "Submit an response to the current interview question. The system will process the response and provide the next question if available."
    :schema {:type "object"
             :properties {:project_id {:type "string"
                                       :description "The project ID"}
                          :conversation_id {:type "string"
                                            :description "The conversation ID"}
-                         :answer {:type "string"
-                                  :description "The user's answer to the current question"}
+                         :response {:type "string"
+                                  :description "The user's response to the current question"}
                          :question_id {:type "string"
-                                       :description "ID of the question being answered (optional, uses current question if not provided)"}}
-            :required ["project_id" "conversation_id" "answer"]}
-   :tool-fn submit-answer-tool})
+                                       :description "ID of the question being responseed (optional, uses current question if not provided)"}}
+            :required ["project_id" "conversation_id" "response"]}
+   :tool-fn submit-response-tool})
 
-(defn get-interview-answers-tool
-  "Get all answers collected so far"
+(defn get-interview-responses-tool
+  "Get all responses collected so far"
   [{:keys [project_id conversation_id]}]
   (try
     (cond
@@ -141,35 +139,33 @@
       :else
       (let [pid (keyword project_id)
             cid (keyword conversation_id)
-            eads-data (warm-up/get-eads-data pid cid)]
-        (if eads-data
-          {:phase (name (get eads-data :phase :unknown))
-           :complete? (get eads-data :complete? false)
-           :answers (reduce-kv (fn [m k v]
-                                 (assoc m (name k) v))
-                               {}
-                               (get eads-data :answers {}))}
+            {:conversation/keys [messages status] :as ds-data}
+             (pdb/get-conversation pid cid)]
+        (if ds-data
+          {:phase (name (get ds-data :phase :unknown))
+           :complete? (= status :ds-exhausted)
+           :responses messages} ; ToDo: Actually this has the question too!
           {:phase "unknown"
            :complete? false
-           :answers {}
+           :responses {}
            :message "No interview data found yet"})))
     (catch Exception e
-      {:error (str "Failed to get answers: " (.getMessage e))})))
+      {:error (str "Failed to get responses: " (.getMessage e))})))
 
-(def get-interview-answers-tool-spec
-  {:name "get_interview_answers"
-   :description "Get all answers collected so far in the interview. Useful for reviewing what information has been gathered."
+(def get-interview-responses-tool-spec
+  {:name "get_interview_responses"
+   :description "Get all responses collected so far in the interview. Useful for reviewing what information has been gathered."
    :schema {:type "object"
             :properties {:project_id {:type "string"
                                       :description "The project ID"}
                          :conversation_id {:type "string"
                                            :description "The conversation ID"}}
             :required ["project_id" "conversation_id"]}
-   :tool-fn get-interview-answers-tool})
+   :tool-fn get-interview-responses-tool})
 
-;;; Export all tool specs for use with clojure-mcp
+;;; Export all tool specs for use with MCP
 (def tool-specs
   [start-interview-tool-spec
    get-interview-context-tool-spec
-   submit-answer-tool-spec
-   get-interview-answers-tool-spec])
+   submit-response-tool-spec
+   get-interview-responses-tool-spec])

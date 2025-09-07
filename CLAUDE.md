@@ -1,15 +1,8 @@
 # CLAUDE.md - AI Coding Copilot Instructions
 
 Essential operating instructions for any LLM agent (Claude, GPT, etc.) working on this Clojure project.
-Note that we are starting a new project in the src directory. As of this writing, there are only files using the utilities I typically use in src/ directory.
-The new project should be based on an existing project schedulingTBD, found in the examples directory. As you will see, examples/schedulingTBD is a generative AI system for building scheduling systems using human/machine teaming.
-The docs directory has some .pdfs about schedulingTBD.
-The new project performs the same work as schedulingTBD but
- 1) is built using Model Context Protocol (MCP), and
- 2) borrows ideas about how to do that from examples/clojure-mcp, an MCP server for developing clojure.
-
-Note that some of the instructions in this file concern schedulingTBD as it is implemented in examples/schedulingTBD.
-We will write a new schedMCP/CLAUDE.md once we have a modest implementation in schedMCP/src.
+This project performs the functions of an existing project, schedulingTBD, found in the `examples/schedulingTBD` directory, but uses MCP.
+As much as possible, it uses code from schedulingTBD, particularly its database functions and database schema.
 
 ## Starting up
 - The system, including its MCP loop, is probably running when you join. If you clojure_eval `(develop.repl/ns-setup!)` you will have the same NS aliases that I typically use.
@@ -28,19 +21,11 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
       `pid` should be the only variable name used to refer to a project ID. Its value is a keyword.
       `cid` should be the only variable name used to refer to a conversation ID. Its value is a keyword in #{:process :data :resources :optimality}.
 
-### Do not use println
-- Do no use println. Currently, it interferes with MCP's JSON-RPC communication. Use log! instead (see util.clj). And remember: it takes two args:
- ```clojure
-     ;;; First arg is reporting level. If more than two args, or just one more arg and it isn't a string, wrap them in str like this:
-     (log! :info (str "Some text = " the-text))
-     ```
-### Short names for aliases
-- alias names should be short, about 2-7 characters long.
- ```clojure
-     (require '[sched-mcp.interviewers :as iviewrs])
-     ;; NOT
-     (require '[sched-mcp.interviewers :as interviewers])
-     ```
+### When demonstrating code to the user:
+- **Avoid writing files of 'hacks' for demonstration** - If, for example, a function is needed that is not intended to become part of the system, enter it directly into the environment using clojure_eval, or,
+   if you must, write it in a file in the `src/scratch` directory.
+- Whenever you do create such functions or data that is not intended to be part of the system but is used soley for demo, tell the user you are doing that.
+
 ### Data Management
 - **Prefer atoms** to dynamic variable for persistent state.
   ```clojure
@@ -50,7 +35,6 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
   ;;; Avoid
   (def ^:dynamic *mock-enabled* false)
   ```
-
 ### Data Structures
 - Use maps, vectors, sets, and primitive data types to store data.
 - **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.
@@ -74,7 +58,6 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
     []
     "Hi, Peter! No code calls me.")
     ```
-
 ## Editing Etiquette
 
 ### Surgical Changes Only
@@ -89,7 +72,6 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
 
   ;; Don't collapse to single spaces
   ```
-
 ### Code Review Standards
 - Maintain existing code style and patterns
 - Don't introduce unnecessary formatting changes
@@ -98,7 +80,7 @@ We will write a new schedMCP/CLAUDE.md once we have a modest implementation in s
 ## Quick Reference
 
 ```clojure
-;; Start system in the user directory
+;; Start system in the `user` namespace, which uses `mount` a tool for loading and starting the system.
 (start)
 
 ;; Check system status and explore

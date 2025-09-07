@@ -1,10 +1,9 @@
-(ns sched-mcp.tools.orchestrator.core
+(ns sched-mcp.tools.orch.core
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.ds-util :as dsu]
-   [sched-mcp.orchestration :as orch]
    [sched-mcp.util :refer [log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]]))

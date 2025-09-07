@@ -7,7 +7,7 @@
    [clojure.set                    :as set]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.iviewr.ds-util :as dsu :refer [ds-complete? combine-ds! graph-semantics-ok?]]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds! graph-semantics-ok?]]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.sutil                :as sutil]
    [sched-mcp.system-db            :as sdb]

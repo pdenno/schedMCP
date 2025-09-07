@@ -2,10 +2,11 @@
   "LLM integration for Discovery Schema interviews
    Simplified version based on schedulingTBD's llm.clj"
   (:require
-   [clojure.data.json :as json]
+   [clojure.data.json       :as json]
    [clojure.java.io]
-   [clojure.string :as str]
-   [sched-mcp.util :refer [log!]]
+   [clojure.string          :as str]
+   [mount.core              :refer [defstate]]
+   [sched-mcp.util          :refer [log!]]
    [wkok.openai-clojure.api :as openai]))
 
 ;;; Configuration
@@ -160,10 +161,8 @@
                   user)))))
 
 ;;; Agent Integration
-
-(def agent-prompts
-  "System prompts for different interviewer agents"
-  (atom {}))
+;;;  System prompts for different interviewer agents. ToDo: this could go in the system DB.
+(defonce agent-prompts  (atom {}))
 
 (defn load-agent-prompt!
   "Load an agent prompt from markdown file"
@@ -224,38 +223,18 @@
   []
   ;; Load agent prompts
   (load-agent-prompt! :process-interviewer
-                      "docs/agents/process-interviewer-agent.md")
+                      "resources/agents/process-interviewer-agent.md")
   (load-agent-prompt! :data-interviewer
-                      "docs/agents/data-interviewer-agent.md")
+                      "resources/agents/data-interviewer-agent.md")
   (load-agent-prompt! :resource-interviewer
-                      "docs/agents/resource-interviewer-agent.md")
+                      "resources/agents/resource-interviewer-agent.md")
   (load-agent-prompt! :optimality-interviewer
-                      "docs/agents/optimality-interviewer-agent.md")
+                      "resources/agents/optimality-interviewer-agent.md")
   ;; Verify credentials
   (when-not (api-credentials @default-provider)
     (throw (ex-info "No API credentials available"
                     {:provider @default-provider})))
   (log! :info "LLM subsystem initialized"))
 
-;;; Usage examples in comments
-(comment
-  ;; Simple completion
-  (complete [(system-message "You are helpful")
-             (user-message "What is 2+2?")])
-
-  ;; JSON extraction
-  (complete-json [(system-message "Extract entities")
-                  (user-message "Apple released the iPhone in 2007")]
-                 :model-class :extract)
-
-  ;; Using builder
-  (complete (build-prompt
-             :system "You are a scheduling expert"
-             :context "User makes craft beer"
-             :user "What equipment is needed?"))
-
-  ;; DS question generation
-  (complete-json
-   (ds-question-prompt
-    {:ds {} :ascr {} :budget-remaining 5})
-   :model-class :chat))
+(defstate llm-state
+  :start (init-llm!))

@@ -62,8 +62,8 @@
 
 (defn max-msg-id
   "Return the current highest message ID used in the project."
-  [pid cid]
-  (let [ids (->> (get-conversation pid cid) :conversation/messages (mapv :message/id))]
+  [pid]
+  (let [ids (d/q '[:find [?msg-id] :where [_ :message/id ?msg-id]] @(connect-atm pid))]
     (if (empty? ids) 0 (apply max ids))))
 
 (declare get-active-DS-id conversation-exists?)
@@ -82,7 +82,7 @@
   (assert (string? content))
   (assert (not= content "null"))
   (if-let [conn (connect-atm pid)]
-    (let [msg-id (inc (max-msg-id pid cid))
+    (let [msg-id (inc (max-msg-id pid))
           pursuing-DS (or pursuing-DS (get-active-DS-id pid cid))]
       (d/transact conn {:tx-data [{:db/id (conversation-exists? pid cid)
                                    :conversation/messages (cond-> #:message{:id msg-id :from from :time (now) :content content}
@@ -159,7 +159,7 @@
        @(connect-atm pid) cid))
 
 (defn get-conversation
-  "For the argument project (pid) return a vector of messages sorted by their :message/id."
+  "For the argument project (pid) return a map of a DB conversation object with the :conversation/messages sorted by :message/id."
   [pid cid]
   (assert (#{:process :data :resources :optimality} cid))
   (if-let [eid (conversation-exists? pid cid)]
@@ -167,23 +167,8 @@
         (update :conversation/messages #(->> % (sort-by :message/id) vec)))
     {}))
 
-(defn get-conversation-status
-  "Returns a keyword indicating the status of the argument conversation.
-   If the conversation does not have a value for :conversation/status it returns nil."
-  [pid cid]
-  (if-let [eid (conversation-exists? pid cid)]
-    (if-let [status (d/q '[:find ?status .
-                           :in $ ?eid
-                           :where [?eid :conversation/status ?status]]
-                         @(connect-atm pid) eid)]
-      status
-      ;; ToDo: This can go away once old projects go away.
-      (do (log! :warn "Conversation status not set. Returning :not-started")
-          :not-started))
-    (log! :error (str "No such conversation: pid = " pid " cid = " cid))))
-
 (defn put-conversation-status!
-  "Set the project' s:converation/status attribute to true."
+  "Set the project' s:converation/status attribute to one of #{:ds-exhausted :not-started :in-progress}."
   [pid cid status]
   (assert (#{:ds-exhausted :not-started :in-progress} status))
   (if-let [eid (conversation-exists? pid cid)]
@@ -460,7 +445,7 @@
   "Attach a stringified representation of the SCR is building to the latest message.
    The data structure should have keywords for keys at this point (not checked)."
   [pid cid ds]
-  (let [max-id (max-msg-id pid cid)
+  (let [max-id (max-msg-id pid)
         conn-atm (connect-atm pid)
         eid (d/q '[:find ?eid .
                    :in $ ?cid ?max-id

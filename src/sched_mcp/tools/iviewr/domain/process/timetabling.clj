@@ -4,9 +4,8 @@
    [clojure.set                    :as set]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.iviewr.ds-util :as dsu :refer [ds-complete? combine-ds!]]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds!]]
    [sched-mcp.project-db           :as pdb]
-   [sched-mcp.sutil                :as sutil :refer [clj2json-pretty]]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [log! alog!]]))
 

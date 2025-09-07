@@ -8,6 +8,7 @@
    [sched-mcp.system-db] ; For mount
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
    [sched-mcp.tools.iviewr-tools]            ; For mount
+   [sched-mcp.llm]                           ; For mount
    [sched-mcp.tools.registry :as registry]   ; For mount
    [sched-mcp.util :as util :refer [log!]])  ; For mount
   (:import [java.io BufferedReader InputStreamReader PrintWriter]))

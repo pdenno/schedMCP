@@ -41,6 +41,7 @@ dutil/learn-schema!
    'sutil  'sched-mcp.sutil
    'schema 'sched-mcp.schema
    'sdb    'sched-mcp.system-db
+   'iview  'sched-mcp.tools.interview
    'itools 'sched-mcp.tools.iviewr-tools
    'orm    'sched-mcp.tools.iviewr.domain.data.orm
    'reg    'sched-mcp.tools.registry

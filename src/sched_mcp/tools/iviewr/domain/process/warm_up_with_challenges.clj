@@ -5,8 +5,7 @@
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
    [sched-mcp.project-db           :as pdb]
-   [sched-mcp.tools.iviewr.ds-util :as dsu :refer [ds-complete? combine-ds!]]
-   [sched-mcp.sutil                :as sutil]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds!]]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [alog!]]))
 
