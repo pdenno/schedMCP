@@ -170,22 +170,28 @@
   (log! :info (str "Starting surrogate interview for " domain))
 
   ;; Create project with sur- prefix and force replace
-  (let [pid (as-> domain ?s (str/trim ?s) (str/lower-case ?s) (str/replace ?s #"\s+" "-") (str "sur-" ?s) (keyword ?s))
+  (let [pid (as-> domain ?s
+              (name ?s) ; Convert keyword to string
+              (str/trim ?s)
+              (str/lower-case ?s)
+              (str/replace ?s #"\s+" "-")
+              (str "sur-" ?s)
+              (keyword ?s))
         project-result (pdb/create-project-db! {:pid pid
-                                             :project-name (or project-name
-                                                               (str "Surrogate " (name domain) " Interview"))
-                                             :force-replace? true})
+                                                :project-name (or project-name
+                                                                  (str "Surrogate " (name domain) " Interview"))
+                                                :force-replace? true})
 
         ;; Create expert persona
         persona (create-expert-persona {:domain domain
                                         :company-name company-name})
 
         ;; Initialize session with conversation ID
-        _session (init-expert-session (:project-id project-result) persona
+        _session (init-expert-session (:pid project-result) persona
                                       :conversation-id (:cid project-result))]
 
-    {:project-id (:project-id project-result)
-     :conversation-id (name (:conversation-id project-result))
+    {:project-id (:pid project-result)
+     :conversation-id (name (:cid project-result))
      :expert-id (:expert-id persona)
      :company-name (:company-name persona)
      :domain domain

@@ -35,6 +35,9 @@
    :project/name
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "a string, same as the :project/name in the project's DB."}
+   :project/status
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
+        :doc "a keyword, current #{:active :archived :deleted}."}
 ;;; ---------------------- system
    :system/agents
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
@@ -149,9 +152,6 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long
         :doc (str "The unique ID of a message. These are natural numbers starting at 0, but owing to 'LLM:' prompts,\n"
                   "which aren't stored, some values can be skipped. Because these are not unique to the DB, they are not :db.unique/identity.")}
-   :message/pursuing-DS
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
-        :doc "The discovery schema being pursued by this question or answer, if any."}
    :message/question-type
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
         :doc "A label (from interview instructions) associated with this question or answer."}

@@ -1,9 +1,9 @@
 (ns sched-mcp.tools.iviewr-tools
   "Interview management tools for scheduling domain"
   (:require
-   [sched-mcp.interview  :as iview]
+   [sched-mcp.interview :as iview]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.util       :refer [log!]]))
+   [sched-mcp.util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -77,9 +77,9 @@
   "Submit an response to current question"
   [{:keys [project_id conversation_id response question_id]}]
   (log! :info (str "MCP Tool: submit-response called with project_id=" project_id
-              ", conversation_id=" conversation_id
-              ", question_id=" question_id
-              ", response=" (subs response 0 (min 50 (count response))) "..."))
+                   ", conversation_id=" conversation_id
+                   ", question_id=" question_id
+                   ", response=" (subs response 0 (min 50 (count response))) "..."))
   (try
     (cond
       (not project_id) {:error "No project_id provided"}
@@ -88,28 +88,21 @@
       :else
       (let [pid (keyword project_id)
             cid (keyword conversation_id)
-            ;; If no question_id provided, get the current question
-            current-q (when-not question_id
-                        ;; If you need to generate a question, use the interview agent!
-                        :not-yet-implemented!
-                        #_(warm-up/get-next-question pid cid))
+            ;; If no question_id provided, find the last unanswered question
             qid (or question_id
-                    (when current-q (name (:id current-q))))
+                    (pdb/most-recent-unanswered pid cid))
             _ (log! :info (str "MCP Tool: submit-response using question_id=" qid))
             result (if qid
                      (iview/submit-response pid cid response qid)
-                     {:error "No current question to response"})]
+                     {:error "No current unanswered question found"})]
         (log! :info (str "MCP Tool: submit-response result: " (pr-str result)))
         (if (:error result)
           result
           {:success true
-           :complete? (:complete? result)
-           :progress (:progress result)
-           :next_question (when-let [q (:next-question result)]
-                            {:id (name (:id q))
-                             :text (:text q)
-                             :help (:help q)
-                             :required (:required q)})})))
+           :ds-complete (:ds-complete result)
+           :budget-remaining (:budget-remaining result)
+           :message-id (:message-id result)
+           :next-step (:next-step result)})))
     (catch Exception e
       (log! :error (str "MCP Tool: submit-response error: " (.getMessage e)))
       {:error (str "Failed to submit response: " (.getMessage e))})))
@@ -123,7 +116,7 @@
                          :conversation_id {:type "string"
                                            :description "The conversation ID"}
                          :response {:type "string"
-                                  :description "The user's response to the current question"}
+                                    :description "The user's response to the current question"}
                          :question_id {:type "string"
                                        :description "ID of the question being responseed (optional, uses current question if not provided)"}}
             :required ["project_id" "conversation_id" "response"]}
@@ -140,7 +133,7 @@
       (let [pid (keyword project_id)
             cid (keyword conversation_id)
             {:conversation/keys [messages status] :as ds-data}
-             (pdb/get-conversation pid cid)]
+            (pdb/get-conversation pid cid)]
         (if ds-data
           {:phase (name (get ds-data :phase :unknown))
            :complete? (= status :ds-exhausted)

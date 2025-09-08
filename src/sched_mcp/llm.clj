@@ -189,7 +189,7 @@
   (build-prompt
    :system (get-agent-prompt :process-interviewer)
    :context (str "Discovery Schema:\n"
-                 (json/write-str (:eads ds) :indent true)
+                 (json/write-str (:ds ds) :indent true)
                  "\n\nCurrent ASCR:\n"
                  (json/write-str ascr :indent true)
                  "\n\nBudget remaining: " budget-remaining " questions")
@@ -206,7 +206,7 @@
   (build-prompt
    :system "You are an expert at extracting structured data from natural language."
    :context (str "Discovery Schema structure:\n"
-                 (json/write-str (:eads ds) :indent true))
+                 (json/write-str (:ds ds) :indent true))
    :user (str "Question asked: " question
               "\n\nUser's answer: " answer
               "\n\nExtract structured data matching the schema.")
@@ -226,8 +226,8 @@
                       "resources/agents/process-interviewer-agent.md")
   (load-agent-prompt! :data-interviewer
                       "resources/agents/data-interviewer-agent.md")
-  (load-agent-prompt! :resource-interviewer
-                      "resources/agents/resource-interviewer-agent.md")
+  (load-agent-prompt! :resources-interviewer
+                      "resources/agents/resources-interviewer-agent.md")
   (load-agent-prompt! :optimality-interviewer
                       "resources/agents/optimality-interviewer-agent.md")
   ;; Verify credentials

@@ -1,17 +1,19 @@
 (ns sched-mcp.project-db
   "Database functions for projects - includes backup/restore for schema migrations"
   (:require
-   [clojure.edn         :as edn]
-   [clojure.java.io     :as io]
-   [clojure.pprint      :refer [pprint]]
-   [clojure.string      :as str]
-   [datahike.api        :as d]
-   [datahike.pull-api   :as dp]
-   [mount.core          :as mount  :refer [defstate]]
-   [sched-mcp.schema    :as schema :refer [project-schema-key?]]
-   [sched-mcp.sutil     :as sutil  :refer [connect-atm mocking? resolve-db-id shadow-pid]]
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
+   [clojure.string :as str]
+   [datahike.api :as d]
+   [datahike.pull-api :as dp]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.schema :as schema :refer [project-schema-key?]]
+   [sched-mcp.sutil :as sutil :refer [connect-atm mocking? resolve-db-id shadow-pid]]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.util      :as util :refer [log! now]]))
+   [sched-mcp.util :as util :refer [log! now]]))
+
+(def ^:diag diag (atom nil))
 
 ;;; Throughout this file, variables named pid are project IDs (a keyword) and variables named cid are conversations IDs #{:process, :data, :resources, :optimality}.
 
@@ -89,7 +91,7 @@
                                                             table (assoc :message/table (str table))
                                                             (not-empty tags) (assoc :message/tags tags)
                                                             question-type (assoc :message/question-type question-type)
-                                                            code          (assoc :message/code code)
+                                                            code (assoc :message/code code)
                                                             pursuing-DS (assoc :message/pursuing-DS pursuing-DS))}]})
       msg-id)
     (throw (ex-info "Could not connect to DB." {:pid pid}))))
@@ -102,10 +104,34 @@
                    :in $ ?cid ?mid
                    :where
                    [?c-ent :conversation/id ?cid]
-S                   [?c-ent :conversation/messages ?m-ent]
+                   [?c-ent :conversation/messages ?m-ent]
                    [?m-ent :message/id ?mid]]
                  conn cid mid)]
     (dp/pull conn '[*] eid)))
+
+(defn most-recent-unanswered
+  "Find the most recent unanswered question in a conversation.
+   Returns the message ID or nil if no unanswered questions."
+  [pid cid]
+  (when-let [conn (connect-atm pid)]
+    (let [unanswered-q (d/q '[:find ?mid ?time
+                              :in $ ?cid
+                              :where
+                              [?m :message/id ?mid]
+                              [?m :message/from :system]
+                              [?m :message/question-type _]
+                              [?m :message/time ?time]
+                              [?c :conversation/id ?cid]
+                              [?c :conversation/messages ?m]
+                             ;; Not answered yet - no message has this as answers-question
+                              (not-join [?mid]
+                                        [_ :message/answers-question ?mid])]
+                            @conn cid)]
+      ;; Get the most recent unanswered question
+      (when (seq unanswered-q)
+        (-> (sort-by second > unanswered-q)
+            first
+            first)))))
 
 (defn update-msg!
   "Update the message with given info (a merge)."
@@ -184,43 +210,19 @@ S                   [?c-ent :conversation/messages ?m-ent]
 
 (defn put-active-cid!
   [pid cid]
-   (let [pid (if @mocking? (shadow-pid pid) pid)]
-     (assert (#{:process :data :resources :optimality} cid))
-     (if-let [eid (project-exists? pid)]
-       (d/transact (connect-atm pid) {:tx-data [{:db/id eid
-                                                 :project/active-conversation cid}]})
-       (log! :error "Could not put-active-cid!"))))
+  (let [pid (if @mocking? (shadow-pid pid) pid)]
+    (assert (#{:process :data :resources :optimality} cid))
+    (if-let [eid (project-exists? pid)]
+      (d/transact (connect-atm pid) {:tx-data [{:db/id eid
+                                                :project/active-conversation cid}]})
+      (log! :error "Could not put-active-cid!"))))
 
 ;;;--------------------------------------- project itself --------------------------------------
-(defn delete-project!
-  "Mark a project as deleted (soft delete)"
-  [pid]
-  (when-let [conn (connect-atm :system)]
-    (let [pid (keyword pid)]
-      (d/transact conn
-                  [{:project/id pid
-                    :project/status :deleted}])
-      {:pid pid
-       :status :deleted})))
-
-(defn list-projects
-  "Return a vector of project IDs (excluding deleted projects)"
-  []
-  (when-let [conn (connect-atm :system)]
-    (-> (d/q '[:find [?id ...]
-               :where
-               [?p :project/id ?id]
-               [?p :project/status ?status]
-               [(not= ?status :deleted)]]
-             @conn)
-        sort
-        vec)))
-
 (defn unique-pid
   "Generate a unique project ID. If the requested ID exists, append -1, -2, etc."
   [base-id]
   (let [base-id (keyword base-id)
-        existing-ids (set (list-projects))]
+        existing-ids (set (sdb/list-projects))]
     (if (not (contains? existing-ids base-id))
       base-id
       (loop [n 1]
@@ -229,29 +231,20 @@ S                   [?c-ent :conversation/messages ?m-ent]
             new-id
             (recur (inc n))))))))
 
-(defn add-project-to-system
-  "Add the argument project (a db-cfg map) to the system database."
-  [id project-name dir]
-  (let [conn-atm (connect-atm :system)
-        eid (d/q '[:find ?eid . :where [?eid :system/name "SYSTEM"]] @conn-atm)]
-    (d/transact conn-atm {:tx-data [{:db/id eid
-                                     :system/projects {:project/id id
-                                                       :project/name project-name
-                                                       :project/dir dir}}]})))
-
 (defn delete-project-db!
   "Delete an existing project database if it exists"
   [pid]
   (let [pid (keyword pid)
         cfg (sutil/db-cfg-map {:type :project :id pid})]
+    (sdb/mark-project-deleted-in-sdb! pid)
     (when (d/database-exists? cfg)
       (log! :info (str "Deleting existing database for: " pid))
       (d/delete-database cfg))))
 
 (def conversation-defaults
   [{:conversation/id :process
-    :conversation/active-DS-id :process/warm-up-with-challenges  ; We assume things start here.
-    :conversation/status :in-progress}                           ; We assume things start here.
+    :conversation/active-DS-id :process/warm-up-with-challenges ; We assume things start here.
+    :conversation/status :in-progress} ; We assume things start here.
    {:conversation/id :data
     :conversation/status :not-started}
    {:conversation/id :resources
@@ -267,51 +260,41 @@ S                   [?c-ent :conversation/messages ?m-ent]
   [{:keys [pid project-name _domain cid force-replace? in-mem? additional-info]
     :or {project-name "Unnamed project"
          cid :process}}]
-   (log! :info (str "Creating project: " pid))
-   (assert (#{:process :data :resources :optimality} cid))
-   (let [pid (if force-replace? pid (unique-pid pid))
-         cfg (sutil/db-cfg-map {:type :project :id pid :in-mem? in-mem?})
-         dir (-> cfg :store :path)
-         pname (as-> project-name ?s (str/split ?s #"\s+") (interpose "-" ?s) (apply str ?s))
-         files-dir (-> cfg :base-dir (str "/projects/" pname "/files"))]
-     (when-not in-mem?
-       (when-not (-> dir io/as-file .isDirectory)
-         (-> cfg :store :path io/make-parents)
-         (-> cfg :store :path io/as-file .mkdir))
-       (when-not (-> files-dir io/as-file .isDirectory)
-         (io/make-parents files-dir)
-         (-> files-dir io/as-file .mkdir))
-       (add-project-to-system pid project-name dir))
-     (when (d/database-exists? cfg) (d/delete-database cfg))
-     (d/create-database cfg)
-     (sutil/register-db pid cfg)
+  (log! :info (str "Creating project: " pid))
+  (assert (#{:process :data :resources :optimality} cid))
+  (let [pid (if force-replace? pid (unique-pid pid))
+        cfg (sutil/db-cfg-map {:type :project :id pid :in-mem? in-mem?})
+        dir (-> cfg :store :path)
+        pname (as-> project-name ?s (str/split ?s #"\s+") (interpose "-" ?s) (apply str ?s))
+        files-dir (-> cfg :base-dir (str "/projects/" pname "/files"))]
+    (when-not in-mem?
+      (when-not (-> dir io/as-file .isDirectory)
+        (-> cfg :store :path io/make-parents)
+        (-> cfg :store :path io/as-file .mkdir))
+      (when-not (-> files-dir io/as-file .isDirectory)
+        (io/make-parents files-dir)
+        (-> files-dir io/as-file .mkdir))
+      (sdb/add-project-to-system pid project-name dir))
+    (when (d/database-exists? cfg) (d/delete-database cfg))
+    (d/create-database cfg)
+    (sutil/register-db pid cfg)
      ;; Add to project db
-     (d/transact (connect-atm pid) schema/db-schema-proj)
-     (d/transact (connect-atm pid) {:tx-data [{:project/id pid
-                                               :project/name project-name
-                                               :project/execution-status :running
-                                               :project/active-conversation :process
-                                               :project/claims [{:claim/string (str `(~'project-id ~pid))}
-                                                                {:claim/string (str `(~'project-name ~pid ~project-name))}]
-                                               :project/conversations conversation-defaults}]})
-     (add-conversation-intros pid)
-     (when (not-empty additional-info)
-       (d/transact (connect-atm pid) additional-info))
+    (d/transact (connect-atm pid) schema/db-schema-proj)
+    (d/transact (connect-atm pid) {:tx-data [{:project/id pid
+                                              :project/name project-name
+                                              :project/execution-status :running
+                                              :project/active-conversation :process
+                                              :project/claims [{:claim/string (str `(~'project-id ~pid))}
+                                                               {:claim/string (str `(~'project-name ~pid ~project-name))}]
+                                              :project/conversations conversation-defaults}]})
+    (add-conversation-intros pid)
+    (when (not-empty additional-info)
+      (d/transact (connect-atm pid) additional-info))
      ;; Add knowledge of this project to the system db.
-     (log! :info (str "Created project database for " pid))
-     {:pid pid
-      :cid cid
-      :status :created}))
-
-(defn ^:admin archive-project!
-  "Archive a project"
-  [pid]
-  (when-let [conn (connect-atm :system)]
-    (d/transact conn
-                [{:project/id pid
-                  :project/status :archived}])
-    {:pid pid
-     :status :archived}))
+    (log! :info (str "Created project database for " pid))
+    {:pid (reset! diag pid)
+     :cid cid
+     :status :created}))
 
 ;;; ------------------- Discovery Schema (DS) and Schema-conforming Response (SCR) -----------------------------------------
 ;;; DS (interview phase) tracking
@@ -385,34 +368,39 @@ S                   [?c-ent :conversation/messages ?m-ent]
     (d/transact (connect-atm pid)
                 {:tx-data [{:db/id eid :conversation/active-DS-id ds-id}]})))
 
-;;; This is what is in orchestration-ignore.clj:
-#_(defn get-interview-progress
-  "Get overall interview progress across all DS"
-  [pid]
-  (let [completed (get-completed-ds pid)
-        completed-ids (set (map :ds-id completed))
-        ;; Estimate total DS needed (varies by problem type)
-        estimated-total (cond
-                          (contains? completed-ids :process/timetabling) 4
-                          (contains? completed-ids :process/job-shop) 5
-                          (contains? completed-ids :process/flow-shop) 4
-                          :else 3)
-        progress-pct (int (* 100 (/ (count completed) estimated-total)))]
-
-    {:completed-ds completed-ids
-     :completed-count (count completed)
-     :estimated-total estimated-total
-     :progress-percentage progress-pct
-     :current-phase (cond
-                      (empty? completed) :warm-up
-                      (< (count completed) 2) :process-discovery
-                      (< (count completed) 4) :data-modeling
-                      :else :optimization-setup)}))
-
 (defn get-interview-progress
   "Get overall interview progress across all DS"
   [pid]
-  :not-yet-implemented)
+  (let [conn (connect-atm pid)]
+    (if-not conn
+      {:error "Project not found"}
+      (let [;; Get all ASCRs in the project
+            ascrs (d/q '[:find ?ds-id ?completed ?budget-left
+                         :where
+                         [?e :ascr/id ?ds-id]
+                         [?e :ascr/completed? ?completed]
+                         [?e :ascr/budget-left ?budget-left]]
+                       @conn)
+            ;; Get current active DS and conversation
+            active-cid (get-active-cid pid)
+            active-ds-id (when active-cid (get-active-DS-id pid active-cid))
+            ;; Calculate summary stats
+            total-ds (count ascrs)
+            completed-ds (count (filter #(second %) ascrs))
+            in-progress-ds (count (filter #(and (not (second %)) (> (nth % 2) 0)) ascrs))]
+        {:total_ds total-ds
+         :completed_ds completed-ds
+         :in_progress_ds in-progress-ds
+         :completion_percentage (if (zero? total-ds)
+                                  0
+                                  (int (* 100 (/ completed-ds total-ds))))
+         :active_conversation (when active-cid (name active-cid))
+         :current_ds (when active-ds-id (name active-ds-id))
+         :ds_details (map (fn [[ds-id completed budget]]
+                            {:ds_id (name ds-id)
+                             :completed completed
+                             :budget_left budget})
+                          ascrs)}))))
 
 ;;; -------------------- Aggregate Schema Conforming Response (ASCR)  -----------------------
 (defn ASCR-exists?
@@ -456,7 +444,7 @@ S                   [?c-ent :conversation/messages ?m-ent]
   "The system stores DS-instructions that may or may not have an :DS/budget-decrement.
    If it does, decrement the same-named summary structure objec by that value.
    Otherwise, decrement the same-named object by the db/default-DS-budget-decrement."
-  [pid ds-id ]
+  [pid ds-id]
   (assert ((sdb/system-DS?) ds-id))
   (let [val (get-questioning-budget-left! pid ds-id)
         dec-val (or (d/q '[:find ?dec-val .
@@ -506,13 +494,13 @@ S                   [?c-ent :conversation/messages ?m-ent]
 
 (defn key-xy
   [obj]
-  (cond (map? obj)       (reduce-kv (fn [m k v] (if (#{"x" "y"} k)
-                                                  (assoc m (keyword k) v)
-                                                  (assoc m k (key-xy v))))
-                                    {}
-                                    obj)
-        (vector? obj)    (mapv key-xy obj)
-        :else            obj))
+  (cond (map? obj) (reduce-kv (fn [m k v] (if (#{"x" "y"} k)
+                                            (assoc m (keyword k) v)
+                                            (assoc m k (key-xy v))))
+                              {}
+                              obj)
+        (vector? obj) (mapv key-xy obj)
+        :else obj))
 
 (defn set-orm-layout!
   "Called when a user changes the layout of an ORM diagram on the UI, this makes that data persistent
@@ -521,9 +509,9 @@ S                   [?c-ent :conversation/messages ?m-ent]
   (log! :info (str "save-orm-layout!:\n " (with-out-str (pprint msg))))
   (if-let [orm-ds (-> (get-msg pid cid message-id) :message/graph--orm edn/read-string)]
     (let [orm-ds (update orm-ds :inquiry-areas (fn [ias] (mapv #(if (= (:inquiry-area-id %) inquiry-area-id)
-                                                                      (assoc % :layout (key-xy layout-data))
-                                                                      %)
-                                                                   ias)))]
+                                                                  (assoc % :layout (key-xy layout-data))
+                                                                  %)
+                                                               ias)))]
       (update-msg! pid cid message-id {:message/graph--orm (str orm-ds)}))
     (log! :error (str "Could not find ORM diagram for " msg))))
 
@@ -583,7 +571,7 @@ S                   [?c-ent :conversation/messages ?m-ent]
 (defn backup-all-projects
   "Backup all project databases"
   [& {:keys [target-dir] :or {target-dir "data/projects/"}}]
-  (doseq [pid (list-projects)]
+  (doseq [pid (sdb/list-projects)]
     (backup-project-db pid :target-dir target-dir)))
 
 (defn recreate-project-db!
@@ -645,7 +633,7 @@ S                   [?c-ent :conversation/messages ?m-ent]
   "Update all projects for new schema"
   []
   (log! :info "Updating all projects for new schema...")
-  (doseq [pid (list-projects)]
+  (doseq [pid (sdb/list-projects)]
     (try
       (update-project-for-schema! pid)
       (catch Exception e
@@ -659,15 +647,15 @@ S                   [?c-ent :conversation/messages ?m-ent]
   (swap! sutil/databases-atm
          #(reduce-kv (fn [res k v] (if (keep-db? k) (assoc res k v) res)) {} %))
   (sdb/recreate-system-db!)
-  (log! :info (str "Recreating these projects: " (list-projects)))
-  (doseq [pid (list-projects)]
+  (log! :info (str "Recreating these projects: " (sdb/list-projects)))
+  (doseq [pid (sdb/list-projects)]
     (recreate-project-db! pid)))
 
 ;;; -------------------------- Starting and stopping ------------------------------
 (defn register-project-dbs!
   "Register all project databases from the system database"
   []
-  (doseq [id (list-projects)]
+  (doseq [id (sdb/list-projects)]
     (let [proj-cfg (sutil/db-cfg-map {:type :project :id id})]
       (when (d/database-exists? proj-cfg)
         (log! :info (str "Registering project database: " id))
@@ -685,7 +673,7 @@ S                   [?c-ent :conversation/messages ?m-ent]
   (register-project-dbs!)
 
   {:system-db (sutil/db-cfg-map {:type :system :id :system})
-   :project-count (count (list-projects))})
+   :project-count (count (sdb/list-projects))})
 
 ;; Mount defstate for automatic database initialization
 (defstate system-and-project-dbs

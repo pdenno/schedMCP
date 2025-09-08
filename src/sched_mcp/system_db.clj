@@ -152,6 +152,49 @@
         cfg))
     (log! :error "Not recreating system DB: No backup file.")))
 
+(defn list-projects
+  "Return a vector of project IDs (excluding deleted projects)"
+  []
+  (when-let [conn (connect-atm :system)]
+    (-> (d/q '[:find [?id ...]
+               :where
+               [?p :project/id ?id]
+               [?p :project/status ?status]
+               [(not= ?status :deleted)]]
+             @conn)
+        sort
+        vec)))
+
+(defn add-project-to-system
+  "Add the argument project (a db-cfg map) to the system database."
+  [id project-name dir]
+  (let [conn-atm (connect-atm :system)
+        eid (d/q '[:find ?eid . :where [?eid :system/name "SYSTEM"]] @conn-atm)]
+    (d/transact conn-atm {:tx-data [{:db/id eid
+                                     :system/projects {:project/id id
+                                                       :project/name project-name
+                                                       :project/dir dir}}]})))
+(defn ^:admin archive-project!
+  "Archive a project"
+  [pid]
+  (when-let [conn (connect-atm :system)]
+    (d/transact conn
+                [{:project/id pid
+                  :project/status :archived}])
+    {:pid pid
+     :status :archived}))
+
+(defn mark-project-deleted-in-sdb!
+  "Mark a project as deleted (soft delete)"
+  [pid]
+  (when-let [conn (connect-atm :system)]
+    (let [pid (keyword pid)]
+      (d/transact conn
+                  [{:project/id pid
+                    :project/status :deleted}])
+      {:pid pid
+       :status :deleted})))
+
 (defn get-discovery-schema-JSON
   "Return the JSON of the discovery schema from the system DB."
   [ds-id]

@@ -8,11 +8,26 @@ This project reimplements the core interview functionality from schedulingTBD as
 
 ## Architecture
 
-The system exposes scheduling interview capabilities through MCP tools:
-- `start_interview` - Initialize a new scheduling project and begin the interview
-- `get_interview_context` - Check current interview state and next questions
-- `submit_answer` - Submit answers to interview questions
-- `get_interview_answers` - Review collected answers
+The system uses an orchestrator-driven approach that dynamically selects appropriate Discovery Schemas based on the current state of knowledge. Key components:
+
+### Interview Tools
+- `iviewr_formulate_question` - Generate contextual questions from Discovery Schemas and current knowledge
+- `iviewr_interpret_response` - Extract structured data (SCRs) from natural language answers
+
+### System Query Tools
+- `sys_get_current_ds` - Check current Discovery Schema and aggregated knowledge (ASCR)
+- `sys_get_interview_progress` - View overall interview progress
+
+### Orchestration Tools
+- `orch_get_next_ds` - Get comprehensive DS status for orchestration decisions
+- `orch_start_ds_pursuit` - Begin working on a specific Discovery Schema
+- `orch_complete_ds` - Mark a Discovery Schema as complete
+- `orch_get_progress` - Get overall interview progress
+
+### Surrogate Expert Tools (for testing)
+- `sur_start_expert` - Initialize a domain expert simulation
+- `sur_answer` - Get expert responses to questions
+- `sur_get_session` - Debug surrogate session state
 
 ## Prerequisites
 
@@ -84,30 +99,27 @@ Once configured, you can interact with the scheduling interview system in Claude
 
 **You**: "I need help with scheduling for my craft beer brewery"
 
-**Claude** will use the `start_interview` tool to create a project and begin asking questions:
-- What are the main scheduling challenges you face?
-- What products does your brewery produce?
-- Any other constraints or goals?
+**Claude** will use the orchestration tools to:
+1. Check available Discovery Schemas
+2. Select the most appropriate starting point based on current knowledge
+3. Begin asking contextual questions
 
-### Continuing the Interview
+### Interview Flow
 
-The system maintains conversation state, so you can answer questions naturally. Claude will use the tools to:
-- Track your answers
-- Determine the next relevant questions
-- Build up a complete picture of your scheduling needs
+The orchestrator dynamically manages the interview by:
+- **Selecting Discovery Schemas** - Choosing the next area to explore based on what's already known
+- **Generating Questions** - Using LLMs to create natural, contextual questions
+- **Interpreting Responses** - Extracting structured data (SCRs) from conversational answers
+- **Building Knowledge** - Aggregating responses into a comprehensive understanding (ASCR)
+- **Determining Completion** - Knowing when enough information has been gathered
 
-### Interview Phases
+### Discovery Schema Types
 
-1. **Warm-up Phase** (currently implemented):
-   - General scheduling challenges
-   - Product/service description
-   - Additional context
-
-2. **Future Phases** (to be implemented):
-   - Resource identification
-   - Process flow mapping
-   - Constraint specification
-   - MiniZinc model generation
+The system includes various Discovery Schemas for different aspects:
+- **Process Schemas** - Understanding workflow types (flow-shop, job-shop, timetabling)
+- **Data Schemas** - Capturing domain relationships (Object-Role Modeling)
+- **Challenge Schemas** - Identifying scheduling pain points
+- **Resource Schemas** - Mapping available resources and constraints
 
 ## Project Structure
 
@@ -119,36 +131,55 @@ schedMCP/
 │   ├── mcp_core.clj      # Core MCP protocol implementation
 │   ├── sutil.clj         # Shared utilities
 │   ├── interview.clj     # Interview management
-│   ├── warm_up.clj       # Warm-up phase implementation
+│   ├── orchestration.clj # Dynamic DS selection and flow
+│   ├── ds_loader.clj     # Discovery Schema loading
+│   ├── ds_combine.clj    # SCR to ASCR aggregation
+│   ├── ds_schema.clj     # Database schema for DS tracking
+│   ├── surrogate.clj     # Domain expert simulation
 │   └── tools/
-│       └── interview.clj # MCP tool definitions
+│       ├── registry.clj  # Central tool registry
+│       ├── iviewr/       # Interviewer tools
+│       ├── orch/         # Orchestration tools
+│       └── surrogate.clj # Surrogate expert tools
 ├── deps.edn              # Dependencies
 └── README.md            # This file
 ```
 
 ## Development
 
-### Adding New Interview Phases
+### Adding New Discovery Schemas
 
-1. Create a new namespace for the phase (e.g., `sched-mcp.resource-mapping`)
-2. Define the question structure and logic
-3. Add tools to `sched-mcp.tools.interview`
-4. Update the interview flow in `sched-mcp.interview`
+1. Add the DS JSON file to `resources/discovery-schemas/`
+2. Implement combination logic in `ds_combine.clj`
+3. Add completion criteria in the appropriate namespace
+4. The orchestrator will automatically include it in the flow
 
 ### Testing Tools
 
 You can test individual tools in the REPL:
 
 ```clojure
-(require '[sched-mcp.tools.interview :as tools])
+;; Test with surrogate expert
+(def project (:project_id (sur-start-expert {:domain "craft-beer"})))
 
-;; Test starting an interview
-((:tool-fn tools/start-interview-tool-spec)
- {:project_name "Test Brewery" :domain "food-processing"})
+;; Check available Discovery Schemas
+(orch-get-next-ds {:project_id project :conversation_id "conv-1"})
 
-;; Test getting context
-((:tool-fn tools/get-interview-context-tool-spec)
- {:project_id "test-brewery"})
+;; Start a specific DS
+(orch-start-ds-pursuit {:project_id project
+                        :conversation_id "conv-1"
+                        :ds_id "process/warm-up-with-challenges"})
+
+;; Generate and answer questions
+(def q (iviewr-formulate-question {:project_id project
+                                   :conversation_id "conv-1"
+                                   :ds_id "process/warm-up-with-challenges"}))
+(def a (sur-answer {:project_id project :question (:question q)}))
+(iviewr-interpret-response {:project_id project
+                            :conversation_id "conv-1"
+                            :ds_id "process/warm-up-with-challenges"
+                            :answer (:answer a)
+                            :question_asked (:question q)})
 ```
 
 ## Troubleshooting
@@ -169,12 +200,14 @@ You can test individual tools in the REPL:
 
 ## Future Enhancements
 
-- [ ] Additional interview phases (resources, processes, constraints)
-- [ ] MiniZinc model generation
+- [ ] Additional Discovery Schema templates
+- [ ] MiniZinc model generation from collected knowledge
+- [ ] Advanced table-based communication for complex data entry
 - [ ] Integration with schedulingTBD's visualization tools
 - [ ] Support for resuming interviews across sessions
 - [ ] Multi-user/multi-project management
 - [ ] Export interview results to various formats
+- [ ] LangGraph integration for more sophisticated orchestration
 
 ## Contributing
 

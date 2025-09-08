@@ -33,15 +33,16 @@ dutil/learn-schema!
    ;'iviewr 'sched-mcp.interview
    ;;'main   'sched-mcp.main ; This isn't used in development
    'pdb    'sched-mcp.project-db
-   ;'dsld   'sched-mcp.ds-loader
-   ;'dssch  'sched-mcp.ds-schema
+   ;;'dsld   'sched-mcp.ds-loader
+   ;;'dssch  'sched-mcp.ds-schema
+   'dsu    'sched-mcp.tools.orch.ds-util
    'mcore  'sched-mcp.mcp-core
-   'ork    'sched-mcp.orchestration
+   'orch   'sched-mcp.tools.orch.core
    'sur    'sched-mcp.surrogate
    'sutil  'sched-mcp.sutil
    'schema 'sched-mcp.schema
    'sdb    'sched-mcp.system-db
-   'iview  'sched-mcp.tools.interview
+   ;'iview  'sched-mcp.tools.interview
    'itools 'sched-mcp.tools.iviewr-tools
    'orm    'sched-mcp.tools.iviewr.domain.data.orm
    'reg    'sched-mcp.tools.registry

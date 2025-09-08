@@ -1,12 +1,13 @@
 (ns sched-mcp.tools.orch.core
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
-   [sched-mcp.tool-system        :as tool-system]
-   [sched-mcp.project-db         :as pdb]
+   [sched-mcp.tool-system :as tool-system]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.system-db :as sdb]
    [sched-mcp.tools.orch.ds-util :as dsu]
-   [sched-mcp.util               :refer [log!]]
-   [datahike.api                 :as d]
-   [sched-mcp.sutil              :refer [connect-atm]])) ; <================================================= FIX THIS
+   [sched-mcp.util :refer [log!]]
+   [datahike.api :as d]
+   [sched-mcp.sutil :refer [connect-atm]])) ; <================================================= FIX THIS
 
 ;;; Tool configurations
 
@@ -41,7 +42,9 @@
 
 ;;; ToDo: This seems quite inadequate. Should talk about SCRs and ASCR.
 (defmethod tool-system/tool-description :get-next-ds [_]
-  "Analyzes conversation history and recommends the next Discovery Schema to pursue. Uses orchestration logic to determine the best progression path.")
+  (str "Get comprehensive Discovery Schema status and data for orchestration decisions. "
+       "Returns all available DS with their completion status, ASCRs, and interview objectives. "
+       "Use the MCP orchestrator guide to analyze this data and make recommendations."))
 
 ;;; ToDo: Verify that conversation ID is simply one of :process, :data :resource, or :optimality
 (defmethod tool-system/tool-schema :get-next-ds [_]
@@ -50,47 +53,67 @@
                 :conversation_id tool-system/conversation-id-schema}
    :required ["project_id" "conversation_id"]})
 
-;;; ToDo: Ugh! This is where I would expect an agent! This is far too rigid.
-;;; Note also that it isn't checking completeness. The whole idea that it is 'get-next-ds'
 (defmethod tool-system/execute-tool :get-next-ds
   [{:keys [_system-atom]} {:keys [project-id conversation-id]}]
-  (let [conn (connect-atm (keyword project-id))
-        ;; Get completed DS list
-        completed (d/q '[:find [?ds ...]
-                         :in $ ?cid
-                         :where
-                         [?c :conversation/id ?cid]
-                         [?c :conversation/completed-ds ?ds]] ; <====== I have :project/summary-dstructs :conversation/active-EADS-id, :message/pursuing-EADS, :project/active-EADS-id but not this.
-                       @conn (keyword conversation-id))] ; :project/summary-dstructs is not necessarily completed.
-    ;; Simple orchestration logic
-    (cond
-      ;; If nothing completed, start with warm-up
-      (empty? completed)
-      {:ds_id "process/warm-up-with-challenges"
-       :rationale "Starting with warm-up to understand scheduling challenges"
-       :interviewer_type "process"
-       :priority 1.0}
+  (try
+    (let [pid (keyword project-id)
+          cid (keyword conversation-id)
 
-      ;; If warm-up done, go to scheduling-problem-type
-      (contains? (set completed) :process/warm-up-with-challenges)
-      (if (contains? (set completed) :process/scheduling-problem-type)
-        ;; If problem type done, recommend flow-shop or job-shop based on type
-        {:ds_id "process/flow-shop"
-         :rationale "Based on problem type, exploring flow shop details"
-         :interviewer_type "process"
-         :priority 0.9}
-        ;; Otherwise do problem type
-        {:ds_id "process/scheduling-problem-type"
-         :rationale "Need to classify the scheduling problem type"
-         :interviewer_type "process"
-         :priority 1.0})
+          ;; Get all available DS from system DB
+          all-ds (sdb/system-DS?)
 
-      ;; Default
-      :else
-      {:ds_id "data/orm"
-       :rationale "Exploring data structures used in scheduling"
-       :interviewer_type "data"
-       :priority 0.8})))
+          ;; Get all ASCRs for this project
+          project-ascrs (pdb/list-ASCR pid)
+
+          ;; Get completed DS (those with completed ASCRs)
+          completed-ds (into #{}
+                             (filter #(let [ascr (pdb/get-ASCR pid %)]
+                                        (and ascr (:ascr/completed? ascr)))
+                                     project-ascrs))
+
+          ;; Get current active DS
+          current-ds (pdb/get-active-DS-id pid cid)
+
+          ;; Get DS in progress (has ASCR but not completed)
+          in-progress-ds (into #{}
+                               (filter #(let [ascr (pdb/get-ASCR pid %)]
+                                          (and ascr (not (:ascr/completed? ascr))))
+                                       project-ascrs))
+
+          ;; Build detailed info for each DS
+          ds-details (map (fn [ds-id]
+                            (let [ds-info (sdb/get-DS-instructions ds-id)
+                                  ascr (when (contains? (set project-ascrs) ds-id)
+                                         (pdb/get-ASCR pid ds-id))
+                                  status (cond
+                                           (contains? completed-ds ds-id) "completed"
+                                           (contains? in-progress-ds ds-id) "in-progress"
+                                           (= current-ds ds-id) "active"
+                                           :else "not-started")]
+                              {:ds_id (name ds-id)
+                               :status status
+                               :interview_objective (get-in ds-info [:DS :interview-objective])
+                               :budget_remaining (when ascr (:ascr/budget-left ascr))
+                               :ascr_summary (when ascr
+                                               (dissoc (:ascr/dstruct ascr) :comment))}))
+                          all-ds)]
+
+      ;; Return comprehensive data for orchestration decision
+      {:available_ds ds-details
+       :completed_count (count completed-ds)
+       :total_available (count all-ds)
+       :current_active_ds (when current-ds (name current-ds))
+       :current_conversation (name cid)
+       :project_ASCRs (into {}
+                            (map (fn [ds-id]
+                                   (let [ascr (pdb/get-ASCR pid ds-id)]
+                                     [(name ds-id) (:ascr/dstruct ascr)]))
+                                 project-ascrs))
+       :recommendation_needed true
+       :orchestrator_guide_available true})
+    (catch Exception e
+      (log! :error (str "Error in get-next-ds: " (.getMessage e)))
+      {:error (str "Failed to get next DS: " (.getMessage e))})))
 
 ;;; Start DS Pursuit Tool
 
@@ -111,33 +134,38 @@
 
 (defmethod tool-system/execute-tool :start-ds-pursuit
   [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id budget]}]
-  (let [conn (connect-atm (keyword project-id))
-        ds :not-yet-implemented ; (ds/get-cached-ds (keyword ds-id))
+  (let [pid (keyword project-id)
+        cid (keyword conversation-id)
+        ds-id-kw (keyword ds-id)
+        ds (sdb/get-DS-instructions ds-id-kw)
         budget (or budget 10)]
-    (if-not ds
+    (if (= ds "") ; get-DS-instructions returns empty string when not found
       {:error (str "Discovery Schema not found: " ds-id)}
-      (let [pursuit-id (keyword (str "pursuit-" (System/currentTimeMillis)))
-            conv-eid (d/q '[:find ?c .
-                            :in $ ?cid
-                            :where [?c :conversation/id ?cid]]
-                          @conn (keyword conversation-id))]
-        ;; Create pursuit
-        (d/transact conn [{:pursuit/id pursuit-id
-                           :pursuit/ds-id (keyword ds-id)
-                           :pursuit/conversation conv-eid
-                           :pursuit/started (java.util.Date.)
-                           :pursuit/status :active
-                           :pursuit/budget-allocated budget
-                           :pursuit/budget-used 0}])
-        ;; Set as active pursuit
-        (d/transact conn [{:db/id conv-eid
-                           :conversation/active-pursuit [:pursuit/id pursuit-id]}])
-        ;; Return info
-        {:pursuit_id (name pursuit-id)
-         :ds_instructions (:interview-objective ds)
-         :ds_template (:eads ds)
+      (try
+        ;; Set the DS as active for this conversation
+        (pdb/put-active-DS-id pid cid ds-id-kw)
+
+        ;; Initialize ASCR if it doesn't exist
+        (when-not (pdb/ASCR-exists? pid ds-id-kw)
+          (pdb/init-ASCR! pid ds-id-kw)
+          ;; Set initial budget
+          (let [conn (connect-atm pid)
+                ascr-eid (d/q '[:find ?e .
+                                :in $ ?ds-id
+                                :where [?e :ascr/id ?ds-id]]
+                              @conn ds-id-kw)]
+            (d/transact conn [{:db/id ascr-eid
+                               :ascr/budget-left (double budget)}])))
+
+        ;; Return info about the DS
+        {:ds_id (name ds-id-kw)
+         :interview_objective (get-in ds [:DS :interview-objective])
+         :ds_template (get-in ds [:DS :EADS])
          :budget budget
-         :current_state {}}))))
+         :status "Started DS pursuit"}
+        (catch Exception e
+          (log! :error (str "Error in start-ds-pursuit: " (.getMessage e)))
+          {:error (str "Failed to start DS pursuit: " (.getMessage e))})))))
 
 ;;; Complete DS Tool
 
@@ -157,34 +185,28 @@
 
 (defmethod tool-system/execute-tool :complete-ds
   [{:keys [_system-atom]} {:keys [project-id conversation-id final-notes]}]
-  (let [conn (connect-atm (keyword project-id))
-        ;; Find active pursuit - fixed query
-        pursuit-data (d/q '[:find [?pursuit ?ds-id]
-                            :in $ ?cid
-                            :where
-                            [?c :conversation/id ?cid]
-                            [?c :conversation/active-pursuit ?pursuit]
-                            [?pursuit :pursuit/ds-id ?ds-id]]
-                          @conn (keyword conversation-id))]
-    (if-not pursuit-data
-      {:error "No active pursuit to complete"}
-      (let [[pursuit-eid ds-id] pursuit-data
-            ;; Get final ASCR
-            ascr (dsu/combine-ds! ds-id (keyword project-id))]
-        ;; Mark pursuit complete
-        (d/transact conn [{:db/id pursuit-eid
-                           :pursuit/status :complete}])
-        ;; Add to completed list
-        (d/transact conn [{:db/id [:conversation/id (keyword conversation-id)]
-                           :conversation/completed-ds ds-id}])
-        ;; Clear active pursuit - use retraction instead of nil
-        (d/transact conn [[:db/retract [:conversation/id (keyword conversation-id)]
-                           :conversation/active-pursuit]])
+  (let [pid (keyword project-id)
+        cid (keyword conversation-id)
+        conn (connect-atm pid)
+        ;; Get the active DS from conversation
+        active-ds (pdb/get-active-DS-id pid cid)]
+    (if-not active-ds
+      {:error "No active DS to complete"}
+      (let [;; Get final ASCR
+            ascr (dsu/combine-ds! active-ds pid)]
+        ;; Mark ASCR as complete
+        (pdb/mark-ASCR-complete! pid active-ds)
+        ;; Add to completed DS list for the conversation
+        (d/transact conn [{:db/id [:conversation/id cid]
+                           :conversation/completed-ds active-ds}])
+        ;; Clear active DS
+        (d/transact conn [[:db/retract [:conversation/id cid]
+                           :conversation/active-DS-id]])
         ;; Log final notes if provided
         (when final-notes
           (log! :info (str "DS completed with notes: " final-notes)))
         {:success true
-         :ds_id (str (namespace ds-id) "/" (name ds-id))
+         :ds_id (str (namespace active-ds) "/" (name active-ds))
          :final_ascr ascr
          :validation_results {:valid true}}))))
 

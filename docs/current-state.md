@@ -4,30 +4,42 @@
 
 ## Overview
 
-schedMCP is in active development, implementing the schedulingTBD Discovery Schema system using Model Context Protocol (MCP). This document captures the current state of implementation and our new development direction.
+schedMCP implements the schedulingTBD Discovery Schema system using Model Context Protocol (MCP). The system uses an orchestrator-driven approach to dynamically conduct interviews based on current knowledge state.
 
-## New Direction: Core DS Flow First
+## Core Architecture
 
-**Important Update**: We are prioritizing getting the core Discovery Schema flow working before implementing table-based communication. This means:
+The system operates through three main components:
 
-1. **Phase 2.5 (NEW)**: Fix SCR storage and ASCR aggregation for basic text Q&A
-2. **Phase 3**: Add table-based communication (after 2.5 is complete)
-3. **Phase 4**: Advanced features (LangGraph, MCP-UI)
+### 1. Orchestrator
+- Analyzes current knowledge state (ASCRs)
+- Selects next Discovery Schema to pursue
+- Determines when sufficient information has been gathered
+- Manages interview flow dynamically
 
-The key insight is that tables are an optimization - we need the basic DS mechanism working first.
+### 2. Interviewer
+- Executes Discovery Schema pursuits
+- Generates contextual questions using LLMs
+- Interprets responses into structured data (SCRs)
+- Updates aggregated knowledge (ASCRs)
+
+### 3. Discovery Schema System
+- 8 DS templates loaded from JSON
+- Each DS defines what information to gather
+- SCRs (Schema-Conforming Responses) capture individual answers
+- ASCRs (Aggregated SCRs) represent cumulative knowledge
 
 ## What's Working ✅
 
-### Basic Interview Infrastructure
-- **Interview Start**: `start_interview` tool successfully creates projects and initializes conversations
-- **Question Retrieval**: `get_interview_context` returns current question and progress
-- **Answer Submission**: `submit_answer` properly progresses through questions
-- **Answer Retrieval**: `get_interview_answers` returns collected answers
+### Complete DS Flow Pipeline
+1. **SCR Storage**: Responses are extracted and stored with messages
+2. **ASCR Building**: SCRs are automatically aggregated after each response
+3. **DS Completion**: System detects when a DS has gathered sufficient information
+4. **Dynamic Progression**: Orchestrator selects next DS based on current knowledge
 
-### LLM-Based DS Tools
-- **`formulate_question`**: Uses LLM to generate contextual questions from DS + ASCR
-- **`interpret_response`**: Extracts structured data (SCR) from natural language answers
-- Both tools implemented and calling LLM successfully
+### LLM-Based Tools
+- **`iviewr_formulate_question`**: Generates natural questions from DS + ASCR context
+- **`iviewr_interpret_response`**: Extracts structured SCRs from conversational answers
+- Both tools use contextual prompting for domain-appropriate interactions
 
 ### Database Layer
 - Datahike integration for persistent storage
@@ -35,64 +47,46 @@ The key insight is that tables are an optimization - we need the basic DS mechan
 - Schema supports projects, conversations, messages, pursuits, and DS data
 - Clean project ID naming: `:craft-beer`, `:craft-beer-1`, `:sur-craft-beer`
 
-### Discovery Schema Infrastructure
-- 8 DS templates loaded from JSON:
-  - Process: warm-up-with-challenges, flow-shop, job-shop (3 variants), scheduling-problem-type, timetabling
-  - Data: ORM (Object-Role Modeling)
-- DS loader (`ds_loader.clj`) working
-- Basic combine logic (`ds_combine.clj`) implemented
+### Discovery Schema Templates
+Available DS templates (loaded from JSON):
+- **Process Types**:
+  - `process/warm-up-with-challenges` - Initial exploration and pain points
+  - `process/flow-shop` - Sequential production flow
+  - `process/job-shop` (3 variants) - Flexible routing workflows
+  - `process/scheduling-problem-type` - Problem classification
+  - `process/timetabling` - Time-based scheduling
+- **Data Modeling**:
+  - `data/ORM` - Object-Role Modeling for domain relationships
 
-### Orchestration Foundation
+### Orchestration System
 - Flow graph defining DS progression paths
-- Priority-based DS selection logic
-- DS pursuit tracking implemented
+- Priority-based DS selection considering:
+  - Current knowledge gaps
+  - DS dependencies
+  - Interview objectives
+- Automatic progression when DS completes
 
 ### Surrogate Expert System ✅
-- Domain-specific expertise (craft-beer, plate-glass, metal-fabrication, etc.)
-- Realistic interview behavior with consistent responses
-- State management with database persistence
-- Ready for testing DS flows
+- Simulates domain experts for testing
+- Supports multiple domains:
+  - craft-beer, plate-glass, metal-fabrication
+  - textiles, food-processing, automotive
+- Maintains consistent persona and knowledge
+- Generates realistic, contextual responses
 
-### MCP Integration
-- Tool definitions following clojure-mcp patterns
-- Registry system for all tools
-- Proper error handling and structured responses
+## Future Enhancements
 
-## What's Not Working Yet ❌
-
-### Critical Gap: SCR/ASCR Pipeline
-1. **SCR Storage**: `interpret_response` extracts SCRs but doesn't store them in messages
-2. **ASCR Updates**: `combine-ds!` exists but isn't triggered after Q&A
-3. **DS Completion**: No flow from completing one DS to starting the next
-
-### Missing Features (Lower Priority)
-- Table-based communication (postponed to Phase 3)
-- MiniZinc generation
-- Visualization of collected data
+### Near Term
+- Additional Discovery Schema templates
+- Table-based communication for complex data
+- MiniZinc model generation from ASCRs
 - Export/import of interview sessions
 
-## Current Focus: Phase 2.5 Implementation
-
-### What Needs to Be Fixed
-
-```clojure
-;; In interpret_response tool:
-(defmethod tool-system/execute-tool :interpret-response
-  [{:keys [_system-atom]} params]
-  (let [scr (extract-scr-from-answer ...)]  ;; ✅ This works
-    ;; ❌ MISSING: Store SCR with message
-    ;; ❌ MISSING: Trigger ASCR update
-    ;; ❌ MISSING: Check DS completion
-    {:scr scr}))  ;; Currently only returns SCR
-```
-
-### Success Criteria for Phase 2.5
-
-1. Complete warm-up DS through conversation
-2. See SCRs stored in database messages
-3. See ASCR properly aggregated
-4. Transition to scheduling-problem-type DS
-5. Complete second DS with proper data storage
+### Long Term
+- LangGraph integration for advanced orchestration
+- Multi-user collaborative interviews
+- Real-time visualization of gathered knowledge
+- Integration with external scheduling systems
 
 ## Current Architecture
 
@@ -100,96 +94,70 @@ The key insight is that tables are an optimization - we need the basic DS mechan
 src/
 ├── sched_mcp/
 │   ├── core.clj              # MCP server setup
-│   ├── interview.clj         # Interview management
-│   ├── warm_up.clj           # Warm-up phase (deprecated)
+│   ├── interview.clj         # Interview management (legacy)
 │   ├── surrogate.clj         # Surrogate expert implementation
 │   ├── llm.clj               # LLM integration
 │   ├── ds_loader.clj         # DS JSON loading ✅
 │   ├── ds_combine.clj        # SCR → ASCR aggregation ✅
+│   ├── ds_schema.clj         # Database schema ✅
 │   ├── orchestration.clj     # DS flow management ✅
 │   ├── tool_system.clj       # Multimethod tool framework
 │   └── tools/
 │       ├── registry.clj      # Central tool registry
-│       ├── interviewer/
+│       ├── iviewr/
 │       │   ├── core.clj      # formulate_question, interpret_response
 │       │   └── advanced.clj  # DS management tools
-│       ├── orchestrator/
-│       │   └── core.clj      # get_next_ds, start_ds_pursuit
-│       └── surrogate.clj     # Surrogate tools
+│       ├── orch/
+│       │   └── core.clj      # Orchestration tools
+│       └── surrogate.clj     # Surrogate expert tools
 ```
 
-## Testing the DS Flow (Phase 2.5)
+## Testing the System
 
-### Test Script for Core DS Flow
+### Complete Interview Flow Test
 ```clojure
-;; 1. Start interview
-(start-interview {:project_name "DS Test Brewery"})
-;; → project-id: :ds-test-brewery
+;; 1. Start surrogate expert
+(def project-id (:project_id (sur-start-expert {:domain "craft-beer"})))
 
-;; 2. Start warm-up DS
-(start-ds-pursuit {:project_id :ds-test-brewery
-                   :conversation_id "conv-xxx"
-                   :ds_id :process/warm-up-with-challenges})
+;; 2. Check available DS options
+(orch-get-next-ds {:project_id project-id :conversation_id "main"})
 
-;; 3. Get first question
-(formulate-question {:project_id :ds-test-brewery
-                     :conversation_id "conv-xxx"
-                     :ds_id :process/warm-up-with-challenges})
-;; → "What products do you make and what scheduling challenges?"
+;; 3. Start recommended DS
+(orch-start-ds-pursuit {:project_id project-id
+                        :conversation_id "main"
+                        :ds_id "process/warm-up-with-challenges"})
 
-;; 4. Submit answer
-(interpret-response {:project_id :ds-test-brewery
-                     :conversation_id "conv-xxx"
-                     :ds_id :process/warm-up-with-challenges
-                     :answer "We make craft beer..."
-                     :question_asked "What products..."})
+;; 4. Run Q&A cycles
+(let [q (iviewr-formulate-question {:project_id project-id
+                                    :conversation_id "main"
+                                    :ds_id "process/warm-up-with-challenges"})
+      a (sur-answer {:project_id project-id :question (:question q)})]
+  (iviewr-interpret-response {:project_id project-id
+                              :conversation_id "main"
+                              :ds_id "process/warm-up-with-challenges"
+                              :answer (:answer a)
+                              :question_asked (:question q)}))
 
-;; 5. Check if SCR was stored (THIS SHOULD WORK)
-(d/q '[:find ?scr
-       :where [?m :message/scr ?scr]]
-     @(connect-atm :ds-test-brewery))
-;; Should return SCR data, not empty
+;; 5. Check progress
+(orch-get-progress {:project_id project-id})
 
-;; 6. Check ASCR (THIS SHOULD WORK)
-(get-ascr :ds-test-brewery :process/warm-up-with-challenges)
-;; Should return aggregated data
+;; 6. When DS completes, get next recommendation
+(orch-get-next-ds {:project_id project-id :conversation_id "main"})
 ```
 
-## Development Timeline
-
-### Week 0.5 (Current): Core DS Flow
-- [ ] Fix SCR storage in interpret_response
-- [ ] Implement ASCR triggering after Q&A
-- [ ] Test warm-up → scheduling-problem-type flow
-- [ ] Verify database storage
-- [ ] Debug DS completion
-
-### Week 1: Basic DS System
-- [ ] Test all DS templates with text Q&A
-- [ ] Implement DS completion detection
-- [ ] Add transition logic between DSs
-- [ ] Test with surrogate experts
-
-### Week 2+: Table Communication
-- [ ] Only after DS flow works perfectly
-- [ ] Start with simple copy-paste tables
-- [ ] Progress to more sophisticated UI
-
-## Debugging Tips
-
-### Check DS State
+### Debugging Commands
 ```clojure
-;; List all DS pursuits
+;; Check current ASCR
+(get-ascr project-id :process/warm-up-with-challenges)
+
+;; View all pursuits
 (d/q '[:find ?ds-id ?state
        :where
        [?p :pursuit/ds-id ?ds-id]
        [?p :pursuit/state ?state]]
      @(connect-atm project-id))
 
-;; Check current ASCR
-(get-ascr project-id :process/warm-up-with-challenges)
-
-;; Check if SCRs are being stored
+;; Check stored SCRs
 (d/q '[:find ?scr ?time
        :where
        [?m :message/scr ?scr]
@@ -197,13 +165,8 @@ src/
      @(connect-atm project-id))
 ```
 
-### Common Issues
-- "No SCRs found" - interpret_response not storing SCRs
-- "ASCR empty" - combine-ds! not being triggered
-- "DS won't complete" - completion logic not checking ASCR
-
 ## Summary
 
-The project has a solid foundation with working LLM tools, DS infrastructure, and surrogate experts. The critical gap is the SCR/ASCR pipeline - we extract structured data but don't properly store or aggregate it.
+The schedMCP system successfully implements an orchestrator-driven interview system using Discovery Schemas. The orchestrator dynamically selects appropriate schemas based on current knowledge, while the interviewer uses LLMs to conduct natural conversations that build structured understanding of manufacturing scheduling domains.
 
-**Our new pragmatic approach**: Fix the core DS flow first (Phase 2.5), verify it works with text Q&A, then add tables as an enhancement. This ensures we build on a working foundation rather than adding complexity to a broken system.
+The system is ready for comprehensive testing across different manufacturing domains using the surrogate expert system.

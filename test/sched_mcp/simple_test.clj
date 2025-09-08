@@ -30,7 +30,7 @@
           formulate-tool (interviewer/create-formulate-question-tool system-atom)]
 
       ;; Test tool metadata
-      (is (= "formulate_question" (tool-system/tool-name formulate-tool)))
+      (is (= "iviewr_formulate_question" (tool-system/tool-name formulate-tool)))
       (is (string? (tool-system/tool-description formulate-tool)))
       (is (map? (tool-system/tool-schema formulate-tool)))
 

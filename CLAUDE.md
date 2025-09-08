@@ -35,6 +35,10 @@ As much as possible, it uses code from schedulingTBD, particularly its database 
   ;;; Avoid
   (def ^:dynamic *mock-enabled* false)
   ```
+- **Isolate use of Datahike to a few files** There is pretty much nothing persistent that doesn't belong in code, the system DB, or a project DB.
+  Therefore, avoid writing Datahike queries and pulls in all files except `src/sched-mcp/system_db.clj`, `src/sched-mcp/project_db.clj`, and `src/sched-mcp/sutil.clj`.
+- Whenever you need state, look into those files and see if something there is appropriate, if not, add a function to whichever of the three above is appropriate.
+
 ### Data Structures
 - Use maps, vectors, sets, and primitive data types to store data.
 - **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.

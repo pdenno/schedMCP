@@ -129,23 +129,21 @@
       (loop []
         (when @stay-alive?
           (if-let [request (read-json-rpc)]
-            (do
-              (try
-                (let [response (handle-request request config)]
-                  ;; Only write response if it's not nil (notifications return nil)
-                  (when response
-                    (write-json-rpc response)))
-                (catch Exception e
-                  (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
-                  (when-let [id (:id request)]
-                    (write-json-rpc (error-response id -32603 "Internal error")))))
-              (recur))
+            (try
+              (let [response (handle-request request config)]
+                ;; Only write response if it's not nil (notifications return nil)
+                (when response
+                  (write-json-rpc response)))
+              (catch Exception e
+                (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
+                (when-let [id (:id request)]
+                  (write-json-rpc (error-response id -32603 "Internal error")))))
             ;; If read-json-rpc returns nil, the connection is closed
-            (log! :info "Connection closed by client"))))
+            (log! :info "Connection closed by client"))
+          (recur)))
       (catch Exception e
         (log! :error (str "Server error: " (.getMessage e))))
-      (finally
-        (log! :info "Server shutting down")))))
+      (finally (log! :info "Server shutting down")))))
 
 (def server-info
   {:name "schedMCP"
