@@ -54,8 +54,8 @@
     (let [pid (keyword project-id)
           cid (keyword conversation-id)
           ds-id (pdb/get-active-DS-id pid cid)
-          mid (pdb/add-msg {:pid pid :cid cid :content response :from :surrogate :pursuing-DS ds-id})
-          _ (pdb/update-msg pid cid mid {:message/answers-question question-id})
+          mid (pdb/add-msg! {:pid pid :cid cid :content response :from :surrogate :pursuing-DS ds-id})
+          _ (pdb/update-msg! pid cid mid {:message/answers-question question-id})
           ;; Process the answer
           result {:not-yet-implemented :not-yet-implemented}
           ;; (warm-up/process-answer project-id conversation-id answer question-id)

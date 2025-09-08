@@ -3,10 +3,8 @@
    These tools use LLMs to formulate questions and interpret responses"
   (:require
    [clojure.edn                   :as edn]
-   [datahike.api                  :as d]
    [sched-mcp.llm                 :as llm]
    [sched-mcp.project-db          :as pdb]
-   [sched-mcp.sutil               :refer [connect-atm]]
    [sched-mcp.system-db           :as sdb]
    [sched-mcp.tools.orch.ds-util  :as dsu]
    [sched-mcp.tool-system         :as tool-system]
@@ -142,65 +140,70 @@
           (llm/init-llm!))
 
         ;; Use LLM to interpret the answer
-        (let [prompt (llm/ds-interpret-prompt
-                      {:ds ds
-                       :question question-asked
-                       :answer answer})
+        (let [prompt (llm/ds-interpret-prompt {:ds ds :question question-asked :answer answer})
               result (llm/complete-json prompt :model-class :extract)
               SCR (:scr result)
-              mid (pdb/add-msg {:pid pid :cid cid :from :user :content answer :pursuing-DS ds-id})]
-          ;(pdb/update-msg pid cid mid {:message/answers-question :not-yet-implemented})
-
-          ;; Trigger ASCR update
-          (let [updated-ascr (dsu/combine-ds! ds-id pid)
-                complete? (dsu/ds-complete? ds-id pid)]
-
-            ;; Update pursuit status if complete
-            (when (and pursuit-eid complete?) ; <=================================
-              (d/transact conn [{:db/id pursuit-eid
-                                 :pursuit/status :complete
-                                 :pursuit/completed-at (java.util.Date.)}])
-              (log! :info (str "DS " ds-id " marked complete")))
-
-            ;; Return comprehensive result ; <================================= Whole completeness thing!
-            {:scr (merge {:answered-at (java.util.Date.)
-                          :question question-asked
-                          :raw-answer answer}
-                         SCR)
-             :confidence (or (:confidence result) 0.8)
-             :ambiguities (or (:ambiguities result) [])
-             :follow_up (:follow_up result)
-             :commit-notes (str "Extracted: " (keys SCR))
-             :updated_ascr updated-ascr
-             :ds_complete complete?
-             :completeness (if complete?
-                             1.0
-                             (/ (count (keys updated-ascr))
-                                (count (keys (:eads ds)))))}))
+              _mid (pdb/add-msg! {:pid pid :cid cid :from :user :content answer :pursuing-DS ds-id})
+              ;;_ignore  (pdb/update-msg! pid cid mid {:message/answers-question :not-yet-implemented}) ; ToDo.
+              updated-ASCR (dsu/combine-ds! ds-id pid)
+              _ (pdb/put-ASCR! pid ds-id updated-ASCR)
+              _complete? (dsu/ds-complete? ds-id pid)]
+          (pdb/mark-ASCR-complete! pid ds-id)
+          {:scr (merge {:answered-at (java.util.Date.)
+                        :question question-asked
+                        :raw-answer answer}
+                       SCR)})
         (catch Exception e
-          (log! :error (str "Error in interpret-response: " (.getMessage e)))
-          ;; Still try to store raw answer
-          (try
-            (let [conn (connect-atm pid)
-                  message-id (keyword (str "msg-" (System/currentTimeMillis)))
-                  message-data {:message/id message-id
-                                :message/conversation cid
-                                :message/type :answer
-                                :message/from :user
+          (log! :error (str "Error in interpret-response: " (.getMessage e))))))))
+            
 
-                                :message/content answer
-                                :message/timestamp (java.util.Date.)}]
-              (d/transact conn [message-data]))
-            (catch Exception e2
-              (log! :error (str "Failed to store fallback message: " (.getMessage e2)))))
-          ;; Return error response
-          {:scr {:answered-at (java.util.Date.)
-                 :question question-asked
-                 :raw-answer answer
-                 :extraction-failed true}
-           :confidence 0.0
-           :ambiguities ["Could not extract structured data"]
-           :commit-notes "LLM extraction failed - storing raw answer only"})))))
+ #_(try
+     ;; Update pursuit status if complete
+     (when complete? ; <=================================
+       (d/transact conn [{:db/id pursuit-eid
+                          :pursuit/status :complete
+                          :pursuit/completed-at (java.util.Date.)}])
+       (log! :info (str "DS " ds-id " marked complete")))
+     
+     ;; Return comprehensive result ; <================================= Whole completeness thing!
+     {:scr (merge {:answered-at (java.util.Date.)
+                   :question question-asked
+                   :raw-answer answer}
+                  SCR)
+      :confidence (or (:confidence result) 0.8)
+      :ambiguities (or (:ambiguities result) [])
+      :follow_up (:follow_up result)
+      :commit-notes (str "Extracted: " (keys SCR))
+      :updated_ascr updated-ascr
+      :ds_complete complete?
+      :completeness (if complete?
+                      1.0
+                      (/ (count (keys updated-ascr))
+                         (count (keys (:eads ds)))))}
+     (catch Exception e
+       (log! :error (str "Error in interpret-response: " (.getMessage e)))
+       ;; Still try to store raw answer
+       (try
+         (let [conn (connect-atm pid)
+               message-id (keyword (str "msg-" (System/currentTimeMillis)))
+               message-data {:message/id message-id
+                             :message/conversation cid
+                             :message/type :answer
+                             :message/from :user
+                             
+                             :message/content answer
+                             :message/timestamp (java.util.Date.)}]
+           (d/transact conn [message-data]))
+         (catch Exception e2
+           (log! :error (str "Failed to store fallback message: " (.getMessage e2)))))
+       ;; Return error response
+       {:scr {:answered-at (java.util.Date.)
+              :question question-asked
+              :raw-answer answer
+              :extraction-failed true}
+        :confidence 0.0
+        :ambiguities ["Could not extract structured data"]
+        :commit-notes "LLM extraction failed - storing raw answer only"}))
 
 ;;; Get Current DS Tool
 
@@ -221,28 +224,17 @@
 
 (defmethod tool-system/execute-tool :get-current-ds
   [{:keys [_system-atom]} {:keys [project-id conversation-id]}]
-  (let [conn (connect-atm (keyword project-id))
-        ;; Find active pursuit
-        pursuit (d/q '[:find ?pursuit ?ds-id
-                       :in $ ?cid
-                       :where
-                       [?c :conversation/id ?cid]
-                       [?c :conversation/active-pursuit ?pursuit]
-                       [?pursuit :pursuit/ds-id ?ds-id]]
-                     @conn (keyword conversation-id))]
-    (if-not pursuit
+  (let [pid (keyword project-id)
+        cid (keyword conversation-id)
+        ds-id (pdb/get-current-DS pid cid)
+        {:ascr/keys [completed? dstruct] :as ascr} (pdb/get-ASCR pid ds-id)]
+    (if-not ds-id
       {:error "No active DS pursuit found"}
-      (let [[pursuit-eid ds-id] (first pursuit)
-            ds (ds/get-cached-ds ds-id)
-            ascr (pdb/get-ASCR (keyword project-id) ds-id)]
-        {:ds_id (str (namespace ds-id) "/" (name ds-id))
-         :ds_template (:eads ds)
-         :interview_objective (:interview-objective ds)
-         :current_ascr ascr
-         :pursuit_status (d/q '[:find ?status .
-                                :in $ ?p
-                                :where [?p :pursuit/status ?status]]
-                              @conn pursuit-eid)}))))
+      {:ds_id (name ds-id)
+       :ds_template (:ds dstruct)
+       :interview_objective (:interview-objective dstruct)
+       :current_ascr ascr
+       :pursuit_status (if completed? :completed :incomplete)})))
 
 ;;; Get Interview Progress Tool
 
@@ -263,11 +255,10 @@
 (defmethod tool-system/execute-tool :get-interview-progress
   [{:keys [_system-atom]} {:keys [project-id]}]
   (try
-    (let [progress (orch/get-interview-progress (keyword project-id))]
+    (let [progress {:status :not-yet-implemented}] ; (orch/get-interview-progress (keyword project-id))]
       progress)
     (catch Exception e
-      (log! :info (str "Error in get-interview-progress: " (.getMessage e))
-            {:level :error})
+      (log! :info (str "Error in get-interview-progress: " (.getMessage e)))
       {:error (.getMessage e)})))
 
 ;;; Helper to create all interviewer tools

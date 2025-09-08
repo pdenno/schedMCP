@@ -4,8 +4,8 @@
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.project-db] ; For mount
-   [sched-mcp.system-db] ; For mount
+   [sched-mcp.project-db]                    ; For mount
+   [sched-mcp.system-db]                     ; For mount
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
    [sched-mcp.tools.iviewr-tools]            ; For mount
    [sched-mcp.llm]                           ; For mount

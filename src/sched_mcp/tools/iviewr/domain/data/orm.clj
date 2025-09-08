@@ -356,6 +356,8 @@
           best
           (dsu/collect-keys-vals more :inquiry-area-id)))
 
+;;; ToDo: This method is poorly conceived; it does too many things it should not touch the DB, yet it does in two ways!
+;;;       Hard to test as it stands!
 (defmethod combine-ds! :data/orm
   [tag pid]
   (let [msg-scr (->> (pdb/get-msg-SCR pid tag)

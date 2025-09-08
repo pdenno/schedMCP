@@ -220,7 +220,7 @@
 ;;; Interviewer has been instructed that it is okay to do :event-types separate from :timeslots, and in fact, it
 ;;; is currently giving things *very piecemeal*, suggesting that I use :ts-type-id and :event-type-id to stitch together the result.
 
-;;; We don't offer accumulation in the :process/flow-shop DS.
+;;; We don't accumulate in the :process/flow-shop DS.
 (defmethod combine-ds! :process/flow-shop
   [tag pid]
   (when-let [msg-scr (pdb/get-msg-SCR pid tag)]

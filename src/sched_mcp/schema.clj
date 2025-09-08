@@ -62,15 +62,18 @@
    To eliminate confusion and need for back pointers, each project has its own db.
    See also db-schema-agent+ which gets merged into this."
   {;; ---------------------- Aggregate Schema-Conforming Response (ASCR)
+   :ascr/budget-left
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/double
+        :doc "the amount of budget left for questioning."}
+   :ascr/completed?
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean
+        :doc "true if no more interviewing required on this ASCR."}
    :ascr/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
         :doc "the DS-id uniquely identifying the summary data structure."}
    :ascr/str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "a string that can be edn/read-string to the data structure."}
-   :ascr/budget-left
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/double
-        :doc "the amount of budget left for questioning."}
 
    ;; ---------------------- box
    :box/string-val
@@ -205,7 +208,7 @@
                   "the agent needs a more expansive CONVERSATION-HISTORY message for the conversation.")}
    :project/ASCRs
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref
-        :doc "Aggregated Schema-Conforming Responses indexed by their DS-id, :dstruct/id."}
+        :doc "Aggregated Schema-Conforming Responses indexed by their DS-id, :ascr/id."}
    :project/surrogate
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref
         :doc "the project's surrogate object, if any."}

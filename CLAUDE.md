@@ -23,7 +23,7 @@ As much as possible, it uses code from schedulingTBD, particularly its database 
 
 ### When demonstrating code to the user:
 - **Avoid writing files of 'hacks' for demonstration** - If, for example, a function is needed that is not intended to become part of the system, enter it directly into the environment using clojure_eval, or,
-   if you must, write it in a file in the `src/scratch` directory.
+   if you must, write it in a file in the `src/tmp_scratch` directory.
 - Whenever you do create such functions or data that is not intended to be part of the system but is used soley for demo, tell the user you are doing that.
 
 ### Data Management

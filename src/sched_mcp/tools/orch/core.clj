@@ -1,12 +1,12 @@
 (ns sched-mcp.tools.orch.core
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
-   [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.system-db :as sdb]
-   [sched-mcp.ds-util :as dsu]
-   [sched-mcp.util :refer [log!]]
-   [datahike.api :as d]
-   [sched-mcp.sutil :refer [connect-atm]]))
+   [sched-mcp.tool-system        :as tool-system]
+   [sched-mcp.project-db         :as pdb]
+   [sched-mcp.tools.orch.ds-util :as dsu]
+   [sched-mcp.util               :refer [log!]]
+   [datahike.api                 :as d]
+   [sched-mcp.sutil              :refer [connect-atm]])) ; <================================================= FIX THIS
 
 ;;; Tool configurations
 
@@ -112,7 +112,7 @@
 (defmethod tool-system/execute-tool :start-ds-pursuit
   [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id budget]}]
   (let [conn (connect-atm (keyword project-id))
-        ds (ds/get-cached-ds (keyword ds-id))
+        ds :not-yet-implemented ; (ds/get-cached-ds (keyword ds-id))
         budget (or budget 10)]
     (if-not ds
       {:error (str "Discovery Schema not found: " ds-id)}

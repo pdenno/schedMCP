@@ -1,16 +1,11 @@
 (ns sched-mcp.tools.registry
   "Central registry for all schedMCP tools"
   (:require
-   ;; Existing tools
-   [sched-mcp.tools.iviewr-tools :as itools]
-   ;; New tools
-   [sched-mcp.sutil :as sutil :refer [connect-atm]]
-   [sched-mcp.tools.iviewr.core :as interviewer]
-   [sched-mcp.tools.orchestrator.core :as orchestrator]
-   [sched-mcp.tools.surrogate :as surrogate]
-   [sched-mcp.tool-system :as toolsys]
-   [sched-mcp.util :refer [log!]]
-   [datahike.api :as d]))
+   ;;[sched-mcp.tools.iviewr-tools :as itools]
+   [sched-mcp.tools.iviewr.core  :as iviewr]
+   [sched-mcp.tools.orch.core    :as orch]
+   [sched-mcp.tools.surrogate    :as surrogate]
+   [sched-mcp.tool-system        :as toolsys]))
 
 ;;; System atom for sharing state between tools
 (def system-atom (atom {}))
@@ -39,8 +34,8 @@
   "Build the complete set of tools for schedMCP"
   []
   (let [;; Create new tools
-        interviewer-tools (interviewer/create-interviewer-tools system-atom)
-        orchestrator-tools (orchestrator/create-orchestrator-tools system-atom)
+        interviewer-tools (iviewr/create-interviewer-tools system-atom)
+        orchestrator-tools (orch/create-orchestrator-tools system-atom)
 
         ;; Convert to specs
         new-tool-specs (mapv tool-config->spec
