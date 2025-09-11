@@ -78,21 +78,19 @@
   "Create a message object and add it to current conversation of the database with :project/id = id.
    Return the :message/id.
    Note that this doesn't handle :message/answers-question. That is typically done with update-msg."
-  [{:keys [pid cid from content table code tags question-type pursuing-DS]}]
+  [{:keys [pid cid from content table code tags pursuing-DS]}]
   (assert (keyword? cid))
   (assert (#{:system :human :surrogate :developer-injected} from))
   (assert (string? content))
   (assert (not= content "null"))
   (if-let [conn (connect-atm pid)]
-    (let [msg-id (inc (max-msg-id pid))
-          pursuing-DS (or pursuing-DS (get-active-DS-id pid cid))]
+    (let [msg-id (inc (max-msg-id pid))]
       (d/transact conn {:tx-data [{:db/id (conversation-exists? pid cid)
                                    :conversation/messages (cond-> #:message{:id msg-id :from from :time (now) :content content}
                                                             table (assoc :message/table (str table))
                                                             (not-empty tags) (assoc :message/tags tags)
-                                                            question-type (assoc :message/question-type question-type)
-                                                            code (assoc :message/code code)
-                                                            pursuing-DS (assoc :message/pursuing-DS pursuing-DS))}]})
+                                                            pursuing-DS (assoc :message/pursuing-DS pursuing-DS)
+                                                            code (assoc :message/code code))}]})
       msg-id)
     (throw (ex-info "Could not connect to DB." {:pid pid}))))
 
@@ -119,7 +117,6 @@
                               :where
                               [?m :message/id ?mid]
                               [?m :message/from :system]
-                              [?m :message/question-type _]
                               [?m :message/time ?time]
                               [?c :conversation/id ?cid]
                               [?c :conversation/messages ?m]
@@ -137,44 +134,17 @@
   "Update the message with given info (a merge)."
   [pid cid mid {:message/keys [answers-question graph--orm] :as info}]
   (if-let [eid (message-exists? pid cid mid)]
-    (do (when answers-question
-          (if (= mid answers-question)
-            (throw (ex-info "Attempting to mark a message as answer the question it raises." {:pid pid :cid cid :mid mid}))
-            (d/transact (connect-atm pid) {:tx-data [(merge {:db/id eid} info)]})))
-        (when graph--orm
-          (d/transact (connect-atm pid) {:tx-data [(merge {:db/id eid} info)]})))
+    (do
+      ;; Special validation for answers-question
+      (when answers-question
+        (if (= mid answers-question)
+          (throw (ex-info "Attempting to mark a message as answer the question it raises."
+                          {:pid pid :cid cid :mid mid}))))
+      ;; Transact all the info attributes
+      (d/transact (connect-atm pid) {:tx-data [(merge {:db/id eid} info)]}))
     (log! :warn (str "Could not find msg for update-msg: pid = " pid " cid = " cid " mid = " mid))))
 
 ;;; --------------------------------------- Conversations ---------------------------------------------------------------------
-(def conversation-intros
-  {:process
-   (str "This is where we discuss how product gets made, or in the cases of services, how the service gets delivered. "
-        "It is also where we introduce MiniZinc, the <a href=\"terms/dsl\">domain specific language</a> (DSL) "
-        "through which together we design a solution to your scheduling problem. "
-        "You can read more about <a href=\"about/process-conversation\">how this works</a>.")
-   :data
-   (str "This is where we ask you to talk about the data that drives your decisions (customer orders, due dates, worker schedules,... whatever). "
-        "Here you can either upload actual data as spreadsheets, or we can talk about the kinds of information you use in general terms and "
-        "we can invent some similar data to run demonstrations. "
-        "Whenever someone suggests that you upload information to them, you should be cautious. "
-        "Read more about the intent of this conversation and the risks of uploading data <a href=\"about/uploading-data\">here</a>.")
-   :resources
-   (str "This is typically the third conversation we'll have, after discussing process and data. "
-        "(By the way, you can always go back to a conversation and add to it.) "
-        "You might have already mentioned the resources (people, machines) by which you make product or deliver services. "
-        "Here we try to integrate this into the MiniZinc solution. Until we do that, we won't be able to generate realistic schedules.")
-   :optimality
-   (str "This is where we discuss what you intend by 'good' and 'ideal' schedules. "
-        "With these we formulate an objective and model it in MiniZinc. "
-        "The MiniZinc solution can change substantially owing to this discussion, but owing to all the work we did "
-        "to define requirements, we think it will be successful.")})
-
-(defn add-conversation-intros
-  "Add an intro describing the topic and rationale of the conversation."
-  [pid]
-  (doseq [cid [:process :data :resources :optimality]]
-    (add-msg! {:pid pid :cid cid :from :system :content (get conversation-intros cid) :tags [:conversation-intro]})))
-
 (defn conversation-exists?
   "Return the eid of the conversation if it exists."
   [pid cid]
@@ -282,12 +252,12 @@
     (d/transact (connect-atm pid) schema/db-schema-proj)
     (d/transact (connect-atm pid) {:tx-data [{:project/id pid
                                               :project/name project-name
+                                              ;; REMOVED :project/status - it belongs in system DB
                                               :project/execution-status :running
                                               :project/active-conversation :process
                                               :project/claims [{:claim/string (str `(~'project-id ~pid))}
                                                                {:claim/string (str `(~'project-name ~pid ~project-name))}]
                                               :project/conversations conversation-defaults}]})
-    (add-conversation-intros pid)
     (when (not-empty additional-info)
       (d/transact (connect-atm pid) additional-info))
      ;; Add knowledge of this project to the system db.
@@ -326,7 +296,7 @@
                       [?e :message/id ?msg-id]]
                     @(connect-atm pid) ds-id)
         dstructs (reduce (fn [r {:keys [s msg-id]}]
-                           (let [{:keys [data-structure]} (edn/read-string s)]
+                           (let [data-structure (edn/read-string s)]
                              (conj r (-> data-structure
                                          (assoc :msg-id msg-id)
                                          (assoc :DS-ref ds-id)))))
@@ -429,12 +399,12 @@
 (defn get-questioning-budget-left!
   "The project contains dstruct objects for everything that has been started.
    If one can't be found (it hasn't started) this returns 1.0, otherwise it
-   returns the value of :dstruct/budget-left for the given ds-id.
+   returns the value of :ascr/budget-left for the given ds-id.
    This will create the summary data structure if it doesn't exist."
   [pid ds-id]
   (assert (or (nil? ds-id) ((sdb/system-DS?) ds-id)))
   (if-let [eid (ASCR-exists? pid ds-id)]
-    (d/q '[:find ?left . :in $ ?eid :where [?eid :dstruct/budget-left ?left]] @(connect-atm pid) eid)
+    (d/q '[:find ?left . :in $ ?eid :where [?eid :ascr/budget-left ?left]] @(connect-atm pid) eid)
     (do (when ds-id (init-ASCR! pid ds-id))
         1.0)))
 
@@ -457,10 +427,10 @@
         eid (d/q '[:find ?eid .
                    :in $ ?ds-id
                    :where
-                   [?eid :dstruct/id ?ds-id]]
+                   [?eid :ascr/id ?ds-id]]
                  @(connect-atm pid) ds-id)]
     (if eid
-      (d/transact (connect-atm pid) {:tx-data [{:db/id eid :dstruct/budget-left (- val dec-val)}]})
+      (d/transact (connect-atm pid) {:tx-data [{:db/id eid :ascr/budget-left (- val dec-val)}]})
       (log! :error (str "No summary structure for DS id " ds-id)))))
 
 (defn get-ASCR

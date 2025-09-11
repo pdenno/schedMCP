@@ -1,55 +1,34 @@
 # Database Inspection Cheat Sheet
 
-Quick reference for database exploration after restart.
+Quick reference for database exploration after restart. There are two DBs. Namespace alias `sdb` refers to the system DB functions; `pdb` refers to project DB functions.
 
 ## Load the utilities
 ```clojure
-(require '[sched-mcp.db :as db] :reload)
+(require '[sched-mcp.system-db :as sdb] :reload)
+(require '[sched-mcp.projectdb :as pdb] :reload)
 ```
-
 ## Common inspection tasks
 
-### See what databases exist
+
+### See what databases exist; provides a vector of keywords naming projects
 ```clojure
-(db/list-all-dbs)
+(sdb/list-projects)
 ```
 
-### Check a specific database
+### Get Project content
 ```clojure
-(db/db-info :post-restart-brewery)
-(db/db-info :system)
+(pdb/get-project :sur-craft-beer) ; Get the :sur-craft-beer project.
 ```
 
-### List all projects
+### Get conversation (a projection of what you get from `pdb/get-project`).
 ```clojure
-(db/list-projects)
+(pdb/get-conversation :sur-craft-beer :process) ; The process conversation
 ```
 
-### Find conversations in a project
-```clojure
-(db/find-conversations :post-restart-brewery)
-```
-
-### Inspect an entity
-```clojure
-;; First find entity IDs
-(db/list-entities :post-restart-brewery)
-
-;; Then inspect specific entity
-(db/inspect-entity :post-restart-brewery entity-id)
-```
-
-### Recent activity
-```clojure
-(db/recent-transactions :post-restart-brewery 10)
-```
-
-### Quick stats
-```clojure
-(db/db-stats)
-```
 
 ## Direct Datahike queries
+
+You can use the `clojure_eval` tool anywhere to inspect DBs as you like, however, persistent source code for managing DBs should be restricted to `project_db.clj`, `system_db.clj` and `sutil.clj`.
 
 ```clojure
 (require '[datahike.api :as d])
@@ -68,15 +47,6 @@ Quick reference for database exploration after restart.
 ;; Pull example - get full conversation
 (d/pull @conn '[*] [:conversation/id :conv-1756144856221])
 ```
-
-## Check interview answers
-
-```clojure
-;; Get EADS data (interview warm-up data)
-(require '[sched-mcp.warm-up :as warm-up])
-(warm-up/get-eads-data :post-restart-brewery :conv-1756144856221)
-```
-
 ## Architecture Notes
 
 ### Current Setup

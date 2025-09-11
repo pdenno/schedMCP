@@ -20,18 +20,19 @@ $SCHEDULING_TBD_DB/
 
 ### Key Components
 
-1. **System Database** (`system-db.clj`)
+1. **System Database** (`system_db.clj`)
    - Central registry of all projects
    - Manages project lifecycle (create, archive, delete)
    - Automatically initialized on system startup
 
-2. **Database Management** (`db.clj`)
+2. **Project Database Management** (`project_db.clj`)
    - Mount defstate for automatic initialization
    - Database inspection and debugging tools
    - Testing helper functions
 
 3. **Mount Integration**
-   - `system-and-project-dbs` defstate automatically:
+   - Mount documentation: [Managing Clojure and ClojureScript app state with Mount](https://github.com/tolitius/mount).
+   - `system-and-project-dbs` defstate (found in `src/project_db.clj`) automatically:
      - Initializes system database if needed
      - Registers all existing project databases
      - Handles proper startup/shutdown
@@ -94,17 +95,17 @@ On `mount/start`:
 
 ```clojure
 ;; Project lifecycle
-(sys-db/create-project! {:project-id "id"
+(sdb/create-project! {:project-id "id"
                          :project-name "Name"
                          :domain "domain"})
-(sys-db/list-projects)
-(sys-db/get-project "project-id")
-(sys-db/archive-project! "project-id")
-(sys-db/delete-project! "project-id")
+(sdb/list-projects)
+(sdb/get-project "project-id")
+(sdb/archive-project! "project-id")
+(sdb/delete-project! "project-id")
 
 ;; System management
-(sys-db/ensure-system-db!)
-(sys-db/init-system-db!)
+(sdb/ensure-system-db!)
+(sdb/init-system-db!)
 ```
 
 ### Database Management Functions
@@ -245,11 +246,11 @@ Previous approach required manual database creation and registration. New approa
 ### "Database not found"
 - Check `SCHEDULING_TBD_DB` environment variable
 - Verify directory permissions
-- Run `(sys-db/ensure-system-db!)`
+- Run `(sdb/ensure-system-db!)`
 
 ### "Project not loading"
 - Check `(db/list-all-dbs)`
-- Verify project in system DB: `(db/list-projects)`
+- Verify project in system DB: `(sdb/list-projects)`
 - Manual registration: `(db/register-project-dbs!)`
 
 ### "Connection errors"

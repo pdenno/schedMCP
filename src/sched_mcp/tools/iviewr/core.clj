@@ -3,12 +3,13 @@
    These tools use LLMs to formulate questions and interpret responses"
   (:require
    [clojure.edn :as edn]
+   [clojure.data.json :as json]
    [sched-mcp.llm :as llm]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tool-system :as tool-system]
-   [sched-mcp.util :refer [log!]]))
+   [sched-mcp.util :refer [alog! log!]]))
 
 ;;; Tool configurations
 (defn create-formulate-question-tool
@@ -58,21 +59,23 @@
   (let [pid (keyword project-id)
         cid (keyword conversation-id)
         ds-id (keyword ds-id)
-        ds (sdb/get-discovery-schema-JSON ds-id)
+        ds-json (sdb/get-discovery-schema-JSON ds-id)
+        ds-full (sdb/get-DS-instructions ds-id)
         ;; Get current ASCR
-        {:ascr/keys [dstruct budget-left] ascr-str :ascr/str} (pdb/get-ASCR pid ds-id)
-        ascr (when (or ascr-str dstruct) (edn/read-string (or ascr-str dstruct)))]
+        {:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
+        ascr (or dstruct {})] ; dstruct is already a map, not a string
+    (alog! (str "iviewr_formulate_question " pid " " cid " " ds-id))
 
-    (if-not ds
+    (if (= ds-full "") ; get-DS-instructions returns empty string when not found
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
         ;; Initialize LLM if needed
         (when-not (seq @llm/agent-prompts)
           (llm/init-llm!))
 
-        ;; Generate question using LLM
+        ;; Generate question using LLM with JSON string
         (let [prompt (llm/ds-question-prompt
-                      {:ds ds
+                      {:ds ds-json ; LLM expects JSON string
                        :ascr ascr
                        :budget-remaining budget-left})
               result (llm/complete-json prompt :model-class :chat)
@@ -82,19 +85,20 @@
                                           :cid cid
                                           :from :system
                                           :content question-text
-                                          :pursuing-DS ds-id
-                                          :question-type :generated-question})]
+                                          :pursuing-DS ds-id})]
           (log! :info (str "Generated question for " ds-id " in " conversation-id " with mid " question-mid))
           {:question {:id question-mid ; Use the actual message ID
                       :text question-text
                       :ds_id (name ds-id)
                       :help (or (:help result)
                                 "Provide detailed information to help complete the schema")}
-           :context {:ds_objective (get-in ds [:DS :interview-objective])
+           :context {:ds_objective (:interview-objective ds-full) ; Use Clojure data structure
                      :fields_remaining (if ascr
-                                         (- (count (keys (get-in ds [:DS :EADS])))
-                                            (count (keys ascr)))
-                                         (count (keys (get-in ds [:DS :EADS]))))
+                                         (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
+                                           (- (count (keys ds-fields))
+                                              (count (keys ascr))))
+                                         (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
+                                           (count (keys ds-fields))))
                      :ascr_summary (if (empty? ascr)
                                      "No data collected yet"
                                      (str (count ascr) " fields filled"))
@@ -109,14 +113,14 @@
                                             :cid cid
                                             :from :system
                                             :content fallback-text
-                                            :pursuing-DS ds-id
-                                            :question-type :fallback-question})]
+                                            :pursuing-DS ds-id})]
             {:question {:id fallback-mid
                         :text fallback-text
                         :ds_id (name ds-id)
                         :help "Describe the steps involved in your production process"}
-             :context {:ds_objective (get-in ds [:DS :interview-objective])
-                       :fields_remaining (count (get-in ds [:DS :EADS]))
+             :context {:ds_objective (:interview-objective ds-full)
+                       :fields_remaining (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
+                                           (count (keys ds-fields)))
                        :error_fallback true}}))))))
 
 ;;; Interpret Response Tool
@@ -150,28 +154,32 @@
   (let [pid (keyword project-id)
         cid (keyword conversation-id)
         ds-id (keyword ds-id)
-        ds (sdb/get-discovery-schema-JSON ds-id)]
-    (if-not ds
+        ds-json (sdb/get-discovery-schema-JSON ds-id)]
+
+    (alog! (str "iviewr_interpret_response " pid " " cid " " ds-id))
+    (if-not ds-json
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
         ;; Initialize LLM if needed
         (when-not (seq @llm/agent-prompts)
           (llm/init-llm!))
 
-        ;; Use LLM to interpret the answer
-        (let [prompt (llm/ds-interpret-prompt {:ds ds :question question-asked :answer answer})
+        ;; Use LLM to interpret the answer with JSON string
+        (let [prompt (llm/ds-interpret-prompt {:ds ds-json :question question-asked :answer answer})
               result (llm/complete-json prompt :model-class :extract)
               scr (:scr result)
               ;; Add message with the answer
               answer-mid (pdb/add-msg! {:pid pid
                                         :cid cid
-                                        :from :user
+                                        :from :human
                                         :content answer
                                         :pursuing-DS ds-id})
               ;; Link answer to question if question-id provided
               _ (when question-id
                   (pdb/update-msg! pid cid answer-mid
-                                   {:message/answers-question question-id}))
+                                   {:message/answers-question (if (string? question-id)
+                                                                (Long/parseLong question-id)
+                                                                question-id)}))
               ;; Store the SCR with the message
               _ (when scr
                   (pdb/update-msg! pid cid answer-mid
@@ -227,7 +235,7 @@
      :completeness (if complete?
                      1.0
                      (/ (count (keys updated-ascr))
-                        (count (keys (:eads ds)))))}
+                        (count (keys (:DS ds)))))}
     (catch Exception e
       (log! :error (str "Error in interpret-response: " (.getMessage e)))
        ;; Still try to store raw answer
@@ -276,6 +284,7 @@
         cid (keyword conversation-id)
         ds-id (pdb/get-current-DS pid cid)
         {:ascr/keys [completed? dstruct] :as ascr} (pdb/get-ASCR pid ds-id)]
+    (alog! (str "sys_get_current_ds " pid " " cid " " ds-id))
     (if-not ds-id
       {:error "No active DS pursuit found"}
       {:ds_id (name ds-id)
@@ -302,6 +311,7 @@
 
 (defmethod tool-system/execute-tool :get-interview-progress
   [{:keys [_system-atom]} {:keys [project-id]}]
+  (alog! "sys_get_interview_progress (NYI)!!!")
   (try
     (let [progress {:status :not-yet-implemented}] ; (orch/get-interview-progress (keyword project-id))]
       progress)

@@ -75,7 +75,7 @@
   [tool-config inputs]
   (try
     (log! :info (str "Executing tool: " (tool-name tool-config)
-                " with inputs: " (pr-str inputs)))
+                     " with inputs: " (pr-str inputs)))
     (let [;; Convert underscore keys to hyphenated keywords
           inputs (keywordize-keys inputs)
           ;; Validate
@@ -87,8 +87,7 @@
       (log! :info (str "Tool " (tool-name tool-config) " completed successfully"))
       formatted)
     (catch Exception e
-      (log! :info (str "Tool " (tool-name tool-config) " failed: " (.getMessage e))
-             {:level :error})
+      (log! :error (str "Tool " (tool-name tool-config) " failed: " (.getMessage e)))
       {:error (.getMessage e)
        :tool-type (:tool-type tool-config)})))
 

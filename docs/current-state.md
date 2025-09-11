@@ -48,7 +48,7 @@ The system operates through three main components:
 - Clean project ID naming: `:craft-beer`, `:craft-beer-1`, `:sur-craft-beer`
 
 ### Discovery Schema Templates
-Available DS templates (loaded from JSON):
+Available DS templates (found in `src/tools/iviewr/domain` and available from the system DB by calling `sdb/get-discovery-schema-JSON`).
 - **Process Types**:
   - `process/warm-up-with-challenges` - Initial exploration and pain points
   - `process/flow-shop` - Sequential production flow
@@ -94,13 +94,8 @@ Available DS templates (loaded from JSON):
 src/
 ├── sched_mcp/
 │   ├── core.clj              # MCP server setup
-│   ├── interview.clj         # Interview management (legacy)
 │   ├── surrogate.clj         # Surrogate expert implementation
 │   ├── llm.clj               # LLM integration
-│   ├── ds_loader.clj         # DS JSON loading ✅
-│   ├── ds_combine.clj        # SCR → ASCR aggregation ✅
-│   ├── ds_schema.clj         # Database schema ✅
-│   ├── orchestration.clj     # DS flow management ✅
 │   ├── tool_system.clj       # Multimethod tool framework
 │   └── tools/
 │       ├── registry.clj      # Central tool registry

@@ -68,8 +68,7 @@
           mid (pdb/add-msg! {:pid pid
                              :cid cid
                              :content response
-                             :from :user
-                             :pursuing-DS ds-id})
+                             :from :user})
           ;; Link to question if provided
           _ (when question-id
               (pdb/update-msg! pid cid mid

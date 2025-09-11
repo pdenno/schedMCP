@@ -4,10 +4,15 @@ Essential operating instructions for any LLM agent (Claude, GPT, etc.) working o
 This project performs the functions of an existing project, schedulingTBD, found in the `examples/schedulingTBD` directory, but uses MCP.
 As much as possible, it uses code from schedulingTBD, particularly its database functions and database schema.
 
+## Documents to read (in the `docs` directory.
+  1.
+
 ## Starting up
-- The system, including its MCP loop, is probably running when you join. If you clojure_eval `(develop.repl/ns-setup!)` you will have the same NS aliases that I typically use.
-  You can then evaluate `(sutil/connect-atm :system)`. If that returns a connection object, such as `#<Connection@1840adbd: #datahike/DB {:max-tx 536870914 :max-eid 10}>`, you
-  should be ready to work.
+- The system, including its MCP loop, is probably running when you join. If you
+  To check that things are as they should be:
+  1. `clojure_eval` (an MCP tool) the sexp `(develop.repl/ns-setup!)`; That will allow you to use the same NS aliases that I typically use.
+  2. `clojure_eval` the sexp `(sutil/connect-atm :system)`; it should return a connection object, such as `#<Connection@1840adbd: #datahike/DB {:max-tx 536870914 :max-eid 10}>`, and
+  3. `clojure_eval` the sexp `(->> reg/tool-specs (mapv :name))`, it should return a vector of (currently 11) tool names.
 
 ## Coding Rules
 

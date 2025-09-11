@@ -1,5 +1,5 @@
 (ns sched-mcp.iviewr.domain.process.flow-shop
-  "(1) Define the example annotated data structure (EADS) interviewer will use for questioning about a flow-shop scheduling problem.
+  "(1) Define a Discovery Schema for questioning about a flow-shop scheduling problem.
        As the case is with flow-shop problems, this structure defines the flow of work through resources.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer."
   (:require
@@ -7,7 +7,7 @@
    [clojure.set                    :as set]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds! graph-semantics-ok?]]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [combine-ds! ds-complete? ds-valid? graph-semantics-ok?]]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.sutil                :as sutil]
    [sched-mcp.system-db            :as sdb]
@@ -219,6 +219,11 @@
 ;;; Collect and combine :process/flow-shop ds refinements, favoring recent over earlier versions.
 ;;; Interviewer has been instructed that it is okay to do :event-types separate from :timeslots, and in fact, it
 ;;; is currently giving things *very piecemeal*, suggesting that I use :ts-type-id and :event-type-id to stitch together the result.
+
+(defmethod ds-valid? :process/flow-shop
+  [tag obj]
+  (or (s/valid? ::DS obj)
+      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 ;;; We don't accumulate in the :process/flow-shop DS.
 (defmethod combine-ds! :process/flow-shop

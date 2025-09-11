@@ -2,13 +2,13 @@
   "System database initialization and management.
    The system database tracks all projects and global configuration."
   (:require
-   [clojure.edn      :as edn]
-   [clojure.java.io  :as io]
-   [clojure.pprint   :refer [pprint]]
-   [datahike.api     :as d]
+   [clojure.edn :as edn]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
+   [datahike.api :as d]
    [sched-mcp.schema :as schema]
-   [sched-mcp.sutil  :as sutil :refer [db-cfg-map register-db connect-atm resolve-db-id root-entities]]
-   [sched-mcp.util   :as util :refer [log!]]))
+   [sched-mcp.sutil :as sutil :refer [db-cfg-map register-db connect-atm resolve-db-id root-entities]]
+   [sched-mcp.util :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 
@@ -116,7 +116,7 @@
     (when-let [eid (d/q '[:find ?eid . :where [?eid :system/name "SYSTEM"]] @conn-atm)]
       (resolve-db-id {:db/id eid} conn-atm))))
 
-(defn ^:admin  backup-system-db
+(defn ^:admin backup-system-db
   "Backup the system database to an EDN file"
   [& {:keys [target-dir] :or {target-dir "data/"}}]
   (io/make-parents (str target-dir "dummy"))
@@ -173,7 +173,8 @@
     (d/transact conn-atm {:tx-data [{:db/id eid
                                      :system/projects {:project/id id
                                                        :project/name project-name
-                                                       :project/dir dir}}]})))
+                                                       :project/dir dir
+                                                       :project/status :active}}]})))
 (defn ^:admin archive-project!
   "Archive a project"
   [pid]
@@ -195,8 +196,8 @@
       {:pid pid
        :status :deleted})))
 
-(defn get-discovery-schema-JSON
-  "Return the JSON of the discovery schema from the system DB."
+(defn get-discovery-schema
+  "Return the discovery-schema identified by the argument ds-id."
   [ds-id]
   (assert (keyword? ds-id))
   (if-let [s (d/q '[:find ?str .
@@ -205,5 +206,32 @@
                     [?e :DS/id ?ds-id]
                     [?e :DS/msg-str ?str]]
                   @(connect-atm :system) ds-id)]
-    (-> s edn/read-string :DS sutil/clj2json-pretty)
+    (-> s edn/read-string (dissoc :message-type))
     (throw (ex-info "No such discovery-schema" {:ds-id ds-id}))))
+
+
+(defn get-discovery-schema-JSON
+  "Return the JSON of the discovery schema from the system DB."
+  [ds-id]
+  (-> ds-id get-discovery-schema sutil/clj2json-pretty))
+
+
+(defn ^:admin delete-project!
+  "Remove project from the system."
+  [pid]
+  (if (some #(= % pid) (list-projects))
+    (let [conn-atm (connect-atm :system)]
+      ;; Remove from system DB.
+      (when-let [s-eid (d/q '[:find ?e . :in $ ?pid :where [?e :project/id ?pid]] @conn-atm pid)]
+        (let [obj (resolve-db-id {:db/id s-eid} conn-atm)]
+          (d/transact (connect-atm :system) {:tx-data (for [[k v] obj] [:db/retract s-eid k v])})))
+      ;; Remove DB files
+      (let [cfg (db-cfg-map {:type :project :id pid})]
+        (d/delete-database cfg)
+        (sutil/deregister-db pid)
+        (when-let [base-dir (:base-dir cfg)]
+          (let [dir (str base-dir "/projects/" (name pid) "/")]
+            (when (.exists (io/file dir))
+              (sutil/delete-directory-recursive dir))))
+        nil))
+    (log! :warn (str "Delete-project: Project not found: " pid))))

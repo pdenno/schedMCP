@@ -1,11 +1,11 @@
 (ns sched-mcp.iviewr.domain.process.job-shop-u
-  "(1) Define the an example annotated data structure (EADS) to provide to the interviewer for a job-shop scheduling problem where each job potentially follows a unique process.
+  "(1) Define the a discovery schema for job-shop scheduling problems where each job potentially follows a unique process.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer."
   (:require
    [clojure.pprint                 :refer [cl-format pprint]]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete?]]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? ds-valid?]]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [alog!]]))
@@ -119,6 +119,11 @@
   (throw (ex-info "Invalid DS (job-shop--unique)" {})))
 
 (defn completeness-test [_ds] true)
+
+(defmethod ds-valid? :process/job-shop--unique
+  [tag obj]
+  (or (s/valid? ::DS obj)
+      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 ;;; ------------------------------- checking for completeness ---------------
 (defmethod ds-complete? :process/job-shop--unique

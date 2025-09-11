@@ -301,16 +301,6 @@
     [obj]
     (if (nil? obj) nil (ches/generate-string obj {:pretty true})))
 
-#_(defn update-resources-DS-json!
-  "Update the resources/agents/iviewrs/EADS directory with a (presumably) new JSON pprint of the argument EADS instructions.
-   These are needed by the orchestrator; they are put in its vector store."
-  [ds-instructions]
-  (let [id (-> ds-instructions :DS :DS-id)
-        [nam ns] ((juxt name namespace) id)
-        ds-json-fname (cl-format nil "resources/agents/iviewrs/discovery-schema/~A/~A.json" ns nam)]
-    (io/make-parents ds-json-fname)
-    (spit ds-json-fname (clj2json-pretty ds-instructions))))
-
 (defn update-resources-DS-json! [& _] (throw (ex-info "This should no longer be needed." {})))
 
 ;;;https://gist.github.com/olieidel/c551a911a4798312e4ef42a584677397

@@ -5,7 +5,7 @@
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.tools.orch.ds-util :as dsu]
-   [sched-mcp.util :refer [log!]]
+   [sched-mcp.util :refer [alog! log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]])) ; <================================================= FIX THIS
 
@@ -90,7 +90,7 @@
                                            (contains? in-progress-ds ds-id) "in-progress"
                                            (= current-ds ds-id) "active"
                                            :else "not-started")]
-                              {:ds_id (name ds-id)
+                              {:ds_id (if (keyword? ds-id) (name ds-id) (str ds-id))
                                :status status
                                :interview_objective (get-in ds-info [:DS :interview-objective])
                                :budget_remaining (when ascr (:ascr/budget-left ascr))
@@ -102,12 +102,12 @@
       {:available_ds ds-details
        :completed_count (count completed-ds)
        :total_available (count all-ds)
-       :current_active_ds (when current-ds (name current-ds))
+       :current_active_ds (when current-ds (if (keyword? current-ds) (name current-ds) current-ds))
        :current_conversation (name cid)
        :project_ASCRs (into {}
                             (map (fn [ds-id]
                                    (let [ascr (pdb/get-ASCR pid ds-id)]
-                                     [(name ds-id) (:ascr/dstruct ascr)]))
+                                     [(if (keyword? ds-id) (name ds-id) (str ds-id)) (:ascr/dstruct ascr)]))
                                  project-ascrs))
        :recommendation_needed true
        :orchestrator_guide_available true})
@@ -138,7 +138,8 @@
         cid (keyword conversation-id)
         ds-id-kw (keyword ds-id)
         ds (sdb/get-DS-instructions ds-id-kw)
-        budget (or budget 10)]
+        budget (or budget 1.0)]
+    (alog! (str "orch_start_ds_pursuit " pid " " cid " " ds-id))
     (if (= ds "") ; get-DS-instructions returns empty string when not found
       {:error (str "Discovery Schema not found: " ds-id)}
       (try
@@ -159,8 +160,8 @@
 
         ;; Return info about the DS
         {:ds_id (name ds-id-kw)
-         :interview_objective (get-in ds [:DS :interview-objective])
-         :ds_template (get-in ds [:DS :EADS])
+         :interview_objective (:interview-objective ds)
+         :ds_template (:DS ds) ; The DS structure itself, not nested under EADS
          :budget budget
          :status "Started DS pursuit"}
         (catch Exception e
@@ -190,6 +191,7 @@
         conn (connect-atm pid)
         ;; Get the active DS from conversation
         active-ds (pdb/get-active-DS-id pid cid)]
+    (alog! (str "orch_complete_ds " pid " " cid))
     (if-not active-ds
       {:error "No active DS to complete"}
       (let [;; Get final ASCR
@@ -226,7 +228,9 @@
 (defmethod tool-system/execute-tool :get-progress
   [{:keys [_system-atom]} {:keys [project-id]}]
   (try
-    (let [progress (pdb/get-interview-progress (keyword project-id))]
+    (let [pid (keyword project-id)
+          progress (pdb/get-interview-progress pid)]
+      (alog! (str "orch_get_progress " pid))
       progress)
     (catch Exception e
       (log! :error (str "Error in get-progress: " (.getMessage e)))

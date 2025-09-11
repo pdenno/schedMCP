@@ -21,16 +21,18 @@
         org.clojure/core.unify {:mvn/version "0.7.0"}
         org.clojure/data.xml {:mvn/version "0.0.8"}
         org.clojure/tools.logging {:mvn/version "1.3.0"}
-        net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}}
+        net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}
+
+        ;; Java MCP SDK for proper MCP server implementation
+        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.10.0"}}
 
  ;;; Starting for use with clojure-mcp:
- ;;;  1) clj -M:nrepl (starts as shown in the :nrepl :alias below.)
+ ;;;  1) clj -M:nrepl -m sched-mcp.main 2>> ./logs/nrepl-error.log (starts as shown in the :nrepl :alias below.)
  ;;;  2) cider-connect at port 7888 and do (start)
  ;;;  3) clj -X:mcp :port 7888 (starts as shown in the :mcp alias in ~/.clojure/deps.edn. Also my-mcp, but that only additionally includes shadow-cljs, not used currently.
  ;;;  4) claude-desktop
 
-
- ;; See .dir-locals.el for some defaults on CIDER C-c M-j
+;; See .dir-locals.el for some defaults on CIDER C-c M-j
  :aliases {:dev {:extra-paths ["test" "env/dev"]
                  :jvm-opts ["-Djdk.attach.allowAttachSelf"]
                  :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
@@ -41,11 +43,9 @@
                               org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
            ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
-           ;; Include all paths you want available for development. While running with clojure-mcp/nrepl the server listens on
-           ;; port 3301. See resources/system.edn.
+           ;; Include all paths you want available for development.
            :nrepl {:extra-paths ["test" "env/dev"]
-                   :extra-deps {applied-science/js-interop {:mvn/version "0.4.2"}
-                                cider/cider-nrepl {:mvn/version "0.56.0"}
+                   :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
                                 com.lambdaisland/classpath {:mvn/version "0.6.58"}
                                 expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
                                 nrepl/nrepl {:mvn/version "1.3.1"}

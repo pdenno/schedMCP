@@ -6,11 +6,6 @@ This document outlines the development practices, architectural decisions, and c
 
 ## Dependencies
 
-### Core Principles
-- Keep minimal external dependencies
-- Prefer copying and adapting code over adding dependencies
-- Document the source of any borrowed code
-
 ### Specific Guidelines
 - **Do not add clojure-mcp as a dependency** - While we borrow design patterns and code structures from `examples/clojure-mcp`, we maintain independence by copying and adapting rather than referencing
 - When borrowing code, add attribution comments:
@@ -35,7 +30,7 @@ This document outlines the development practices, architectural decisions, and c
 - Use multimethod dispatch pattern borrowed from clojure-mcp
 
 ### State Management
-- Individual SCRs stored with each conversation response
+- Individual SCRs stored in the message object with each conversation response
 - Aggregated SCR (ASCR) maintained separately in database
 - Discovery Schema-specific combine logic merges new SCRs into ASCR
 - Completion tracked using DS-specific logic
@@ -77,12 +72,13 @@ Follow Clojure conventions with these additions:
 ## Testing Strategy
 
 ### Unit Testing
+- Define in the `test` directory, where files have names similar to the files where the functions to be tested are found, for example `test/project_db_test.clj` for `src/project_db.clj`
 - Test individual tools with mock data
 - Verify DS combine logic independently
 - Test validation and completion functions
 
 ### Integration Testing
-- Use surrogate experts from schedulingTBD
+- Use surrogate experts
 - Test complete interview flows
 - Verify state persistence across tool calls
 
@@ -105,7 +101,7 @@ Follow Clojure conventions with these additions:
 4. Use existing patterns from schedulingTBD and clojure-mcp
 
 ### Code Review Checklist
-- [ ] Tools are stateless
+- [ ] Tools are stateless (If context such as past conversation is required, it is obtained from the project DB as arguments to the tool.)
 - [ ] Proper error handling with informative messages
 - [ ] Attribution comments for borrowed code
 - [ ] Tests for new functionality
@@ -115,7 +111,7 @@ Follow Clojure conventions with these additions:
 ## Documentation Standards
 
 ### Code Documentation
-- Use docstrings for all public functions
+- Use docstrings for all public functions. (BTW, In Clojure the docstring appears BEFORE the arguments.)
 - Document tool parameters and return values
 - Include examples in docstrings where helpful
 
@@ -133,7 +129,8 @@ Follow Clojure conventions with these additions:
 4. **Tool not found** - Verify tool registration in core.clj
 
 ### Debugging Tools
-- Use `^:diag` metadata for REPL-only debug atoms
+- Use `^:diag` metadata for REPL-only debug atoms and diagnostic functions.
+- Use `^:admin` metadata for REPL-only administrative functions (such as schema migration).
 - Liberal use of logging at INFO level
 - Test tools individually before integration
 

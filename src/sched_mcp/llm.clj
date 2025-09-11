@@ -2,11 +2,11 @@
   "LLM integration for Discovery Schema interviews
    Simplified version based on schedulingTBD's llm.clj"
   (:require
-   [clojure.data.json       :as json]
+   [clojure.data.json :as json]
    [clojure.java.io]
-   [clojure.string          :as str]
-   [mount.core              :refer [defstate]]
-   [sched-mcp.util          :refer [log!]]
+   [clojure.string :as str]
+   [mount.core :refer [defstate]]
+   [sched-mcp.util :refer [log!]]
    [wkok.openai-clojure.api :as openai]))
 
 ;;; Configuration
@@ -162,7 +162,7 @@
 
 ;;; Agent Integration
 ;;;  System prompts for different interviewer agents. ToDo: this could go in the system DB.
-(defonce agent-prompts  (atom {}))
+(defonce agent-prompts (atom {}))
 
 (defn load-agent-prompt!
   "Load an agent prompt from markdown file"
@@ -189,7 +189,7 @@
   (build-prompt
    :system (get-agent-prompt :process-interviewer)
    :context (str "Discovery Schema:\n"
-                 (json/write-str (:ds ds) :indent true)
+                 ds ; ds is already a JSON string
                  "\n\nCurrent ASCR:\n"
                  (json/write-str ascr :indent true)
                  "\n\nBudget remaining: " budget-remaining " questions")
@@ -206,15 +206,14 @@
   (build-prompt
    :system "You are an expert at extracting structured data from natural language."
    :context (str "Discovery Schema structure:\n"
-                 (json/write-str (:ds ds) :indent true))
+                 ds) ; ds is already a JSON string
    :user (str "Question asked: " question
-              "\n\nUser's answer: " answer
-              "\n\nExtract structured data matching the schema.")
-   :format "Return JSON with:
-            - scr: Object with extracted schema fields
-            - confidence: 0-1 confidence score
-            - ambiguities: Array of unclear items
-            - follow_up: Optional clarification needed"))
+              "\n\nAnswer received: " answer)
+   :format "Extract a Schema-Conforming Response (SCR) that matches the DS structure.
+            Return JSON with:
+            - scr: Object matching DS field structure
+            - confidence: 0-1 score
+            - ambiguities: Array of unclear points"))
 
 ;;; Initialization
 

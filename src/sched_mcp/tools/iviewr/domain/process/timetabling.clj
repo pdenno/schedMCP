@@ -1,10 +1,11 @@
 (ns sched-mcp.iviewr.domain.process.timetabling
+  "Define a discovery schema and associated methods for timetabling problems."
   (:require
    [clojure.pprint                 :refer [cl-format pprint]]
    [clojure.set                    :as set]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds!]]
+   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? ds-valid? combine-ds!]]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [log! alog!]]))
@@ -220,6 +221,11 @@
 ;;; (s/explain :timetabling/DS-message ttable/timetabling)
 (when-not (s/valid? :timetabling/DS-message timetabling)
   (throw (ex-info "Invalid DS (timetabling)" {})))
+
+(defmethod ds-valid? :process/timetabling
+  [tag obj]
+  (or (s/valid? ::DS obj)
+      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 ;;; ------------------------------- combining content from interviewer refinement messages  ---------------
 ;;; Collect and combine :process/timetabling ds refinements, favoring recent over earlier versions.

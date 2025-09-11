@@ -3,7 +3,7 @@
    [sched-mcp.system-db     :as sdb]
    [taoensso.telemere       :refer [log!]]))
 
-;;; ---------- These are used to check process EADS for valid graphs.
+;;; ---------- These are used to check process Discovery Schema for valid graphs.
 (defn list-process-ids
   "Return a vector of all process-ids defined in the graph."
   [graph]
@@ -29,7 +29,7 @@
       @found?)))
 
 (defn process-produces-output?
-  "EADS process graphs generated through conversation can use an object with :item-id and :from to indicate
+  "Discovery Schema process graphs generated through conversation can use an object with :item-id and :from to indicate
    a relationship between processes. For example, {:item-id 'graphite core', :from 'graphite-core-production'}.
    This function returns true if :from process does, in fact, list the :item-id as an :output."
   [graph {:keys [item-id from]}]
@@ -77,7 +77,7 @@
   "This is used in spec testing of :flow-shop/graph. (See flow_shop.clj)."
   [graph]
   (and
-   (= #{:EADS-ref :process-id :inputs :outputs :resources :duration :subprocesses}
+   (= #{:DS-ref :process-id :inputs :outputs :resources :duration :subprocesses}
       (-> graph keys set))
    (outputs-exist-where-inputs-claim? graph)
    (inputs-match-in-hierarchy? graph)))
@@ -97,8 +97,15 @@
 
 (defmulti combine-ds! #'dispatch-combine-ds!)
 
+(defn dispatch-ds-valid?
+  [tag _pid]
+  (assert ((sdb/system-DS?) tag))
+  tag)
+
+(defmulti ds-valid? #'dispatch-ds-valid?)
+
 (defn strip-annotations
-  "Transfom the EADS argument in the following ways:
+  "Transfom the Discovery Schema argument in the following ways:
      1) Replace {:val v :comment c} maps with v.
      2) Remove property :comment wherever it occurs.
      3) Remove property :invented.

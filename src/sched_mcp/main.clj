@@ -1,13 +1,27 @@
 (ns sched-mcp.main
   "Main entry point for schedMCP server"
   (:require
-   [mount.core :as mount]))
+   [mount.core :as mount]
+   [sched-mcp.mcp-core :as mcp-core]
+   [sched-mcp.util :refer [alog! log! now]]))
 
 (defn -main
-  "Start everything including the schedMCP server.
-   If instead, you just want to start or stop the mcp-server use
-    (mount/start #'sched-mcp.mcp-core.mcp-core-server)
-    (mount/stop #'sched-mcp.mcp-core.mcp-core-server)."
+  "Start the schedMCP server. This will block on the MCP server listen call."
   [& _args]
-  ;; Run the server loop in a future to prevent exit and provide stdout.
-  (mount/start))
+  (alog! (str "Starting schedMCP " (now)))
+  (try
+    ;; Start mount components (but not the MCP server itself yet)
+    (mount/start)
+
+    ;; Now start the actual MCP server - this will block
+    (log! :info "Starting MCP server from main...")
+    (mcp-core/start-server)
+
+    ;; This line will only be reached if the server stops
+    (log! :info "MCP server terminated")
+    (System/exit 0)
+
+    (catch Exception e
+      (log! :error (str "Failed to start server: " (.getMessage e)))
+      (.printStackTrace e)
+      (System/exit 1))))

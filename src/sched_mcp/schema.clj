@@ -9,13 +9,13 @@
      - The project's name and db directory
      - system-level agents
      - See also db-schema-agent+ which gets merged into this."
-  {;; ------------------------------- EADS
+  {;; ------------------------------- Discovery Schema
    :DS/budget-decrement
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/double
         :doc "The cost of each question, decrementing againt a budget for the entire conversation."}
    :DS/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
-        :doc "A unique ID for each EADS. The namespace of the keyword is the cid, e.g. :process/flow-shop."}
+        :doc "A unique ID for each Discovery Schema. The namespace of the keyword is the cid, e.g. :process/flow-shop."}
    :DS/msg-str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "The stringified message object, it can be edn/read-string. It is the EDN version of the JSON in resources used by ork."}
@@ -56,7 +56,7 @@
         :doc "the projects known by the system."}
    :system/specs
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
-        :doc "spec objects used for checking completion of EADS, etc."}})
+        :doc "spec objects used for checking completion of Discovery Schema, etc."}})
 
 ;;; AI Programming Assistants: The schema below has the information we aspire to collect and manage.
 ;;; We might not be using all of it now, but nothing here should be changed without consulting the programmer.
@@ -100,9 +100,6 @@
    :claim/conversation-id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
         :doc "The conversation from which this claim is founded. Currently a cid #{:process :data :resources :optimality}."}
-   :claim/question-type
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
-        :doc "The question-type (if any) on which this claim is founded."}
    :claim/confidence
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long
         :doc "a number [0,1] expressing how strongly we believe the proposition ."}
@@ -152,9 +149,9 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/long
         :doc (str "The unique ID of a message. These are natural numbers starting at 0, but owing to 'LLM:' prompts,\n"
                   "which aren't stored, some values can be skipped. Because these are not unique to the DB, they are not :db.unique/identity.")}
-   :message/question-type
+   :message/pursuing-DS
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
-        :doc "A label (from interview instructions) associated with this question or answer."}
+        :doc "The DS-id of the discovery schema for which this question or answer is based."}
    :message/SCR
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "a string that can be edn/read-string into a Schema-Conforming Response (SCR)."}

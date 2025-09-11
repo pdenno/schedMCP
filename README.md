@@ -5,10 +5,19 @@ schedMCP is an MCP (Model Context Protocol) server that conducts structured inte
 ## Overview
 
 This project reimplements the core interview functionality from schedulingTBD as an MCP server, allowing AI assistants like Claude to conduct scheduling interviews through a structured tool interface.
+Its implementation-- currently under development --borrows ideas and code from [clojure-mcp](https://github.com/bhauman/clojure-mcp)
+For use with AI programming assistants, schedulingTBD can be found in `examples/schedulingTBD` and a snapshot of clojure-mcp can be found at `examples/clojure-mcp`.
+
+
 
 ## Architecture
 
-The system uses an orchestrator-driven approach that dynamically selects appropriate Discovery Schemas based on the current state of knowledge. Key components:
+### Databases
+- `src/sched-mcp/schema.clj` - Datahike (graph DB) schema for the system and project DBs
+- `src/sched-mcp/project-db.clj` - functions to create and manage project databases. A project database is created for each of what interviewees view as a human/AI teaming project to build a scheduling system.
+- `src/sched-mcp/system-db.clj` - functions to maintain knowledge of projects (active, soft deleted, or archived), and other shared data objects such as discovery schema.
+
+The system uses an orchestrator-driven approach that dynamically selects appropriate Discovery Schemas based on the current state of knowledge. Key MCP tools:
 
 ### Interview Tools
 - `iviewr_formulate_question` - Generate contextual questions from Discovery Schemas and current knowledge
@@ -95,54 +104,70 @@ Add to your Claude Desktop configuration file:
 
 Once configured, you can interact with the scheduling interview system in Claude Desktop:
 
-### Starting an Interview
+### Starting an Interview with a Surrogate Expert
 
-**You**: "I need help with scheduling for my craft beer brewery"
+**You**: "Let's start an interview with an AI surrogate expert for scheduling production of craft beer"
 
 **Claude** will use the orchestration tools to:
 1. Check available Discovery Schemas
 2. Select the most appropriate starting point based on current knowledge
 3. Begin asking contextual questions
+4. Complete
 
 ### Interview Flow
 
+The system is predominantly focused on developing the Discovery Schema methodology of interviewing using AI surrogate experts.
+(There are provisions for interviewing actual humans, of course, but these currently aren't used as much.)
+Interviewing is performed by Claude running MCP.
+To make the interviewing process easily comprehensible, the MCP tool names used in interview have prefixes indicating the 'persona' to which they associate.
+For example, `iviewr_formulate_question` is a tool used by the interviewer persona, whereas `sur_answer` is the response to the formulated question provided by the domain surrogate (e.g. the craft beer expert).
+There are three persona: orchestrator (prefix `orch_`), interviewer (prefix `iviewr_`) and surrogate (prefix `sur_`).
+Tools that are generally useful, not just to those personas, are prefixed with `sys_`.
+
+#### Orchestrator
 The orchestrator dynamically manages the interview by:
-- **Selecting Discovery Schemas** - Choosing the next area to explore based on what's already known
+- **Selecting Discovery Schemas** - Choosing the next area to explore based on what's already known,
+- **Building Knowledge** - Aggregating responses, known as Schema-Conforming Responses (SCRs) into a comprehensive understanding called an Aggregated Schema-Conforming Response (ASCR),
+- **Determining Completion** - Knowing when enough information has been gathered.
+
+#### Interviewer
+The interview participates by:
 - **Generating Questions** - Using LLMs to create natural, contextual questions
-- **Interpreting Responses** - Extracting structured data (SCRs) from conversational answers
-- **Building Knowledge** - Aggregating responses into a comprehensive understanding (ASCR)
-- **Determining Completion** - Knowing when enough information has been gathered
+- **Interpreting Responses** - Extracting structured data, each a Schema-Conforming Response (SCRs), from conversational answers from the surrogate or human.
+
+#### Intervieweees
+The surrogate or humans participate by:
+- **Answering Questions** - questions posed by the interviewer. Questions and responses can sometimes be posed using tables, rather than just unformated text.
+The surrogate experts should aim to provide a coherent description of the company's operations and production challenges it faces, just as you would expect from humans.
 
 ### Discovery Schema Types
 
 The system includes various Discovery Schemas for different aspects:
 - **Process Schemas** - Understanding workflow types (flow-shop, job-shop, timetabling)
 - **Data Schemas** - Capturing domain relationships (Object-Role Modeling)
-- **Challenge Schemas** - Identifying scheduling pain points
-- **Resource Schemas** - Mapping available resources and constraints
+- **Resource Schemas** - Mapping available resources and constraints (currently not developed)
+- **Optimality Schemas** - Defining the properties (such as KPI) sought in good schedules, implemented through the solution's MiniZinc objective function.
 
 ## Project Structure
 
 ```
 schedMCP/
 ├── src/sched_mcp/
-│   ├── core.clj          # Mount state management
-│   ├── main.clj          # MCP server entry point
-│   ├── mcp_core.clj      # Core MCP protocol implementation
+│   ├── schema.clj        # Schema for the project and system DBs
+│   ├── project_db.clj    # Functions to manage the project DBs.
+│   ├── mcp_core.clj      # MCP server entry point
 │   ├── sutil.clj         # Shared utilities
 │   ├── interview.clj     # Interview management
-│   ├── orchestration.clj # Dynamic DS selection and flow
-│   ├── ds_loader.clj     # Discovery Schema loading
-│   ├── ds_combine.clj    # SCR to ASCR aggregation
-│   ├── ds_schema.clj     # Database schema for DS tracking
 │   ├── surrogate.clj     # Domain expert simulation
 │   └── tools/
 │       ├── registry.clj  # Central tool registry
 │       ├── iviewr/       # Interviewer tools
+│       ├── iviewr/domain # Discovery schema for process, data, resources, and optimality.
 │       ├── orch/         # Orchestration tools
 │       └── surrogate.clj # Surrogate expert tools
-├── deps.edn              # Dependencies
-└── README.md            # This file
+├── deps.edn              # Dependencies (libraries used)
+└── README.md             # This file
+├── test/                 # Unit tests, each named by the `src` it supports.
 ```
 
 ## Development

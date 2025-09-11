@@ -1,175 +1,162 @@
 (ns sched-mcp.mcp-core
-  "Core MCP server implementation for schedMCP.
-   Top-level system components should be required here so mount can start them."
+  "Core MCP server implementation for schedMCP using Java MCP SDK.
+   Based on clojure-mcp approach for compatibility."
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.project-db]                    ; For mount
-   [sched-mcp.system-db]                     ; For mount
+   [sched-mcp.project-db] ; For mount
+   [sched-mcp.system-db] ; For mount
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
-   [sched-mcp.tools.iviewr-tools]            ; For mount
-   [sched-mcp.llm]                           ; For mount
-   [sched-mcp.tools.registry :as registry]   ; For mount
-   [sched-mcp.util :as util :refer [log!]])  ; For mount
-  (:import [java.io BufferedReader InputStreamReader PrintWriter]))
+   [sched-mcp.tools.iviewr-tools] ; For mount
+   [sched-mcp.llm] ; For mount
+   [sched-mcp.tools.registry :as registry] ; For mount
+   [sched-mcp.util :as util :refer [alog! log!]])
+  (:import [io.modelcontextprotocol.server.transport
+            StdioServerTransportProvider]
+           [io.modelcontextprotocol.server McpServer McpServerFeatures
+            McpServerFeatures$AsyncToolSpecification]
+           [io.modelcontextprotocol.spec
+            McpSchema$ServerCapabilities
+            McpSchema$Tool
+            McpSchema$CallToolResult
+            McpSchema$TextContent
+            McpSchema$LoggingLevel]
+           [reactor.core.publisher Mono]
+           [com.fasterxml.jackson.databind ObjectMapper]))
 
-(def ^:diag diag (atom nil))
+(def ^:private object-mapper (ObjectMapper.))
 
-;; Create readers/writers once to maintain connection
-(def stdin-reader (BufferedReader. (InputStreamReader. System/in)))
-(def stdout-writer (PrintWriter. System/out true))
+;;; Helper functions from clojure-mcp
 
-;;; JSON-RPC message handling ----------------------------------
-(defn read-json-rpc
-  "Read a JSON-RPC message from stdin"
-  []
-  (when-let [line (.readLine stdin-reader)]
-    (try
-      (json/read-str line :key-fn keyword)
-      (catch Exception e
-        (log! :error (str "Failed to parse JSON-RPC: " (.getMessage e)))
-        nil))))
+(defn create-mono-from-callback
+  "Create a Mono that completes when callback is invoked"
+  [callback-fn]
+  (Mono/create
+   (reify java.util.function.Consumer
+     (accept [_ sink]
+       (try
+         (let [result (callback-fn)]
+           (.success sink result))
+         (catch Exception e
+           (.error sink e)))))))
 
-(defn write-json-rpc
-  "Write a JSON-RPC message to stdout"
-  [message]
-  (.println stdout-writer (json/write-str message))
-  (.flush stdout-writer))
+(defn- adapt-result
+  "Adapt a tool result to MCP format"
+  [result]
+  (McpSchema$CallToolResult.
+   (cond
+     (string? result)
+     [(McpSchema$TextContent. result)]
 
-(defn error-response [id code message]
-  {:jsonrpc "2.0"
-   :id id
-   :error {:code code :message message}})
+     (map? result)
+     (if (:error result)
+       [(McpSchema$TextContent. (str "Error: " (:error result)))]
+       [(McpSchema$TextContent. (json/write-str result :pretty true))])
 
-(defn success-response [id result]
-  {:jsonrpc "2.0"
-   :id id
-   :result result})
+     :else
+     [(McpSchema$TextContent. (str result))])
+   nil))
 
-;;; Tool handling ----------------------------------------------
-(defn tool->mcp-tool
-  "Convert internal tool spec to MCP tool format"
-  [{:keys [name description schema]}]
-  {:name name
-   :description description
-   :inputSchema schema})
+(defn adapt-results
+  "Convert tool results to MCP format, handling errors"
+  [result error?]
+  (if error?
+    (McpSchema$CallToolResult.
+     [(McpSchema$TextContent. (str "Tool error: " result))]
+     nil)
+    (adapt-result result)))
 
-(defn call-tool
-  "Call a tool function with arguments"
-  [tool-spec arguments]
-  (try
-    (let [result ((:tool-fn tool-spec) arguments)]
-      (if (:error result)
-        {:error true :content [{:type "text" :text (:error result)}]}
-        {:content [{:type "text" :text (json/write-str result :pretty true)}]}))
-    (catch Exception e
-      {:error true :content [{:type "text" :text (str "Tool error: " (.getMessage e))}]})))
-
-;;; MCP protocol handlers
-
-(defn handle-initialize
-  "Handle the initialize request"
-  [id _params server-info]
-  (log! :info "MCP server initializing")
-  (success-response id
-                    {:protocolVersion "2025-06-18" ; Match client's version
-                     :capabilities {:tools {}}
-                     :serverInfo server-info}))
-
-(defn handle-tools-list
-  "Handle tools/list request"
-  [id tool-specs]
-  (success-response id
-                    {:tools (mapv tool->mcp-tool tool-specs)}))
-
-(defn handle-tool-call
-  "Handle tools/call request"
-  [id tool-name arguments tool-specs]
-  (log! :info (str "Tool call: " tool-name))
-  (if-let [tool-spec (first (filter #(= (:name %) tool-name) tool-specs))]
-    (let [result (call-tool tool-spec arguments)]
-      (success-response id result))
-    (error-response id -32601 (str "Unknown tool: " tool-name))))
-
-;;; Main server loop
-
-(defn handle-request
-  "Route requests to appropriate handlers"
-  [request {:keys [tool-specs server-info]}]
-  (let [{:keys [id method params]} request]
-    ;; Handle notifications (no id field)
-    (if (nil? id)
-      ;; Notifications don't get responses
-      (case method
-        "notifications/initialized" nil ; Acknowledge but don't respond
-        (log! :warn (str "Unknown notification: " method)))
-      ;; Handle requests (with id field)
-      (case method
-        "initialize" (handle-initialize id params server-info)
-        "tools/list" (handle-tools-list id tool-specs)
-        "tools/call" (handle-tool-call id (:name params) (:arguments params) tool-specs)
-        ;; Unknown method
-        (error-response id -32601 (str "Method not found: " method))))))
-
-;;;  A switch in the MCP main loop to make it exit (when false).
-(defonce stay-alive?
-  (atom true))
-
-;;;"Keep the future running the MCP loop. We use cancel-future on it."
-(defonce mcp-main-loop-future
-  (atom nil))
-
-(defn run-server
-  "Main server loop. Don't do any output to console here except JSON-RPC!
-   Returns a future of the server loop."
-  [{:keys [_tool-specs _server-info] :as config}]
-  (future
-    (try
-      (reset! stay-alive? true)
-      (loop []
-        (when @stay-alive?
-          (if-let [request (read-json-rpc)]
+(defn create-async-tool
+  "Create an async tool specification from our tool map"
+  [{:keys [name description schema tool-fn]}]
+  (let [schema-json (json/write-str schema)
+        tool (McpSchema$Tool. name description schema-json)]
+    (McpServerFeatures$AsyncToolSpecification.
+     tool
+     (reify java.util.function.BiFunction
+       (apply [_ exchange arguments]
+         (create-mono-from-callback
+          (fn []
             (try
-              (let [response (handle-request request config)]
-                ;; Only write response if it's not nil (notifications return nil)
-                (when response
-                  (write-json-rpc response)))
+              (let [args (when arguments
+                           (json/read-str (.toString arguments) :key-fn keyword))
+                    _ (log! :info (str "Executing tool: " name " with args: " (pr-str args)))
+                    result (tool-fn args)]
+                (log! :info (str "Tool " name " completed successfully"))
+                (adapt-results result false))
               (catch Exception e
-                (log! :error (str "Error handling request: " (.getMessage e) "\n" (pr-str request)))
-                (when-let [id (:id request)]
-                  (write-json-rpc (error-response id -32603 "Internal error")))))
-            ;; If read-json-rpc returns nil, the connection is closed
-            (log! :info "Connection closed by client"))
-          (recur)))
-      (catch Exception e
-        (log! :error (str "Server error: " (.getMessage e))))
-      (finally (log! :info "Server shutting down")))))
+                (log! :error (str "Tool " name " failed: " (.getMessage e)))
+                (adapt-results (.getMessage e) true))))))))))
 
-(def server-info
+(defn add-tool
+  "Add a tool to the MCP server"
+  [mcp-server tool-map]
+  (-> (.addTool mcp-server (create-async-tool tool-map))
+      (.subscribe)))
+
+(defn create-server-info
+  "Create server information"
+  []
   {:name "schedMCP"
    :version "0.1.0"})
 
-  ;; Start MCP server with our tools
-(def server-config
-  {:tool-specs registry/tool-specs
-   :server-info server-info})
+(defn create-server-capabilities
+  "Create server capabilities"
+  []
+  (-> (McpSchema$ServerCapabilities/builder)
+      (.tools true)
+      (.build))) ; _schemas
+
+(defn mcp-server
+  "Create and configure the MCP server"
+  []
+  (let [transport-provider (StdioServerTransportProvider. object-mapper)
+        server (-> (McpServer/async transport-provider)
+                   (.serverInfo "schedMCP" "0.1.0")
+                   (.capabilities (create-server-capabilities))
+                   (.build))]
+    ;; Add all tools from registry
+    (doseq [tool-spec registry/tool-specs]
+      (add-tool server tool-spec))
+    server))
+
+;;; Server lifecycle management
+
+(def server-instance (atom nil))
+(def server-transport (atom nil))
 
 (defn start-server
-  "Start the server loop in a future."
+  "Start the MCP server"
   []
-  (reset! stay-alive? true)
-  (reset! mcp-main-loop-future (run-server server-config)))
+  (try
+    (log! :info "Starting schedMCP server...")
+
+    ;; Create MCP server
+    (let [server (mcp-server)]
+
+      ;; Store reference
+      (reset! server-instance server)
+
+      ;; The server is already listening via StdioServerTransportProvider
+      ;; No need to call .listen separately
+
+      (log! :info "MCP server started successfully")
+      server)
+    (catch Exception e
+      (log! :error (str "Failed to start server: " (.getMessage e)))
+      (throw e))))
 
 (defn stop-server
+  "Stop the MCP server"
   []
-  (log! :info "Stopping MCP server.")
-  (reset! stay-alive? false)
-  (Thread/sleep 2000)
-  (when @mcp-main-loop-future
-    (future-cancel @mcp-main-loop-future))
-  (log! :info "Stopped MCP server in REPL...")
-  (shutdown-agents))
+  (log! :info "Stopping schedMCP server...")
+  (when-let [server @server-instance]
+    (.closeGracefully server))
+  (reset! server-instance nil)
+  (reset! server-transport nil)
+  (log! :info "MCP server stopped"))
 
+;;; Starting and stopping
 (defstate mcp-core-server
   :start (start-server)
   :stop (stop-server))

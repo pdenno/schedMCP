@@ -1,13 +1,13 @@
 (ns sched-mcp.iviewr.domain.process.warm-up-with-challenges
-  "Define a DS to elicit general information about the scheduling problem the interviewees are interested in solving."
+  "Define a discovery schema to elicit general information about the scheduling problem the interviewees are interested in solving."
   (:require
-   [clojure.pprint                 :refer [cl-format pprint]]
-   [clojure.spec.alpha             :as s]
-   [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.project-db           :as pdb]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds!]]
-   [sched-mcp.system-db            :as sdb]
-   [sched-mcp.util                 :as util :refer [alog!]]))
+   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.spec.alpha :as s]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? combine-ds! ds-valid?]]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.util :as util :refer [alog!]]))
 
 (s/def :warm-up-with-challenges/DS-message (s/keys :req-un [::message-type ::interview-objective ::DS]))
 (s/def ::message-type #(= % :DS-INSTRUCTIONS))
@@ -15,17 +15,17 @@
 (s/def ::comment string?)
 
 (s/def ::DS (s/keys :req-un [::scheduling-challenges ::one-more-thing ::product-or-service-name]
-                      :opt-un [::msg-id ::DS-ref]))
+                    :opt-un [::msg-id ::DS-ref]))
 (s/def ::scheduling-challenges (s/or :normal :scheduling-challenges/val :annotated ::annotated-scheduling-challenges))
 (s/def :scheduling-challenges/val (s/coll-of string? :kind vector?))
 (s/def ::annotated-scheduling-challenges (s/keys :req-un [:scheduling-challenges/val ::comment]))
 
 (s/def ::one-more-thing (s/or :normal :one-more-thing/val :annotated ::annotated-one-more-thing))
-(s/def :one-more-thing/val  string?)
+(s/def :one-more-thing/val string?)
 (s/def ::annotated-one-more-thing (s/keys :req-un [:one-more-thing/val ::comment]))
 
 (s/def ::product-or-service-name (s/or :normal :product-or-service-name/val :annotated ::annotated-product-or-service-name))
-(s/def :product-or-service-name/val  string?)
+(s/def :product-or-service-name/val string?)
 (s/def ::annotated-product-or-service-name (s/keys :req-un [:product-or-service-name/val ::comment]))
 
 (def ^:diag diag (atom nil))
@@ -48,57 +48,56 @@
     "Completing the DS (responding with a complete DATA-STRUCTURE-REFINEMENT message) may require more than just that one question, however.\n"
     "Examine the DS to determine what other questions you may wish to ask.\n")
    :DS {:DS-id :process/warm-up-with-challenges
-          :scheduling-challenges
-          {:comment
-           (str "The value here should be an enumeration of any of the 15 keywords provided below that characterize the kinds of problems they face.\n"
-                "DO NOT ask questions specifically about these.\n"
-                "Instead, use the responses you got back from determining 'principal-problem-type', 'continuous?' and 'cyclical?' to determine the value of this property.\n"
-                "The reason that we ask that you do not ask specifically about these is that we do not want to 'put words in their mouthes'.\n"
-                "We want to know what is on their mind without prompting them with suggestions.\n"
-                "\n"
-                "Here are the 15 keywords you can use, and their definitions:\n"
-                "\n"
-                "  1) raw-material-uncertainty : They sometimes don't have the raw material they need to make what they want to make.\n"
-                "  2) demand-uncertainty : They are uncertain what to make because they are uncertain what customers need.\n"
-                "  3) delivery-schedules : They are having problems meeting delivery promise dates.\n"
-                "  4) variation-in-demand : They have slow periods and very busy periods. This is often the case, for example, when demand has seasonality.\n"
-                "  5) planned-maintenance : They need to accommodate equipment maintenance schedules in their production schedules.\n"
-                "  6) resource-assignment : They need to reserve several resources for simultaneous use.\n"
-                "  7) equipment-changeover : The time it takes to change equipment setting and tooling is considerable.\n"
-                "  8) equipment-availability : They struggle with equipment breakdowns.\n"
-                "  9) equipment-utilization : They have expensive equipment that they would like to be able to use more.\n"
-                "  10) worker-availability : They struggle with shortages of workers.\n"
-                "  11) skilled-worker-availability : This is a specific subtype of 'worker-availability' where they suggest that matching worker skills and/or "
-                "certification to the process is the challenge.\n"
-                "  12) bottleneck-processes : The pace of their production is throttled by just a few processes.\n"
-                "  13) process-variation : They have many different processes for making roughly the same class of products.\n"
-                "  14) product-variation : They have many different products to make.\n"
-                "  15) meeting-KPIs : They mention key performance indicators (KPIs) or difficulty performing to them.\n"
-                "\n"
-                "Suppose they answered the warm-up question with the following:\n"
+        :scheduling-challenges
+        {:comment
+         (str "The value here should be an enumeration of any of the 15 keywords provided below that characterize the kinds of problems they face.\n"
+              "DO NOT ask questions specifically about these.\n"
+              "Instead, use the responses you got back from determining 'principal-problem-type', 'continuous?' and 'cyclical?' to determine the value of this property.\n"
+              "The reason that we ask that you do not ask specifically about these is that we do not want to 'put words in their mouthes'.\n"
+              "We want to know what is on their mind without prompting them with suggestions.\n"
+              "\n"
+              "Here are the 15 keywords you can use, and their definitions:\n"
+              "\n"
+              "  1) raw-material-uncertainty : They sometimes don't have the raw material they need to make what they want to make.\n"
+              "  2) demand-uncertainty : They are uncertain what to make because they are uncertain what customers need.\n"
+              "  3) delivery-schedules : They are having problems meeting delivery promise dates.\n"
+              "  4) variation-in-demand : They have slow periods and very busy periods. This is often the case, for example, when demand has seasonality.\n"
+              "  5) planned-maintenance : They need to accommodate equipment maintenance schedules in their production schedules.\n"
+              "  6) resource-assignment : They need to reserve several resources for simultaneous use.\n"
+              "  7) equipment-changeover : The time it takes to change equipment setting and tooling is considerable.\n"
+              "  8) equipment-availability : They struggle with equipment breakdowns.\n"
+              "  9) equipment-utilization : They have expensive equipment that they would like to be able to use more.\n"
+              "  10) worker-availability : They struggle with shortages of workers.\n"
+              "  11) skilled-worker-availability : This is a specific subtype of 'worker-availability' where they suggest that matching worker skills and/or "
+              "certification to the process is the challenge.\n"
+              "  12) bottleneck-processes : The pace of their production is throttled by just a few processes.\n"
+              "  13) process-variation : They have many different processes for making roughly the same class of products.\n"
+              "  14) product-variation : They have many different products to make.\n"
+              "  15) meeting-KPIs : They mention key performance indicators (KPIs) or difficulty performing to them.\n"
+              "\n"
+              "Suppose they answered the warm-up question with the following:\n"
 
-                "    'We primarily produce various types of plate glass, including clear, tinted, and tempered glass, used in construction, "
-                "     automotive, and architectural applications. Our main scheduling challenge is efficiently coordinating production runs to "
-                "     match supply with fluctuating demand, minimize downtime during equipment changeovers for different glass types, and manage "
-                "     the lead times associated with raw material sourcing and delivery. Additionally, we must balance production with the availability "
-                "     of skilled labor and maintenance schedules to ensure optimal use of resources.'\n"
-                "\n"
-                "Then a reasonable response to for scheduling challenges would be\n"
-                "  [\"process-variation\", \"demand-uncertainty\", \"equipment-changeover\", \"skilled-worker-availability\", \"planned-maintenance\", \"product-variation\"].\n")
-           :val
-           ["process-variation", "demand-uncertainty", "equipment-changeover", "skilled-worker-availability", "planned-maintenance", "product-variation"]}
+              "    'We primarily produce various types of plate glass, including clear, tinted, and tempered glass, used in construction, "
+              "     automotive, and architectural applications. Our main scheduling challenge is efficiently coordinating production runs to "
+              "     match supply with fluctuating demand, minimize downtime during equipment changeovers for different glass types, and manage "
+              "     the lead times associated with raw material sourcing and delivery. Additionally, we must balance production with the availability "
+              "     of skilled labor and maintenance schedules to ensure optimal use of resources.'\n"
+              "\n"
+              "Then a reasonable response to for scheduling challenges would be\n"
+              "  [\"process-variation\", \"demand-uncertainty\", \"equipment-changeover\", \"skilled-worker-availability\", \"planned-maintenance\", \"product-variation\"].\n")
+         :val
+         ["process-variation", "demand-uncertainty", "equipment-changeover", "skilled-worker-availability", "planned-maintenance", "product-variation"]}
 
-          :one-more-thing
-          {:comment
-           (str "This is an opportunity to make one more observation (beyond those in 'scheduling-challenges') about their challenges.\n"
-                "Again, like 'scheduling-challenges', formulate your value for this property without asking additional questions.\n"
-                "Your response should be a single sentence.")
-           :val "They are probably talking about scheduling production on multiple lines."}
+        :one-more-thing
+        {:comment
+         (str "This is an opportunity to make one more observation (beyond those in 'scheduling-challenges') about their challenges.\n"
+              "Again, like 'scheduling-challenges', formulate your value for this property without asking additional questions.\n"
+              "Your response should be a single sentence.")
+         :val "They are probably talking about scheduling production on multiple lines."}
 
-          :product-or-service-name
-          {:comment "Based only on the interviewees' response to prior questions, provide a name for the product they produce or service they deliver."
-           :val "plate glass"}}})
-
+        :product-or-service-name
+        {:comment "Based only on the interviewees' response to prior questions, provide a name for the product they produce or service they deliver."
+         :val "plate glass"}}})
 
 ;;; See if it compiles.
 (when-not (s/valid? :warm-up-with-challenges/DS-message warm-up-with-challenges)
@@ -106,6 +105,12 @@
 
 ;;; ------------------------------- checking for completeness ---------------
 ;;; Collect and combine :process/warm-up-with-challenges ds refinements, favoring recent over earlier versions.
+
+(defmethod ds-valid? :process/warm-up-with-challenges
+  [tag obj]
+  (or (s/valid? ::DS obj)
+      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
+
 (defn completeness-test [_ds] true)
 
 (defmethod combine-ds! :process/warm-up-with-challenges
@@ -114,7 +119,8 @@
                     (sort-by :msg-id)
                     (reduce (fn [r m] (merge r m)) {})
                     dsu/strip-annotations)]
-    (pdb/put-ASCR! pid tag merged)))
+    (pdb/put-ASCR! pid tag merged)
+    merged)) ;; Return merged, not the TxReport from put-ASCR!
 
 (defmethod ds-complete? :process/warm-up-with-challenges
   [tag pid]
@@ -122,7 +128,7 @@
         complete? (completeness-test ascr)]
     (alog! (cl-format nil "{:log-comment \"This is the ASCR for ~A  (complete? =  ~A):~%~S\"}"
                       tag complete? (with-out-str (pprint ascr)))
-               {:console? true #_#_:elide-console 130})
+           {:console? true #_#_:elide-console 130})
     complete?))
 
 ;;; (warm/init-warm-up-with-challenges)

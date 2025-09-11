@@ -6,8 +6,7 @@
    [sched-mcp.llm :as llm]
    [sched-mcp.sutil :as sutil :refer [connect-atm]]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.util :as util :refer [log!]]
-   [taoensso.telemere :as tel]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 ;;; System instruction components
 
@@ -84,51 +83,7 @@
                  :answer answer
                  :timestamp (util/now)})))
 
-(defn persist-message!
-  "Persist a message to the project database"
-  [project-id conversation-id message-data]
-  (when-let [conn (connect-atm (keyword project-id))]
-    (let [message-id (keyword (str "msg-" (System/currentTimeMillis) "-" (rand-int 1000)))
-          tx-data [(merge {:db/id -1
-                           :message/id message-id
-                           :message/timestamp (util/now)}
-                          message-data)]]
-      (try
-        (d/transact conn tx-data)
-        (log! :info (str "Persisted message " message-id " for " project-id))
-        message-id
-        (catch Exception e
-          (log! :error (str "Failed to persist message: " (.getMessage e)))
-          nil)))))
-
-(defn store-surrogate-exchange!
-  "Store both question and answer in the database"
-  [project-id conversation-id question answer]
-  ;; Store the question (from system)
-  (persist-message! project-id conversation-id
-                    {:message/from :system
-                     :message/type :question
-                     :message/content question})
-
-  ;; Store the answer (from surrogate)
-  (persist-message! project-id conversation-id
-                    {:message/from :surrogate
-                     :message/type :answer
-                     :message/content answer}))
-
 ;;; Response generation
-
-(defn build-conversation-context
-  "Build context string from conversation history"
-  [session]
-  (if (empty? (:conversation-history session))
-    "This is the beginning of our conversation."
-    (str "Previous conversation:\n"
-         (str/join "\n"
-                   (map #(str "Q: " (:question %)
-                              "\nA: " (:answer %)
-                              "\n")
-                        (take-last 5 (:conversation-history session)))))))
 
 (defn generate-expert-response
   "Generate a response from the surrogate expert"
@@ -136,7 +91,7 @@
   (if-let [session @current-expert-session]
     (when (= (:project-id session) project-id)
       (let [persona (:expert-persona session)
-            context (build-conversation-context session)
+            context "Responding to question."
             system-prompt (system-instruction (:domain persona) (:company-name persona))
 
             user-prompt (str context "\n\n"
@@ -151,9 +106,8 @@
         ;; Update session history
         (update-session-history project-id question response)
 
-        ;; Store in database if we have a conversation ID
-        (when-let [conversation-id (:conversation-id session)]
-          (store-surrogate-exchange! project-id conversation-id question response))
+        ;; Message persistence should be handled by the interviewer tools
+        ;; (The interviewer will store both question and answer)
 
         ;; Return response with orange color indicator
         {:response response
@@ -202,13 +156,15 @@
 (defn surrogate-answer-question
   "Get an answer from the surrogate expert"
   [{:keys [project-id question]}]
-  (generate-expert-response project-id question))
+  ;; Ensure project-id is a keyword for comparison with session
+  (generate-expert-response (keyword project-id) question))
 
 (defn get-surrogate-session
   "Get the current session if it matches the project-id"
   [project-id]
   (when-let [session @current-expert-session]
-    (when (= (:project-id session) project-id)
+    ;; Ensure project-id is a keyword for comparison
+    (when (= (:project-id session) (keyword project-id))
       session)))
 
 (defn get-conversation-history
@@ -220,7 +176,7 @@
                           [?e :message/from ?from]
                           [?e :message/type ?type]
                           [?e :message/content ?content]
-                          [?e :message/timestamp ?timestamp]]
+                          [?e :message/time ?timestamp]]
                         @conn)]
       (->> messages
            (sort-by #(nth % 3)) ; Sort by timestamp

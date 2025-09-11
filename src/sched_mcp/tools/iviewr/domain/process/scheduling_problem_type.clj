@@ -1,13 +1,13 @@
 (ns sched-mcp.iviewr.domain.process.scheduling-problem-type
-  "Define a EADS to determine the scheduling problem type."
+  "Define a discovery schema to determine the scheduling problem type."
   (:require
-   [clojure.pprint                 :refer [cl-format pprint]]
-   [clojure.spec.alpha             :as s]
-   [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? combine-ds!]]
-   [sched-mcp.project-db           :as pdb]
-   [sched-mcp.system-db            :as sdb]
-   [sched-mcp.util                 :as util :refer [alog!]]))
+   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.spec.alpha :as s]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? ds-valid? combine-ds!]]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.util :as util :refer [alog!]]))
 
 ;;; ToDo: Because we use a central spec registry, the specs defined with short namespaces (e.g. :problem-type/val) might collide with specs from other domains.
 ;;;       The best solution might be not to use a central repository. These things won't be needed outside this file.
@@ -20,7 +20,7 @@
 (s/def ::comment string?)
 
 (s/def ::DS (s/keys :req-un [::principal-problem-type ::problem-components ::continuous? ::cyclical?]
-                      :opt-un [::msg-id ::DS-ref ::DS-id])) ; ToDo: DS-id should never be in here (as a matter of style).
+                    :opt-un [::msg-id ::DS-ref ::DS-id])) ; ToDo: DS-id should never be in here (as a matter of style).
 (s/def ::DS-id #(= % :process/scheduling-problem-type))
 
 ;;; We use the 'trick' that :<some-property>/val can be used to signify a non-namespaced attribute 'val' and a reference to a spec for value of 'val'.
@@ -55,40 +55,45 @@
     "   2) make some basic observations about ancillary aspects of scheduling.\n")
    :DS {:DS-id :process/scheduling-problem-type
 
-          :principal-problem-type
-          {:val :FLOW-SHOP-SCHEDULING-PROBLEM ; On receiving this from interviewers, we'll make it a keyword using ru/ds2clj.
-           :comment
-           (str "The value here should be the problem-type that best characterizes the problem and production system architecture.\n"
-                "If the industrial domain is well-known, use your background knowledge to help make this choice.\n"
-                "The  value you provide here must be one of the following:\n"
-                "\n"
-                "   1) FLOW-SHOP-SCHEDULING-PROBLEM: the problem of scheduling jobs where all jobs execute the same tasks in the same order, excepting possibly skipping some tasks in that order for certain product types.\n"
-                "      Choose flow shop whenever the process suggests that production resources are laid out to facilitate movement to the next resource.\n"
-                "      This is a very common arrangment in production.\n"
-                "   2) TIMETABLING-PROBLEM: the problem of assigning collections of resources to event time slots, ensuring that all the resources required for each event are available in its time slot.\n"
-                "   3) PROJECT-SCHEDULING-PROBLEM:  the problem of defining start and finish dates to all activities, deliverables, and milestones within an undertaking.\n"
-                "   4) JOB-SHOP-SCHEDULING-PROBLEM: the problem of scheduling jobs where the order in which the jobs visit machines or workstations may vary as determined by the job type.\n"
-                "   5) SINGLE-MACHINE-SCHEDULING-PROBLEM: the problem of choosing the sequence by which each of several jobs use the same resource or set of resources.")}
+        :principal-problem-type
+        {:val :FLOW-SHOP-SCHEDULING-PROBLEM ; On receiving this from interviewers, we'll make it a keyword using ru/ds2clj.
+         :comment
+         (str "The value here should be the problem-type that best characterizes the problem and production system architecture.\n"
+              "If the industrial domain is well-known, use your background knowledge to help make this choice.\n"
+              "The  value you provide here must be one of the following:\n"
+              "\n"
+              "   1) FLOW-SHOP-SCHEDULING-PROBLEM: the problem of scheduling jobs where all jobs execute the same tasks in the same order, excepting possibly skipping some tasks in that order for certain product types.\n"
+              "      Choose flow shop whenever the process suggests that production resources are laid out to facilitate movement to the next resource.\n"
+              "      This is a very common arrangment in production.\n"
+              "   2) TIMETABLING-PROBLEM: the problem of assigning collections of resources to event time slots, ensuring that all the resources required for each event are available in its time slot.\n"
+              "   3) PROJECT-SCHEDULING-PROBLEM:  the problem of defining start and finish dates to all activities, deliverables, and milestones within an undertaking.\n"
+              "   4) JOB-SHOP-SCHEDULING-PROBLEM: the problem of scheduling jobs where the order in which the jobs visit machines or workstations may vary as determined by the job type.\n"
+              "   5) SINGLE-MACHINE-SCHEDULING-PROBLEM: the problem of choosing the sequence by which each of several jobs use the same resource or set of resources.")}
 
-          :problem-components
-          {:val [:FLOW-SHOP-SCHEDULING-PROBLEM :JOB-SHOP-SCHEDULING-PROBLEM]
-           :comment
-           (str "This should be a list of problem-type values that include all the problem types that seem relevant given your conversation so far.\n"
-                "For example, whereas in this example the principal-problem-type is a flow-shop, conversation suggests that work might queue for a task the presents a timetabling problem.")}
-          :continuous?
-          {:val false,
-           :comment
-           (str "continuous? refers to whether or not, in the principle-problem-type, product flows continuously from one process to the next, as it does in, for example, production of many petroleum products.\n"
-                "This might be apparent from the answers that determined the value of problem-type. If not, then you can ask.")},
-          :cyclical?
-          {:val false,
-           :comment
-           (str "cyclical? refers to whether or not they seek a system that creates schedules that can be repeated in a pattern.\n"
-                "For example, if the made the same collection of products in the same order each week, cyclical? would be true.")}}})
+        :problem-components
+        {:val [:FLOW-SHOP-SCHEDULING-PROBLEM :JOB-SHOP-SCHEDULING-PROBLEM]
+         :comment
+         (str "This should be a list of problem-type values that include all the problem types that seem relevant given your conversation so far.\n"
+              "For example, whereas in this example the principal-problem-type is a flow-shop, conversation suggests that work might queue for a task the presents a timetabling problem.")}
+        :continuous?
+        {:val false,
+         :comment
+         (str "continuous? refers to whether or not, in the principle-problem-type, product flows continuously from one process to the next, as it does in, for example, production of many petroleum products.\n"
+              "This might be apparent from the answers that determined the value of problem-type. If not, then you can ask.")},
+        :cyclical?
+        {:val false,
+         :comment
+         (str "cyclical? refers to whether or not they seek a system that creates schedules that can be repeated in a pattern.\n"
+              "For example, if the made the same collection of products in the same order each week, cyclical? would be true.")}}})
 
 ;;; See if it compiles.
 (when-not (s/valid? :scheduling-problem-type/DS-message scheduling-problem-type)
   (throw (ex-info "Invalid DS (scheduling problem type)" {})))
+
+(defmethod ds-valid? :process/scheduling-problem-type
+  [tag obj]
+  (or (s/valid? ::DS obj)
+      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 ;;; ------------------------------- checking for completeness ---------------
 ;;; Collect and combine :process/scheduling-problem-type ds refinements, favoring recent over earlier versions.
@@ -101,7 +106,8 @@
         merged (-> merged
                    (update :principal-problem-type keyword)
                    (update :problem-components (fn [pcomps] (mapv #(keyword %) pcomps))))]
-    (pdb/put-ASCR! pid tag merged)))
+    (pdb/put-ASCR! pid tag merged)
+    merged))
 
 (defn completeness-test [_ds] true)
 

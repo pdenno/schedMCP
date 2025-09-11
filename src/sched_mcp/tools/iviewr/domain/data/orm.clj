@@ -1,5 +1,5 @@
 (ns sched-mcp.tools.iviewr.domain.data.orm
-  "This provides EADS for an interview about data interviewees use in performing their work, the fundamental characteristics of those data.
+  "This provides Discovery Schema for an interview about data interviewees use in performing their work, the fundamental characteristics of those data.
    The interview creates example data from ORM fact types it formulates rather than upload their spreadsheets and talking about them.
    We work this way because we know that many people prioritize visual appeal over logical organization when using tools like Excel.
    Therefore, our plan is to use data to demonstrate the operation of the scheduling systems first, and worry about mapping their
