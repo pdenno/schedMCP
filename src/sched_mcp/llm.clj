@@ -169,8 +169,11 @@
   [agent-key file-path]
   (if (.exists (clojure.java.io/file file-path))
     (let [content (slurp file-path)
-          ;; Extract content after the frontmatter
-          prompt (second (str/split content #"---\n" 3))]
+          ;; Extract content after the frontmatter - it's the THIRD part, not the second
+          parts (str/split content #"---\n" 3)
+          prompt (if (>= (count parts) 3)
+                   (nth parts 2) ; Get the third part (index 2)
+                   content)] ; Fallback if no frontmatter
       (swap! agent-prompts assoc agent-key prompt)
       (log! :info (str "Loaded agent prompt for " agent-key)))
     (log! :warn (str "Agent prompt file not found: " file-path))))
