@@ -94,23 +94,45 @@ We simplified from multiple concurrent surrogate sessions to a single active ses
 - Changed `expert-sessions-atom` to `current-expert-session`
 - Dramatically simplified the mental model
 
-### 3. "Phase 2.5" Tasks **WE ARE HERE CURRENTLY**
-Phase 2.5 involves testing entire cycles of the following 6 tasks:
-1. Orchestrator persona selecting a Discovery Schema (DS),
-2. Interviewer persona analyzing the (DS) and existing conversation to formulate a question,
-3. Surrogate expert persona responding to the question,
-4. Interviewer persona analyzing the surrogate interviewee's response and producing a Schema-Conforming Response (SCR),
-5. Orchestrator using the DS, past ASCR (if any) and SCR to produce an updated ASCR using the `ds-combine!` method, and
-6. All of the above being reflected in the project DB.
+### 3. "Phase 2.5" Tasks ✓ COMPLETED (September 13, 2025)
 
-Currently, much of this is not working very well. For example,
-- SCR are not stored; they should be in the interview response message
-- ASCR is not stored; instead we have, for example `:ASCRs [#:ascr{:budget-left 1.0, :id :process/warm-up-with-challenges, :str "datahike.db.TxReport@3c5ddfb6"}],`
-- `:conversation-intro` messages are getting in the way. I'll fix this before we restart.
-- I updated project_db.clj to use :message/pursuing-DS, and remove the conversation intros.
-- We will start with testing with a surrogate expert, namely, craft beer
+Phase 2.5 involved testing entire cycles of the following 6 tasks:
+1. ✅ Orchestrator persona selecting a Discovery Schema (DS)
+2. ✅ Interviewer persona analyzing the DS and existing conversation to formulate a question
+3. ✅ Surrogate expert persona responding to the question
+4. ✅ Interviewer persona analyzing the surrogate interviewee's response and producing a Schema-Conforming Response (SCR)
+5. ✅ Orchestrator using the DS, past ASCR (if any) and SCR to produce an updated ASCR using the `ds-combine!` method
+6. ✅ All of the above being reflected in the project DB
 
-### 4. "Phase 2.6" Tasks
+**Status: COMPLETED**
+- ✅ SCRs are now properly stored with messages using `pdb/put-msg-SCR!`
+- ✅ ASCRs are correctly stored as Clojure data structures (not TxReports)
+- ✅ Removed problematic `:conversation-intro` messages
+- ✅ Added `:message/pursuing-DS` to track which DS a message relates to
+- ✅ Implemented `base-iviewr-instructions.md` prompt system that:
+  - Properly separates DS examples from actual domain
+  - Uses consistent `{question-to-ask: "..."}` format for questions
+  - Returns SCRs directly as the response
+  - Handles the comment/val annotation structure correctly
+- ✅ Successfully tested full cycle with craft beer surrogate expert
+
+The system now correctly:
+- Formulates domain-appropriate questions (no more plate glass confusion)
+- Interprets responses into proper SCRs
+- Stores both SCRs and ASCRs in the database
+- Detects DS completion and updates status accordingly
+
+### 4. Phase 2.5.5 Tasks: ds-combine!
+
+- The dsu/ds-combine! methods are poorly designed. They should take only a SCR and an ASCR and it should return an ASCR.
+   There should be no actions on the DBs to make this happen. We'll fix this first. (We'll call it ds-combine (no exclamation mark) since it won't touch the DB.)
+- More comprehensively, I think there is occassionally the need for an LLM-based agent to perform the combination, if the SCR's come back from the interviewer
+  messed, for example. The problem is it isn't clear how we should manage this. We can easily define a dsu/ds-valid? method on each DS; it returns true if
+  the SCR or ASCR is structurally valid. I suppose that is part of the solution.
+- The question: How would we best try the deterministic code dsu/ds-combine and only if dsu/ds-valid? returns false call the agent?
+  Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
+
+### 5. "Phase 2.6" Tasks
 - Demonstrate Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen
 
 ## Post-2.6 Architecture Discussion
@@ -302,6 +324,7 @@ Claude: [calls process_table_response]
 - ✓ Phase 2.5: Core DS Flow (SCR → ASCR pipeline)
 - ✓ Tool naming with agent prefixes
 - ✓ Single surrogate session simplification
+- ✓ Generic interviewer prompt system (`base-iviewr-instructions.md`)
 
 ### Week 1: Table Infrastructure
 - [ ] Create table-comm namespace

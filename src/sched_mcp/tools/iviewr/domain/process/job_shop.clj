@@ -5,15 +5,15 @@
 
    Note: We don't load this code at system startup. When you compile it, it writes the EADS to resources/EADS/job-shop.txt"
   (:require
-   [clojure.pprint                 :refer [cl-format pprint]]
-   [clojure.set                    :as set]
-   [clojure.spec.alpha             :as s]
-   [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? ds-valid? combine-ds!]]
-   [sched-mcp.project-db           :as pdb]
-   [sched-mcp.sutil                :as sutil :refer [clj2json-pretty]]
-   [sched-mcp.system-db            :as sdb]
-   [sched-mcp.util                 :as util :refer [log! alog!]]))
+   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.set :as set]
+   [clojure.spec.alpha :as s]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? ds-valid?]]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.sutil :as sutil :refer [clj2json-pretty]]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.util :as util :refer [log! alog!]]))
 
 (s/def :job-shop/DS-message (s/keys :req-un [::message-type ::interview-objective ::interviewer-agent ::DS]))
 (s/def ::message-type #(= % :DS-INSTRUCTIONS))
@@ -23,7 +23,7 @@
 (s/def ::comment string?) ; About annotations
 
 (s/def ::DS (s/keys :req-un [::classifiable-jobs?]
-                      :opt-un [::msg-id ::DS-ref ::DS-id]))
+                    :opt-un [::msg-id ::DS-ref ::DS-id]))
 (s/def ::DS-id #(= % :process/job-shop))
 (s/def ::classifiable-jobs? (s/or :normal :classifiable-jobs?/val :annotated ::annotated-classifiable-jobs?))
 (s/def :classifiable-jobs?/val boolean?)

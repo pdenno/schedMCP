@@ -1,36 +1,43 @@
 [
 #:project{:ASCRs
-          [#:ascr{:budget-left 1.0,
+          [#:ascr{:budget-left 0.95,
                   :completed? true,
                   :id :process/warm-up-with-challenges,
-                  :str "{:DS-ref :process/warm-up-with-challenges}"}],
+                  :str
+                  "{:scheduling-challenges [\"bottleneck-processes\" \"resource-assignment\" \"equipment-availability\" \"equipment-utilization\" \"raw-material-uncertainty\"], :one-more-thing \"Managing fermentation times for different beer types is a complex task that requires careful coordination.\", :product-or-service-name \"craft beer\", :DS-ref :process/warm-up-with-challenges}"}],
           :active-conversation :process,
           :claims
           [#:claim{:string "(project-id :sur-craft-beer)"}
-           #:claim{:string "(project-name :sur-craft-beer \"Surrogate craft beer Interview\")"}],
+           #:claim{:string
+                   "(project-name :sur-craft-beer \"Surrogate craft-beer Interview\")"}],
           :conversations
-          [#:conversation{:active-DS-id :process/warm-up-with-challenges,
+          [#:conversation{:active-DS-id
+                          :process/warm-up-with-challenges,
                           :id :process,
                           :messages
                           [#:message{:content
-                                     "Can you describe the main steps involved in your manufacturing process from start to finish?",
+                                     "What are the products you make or the services you provide, and what is the scheduling challenge involving them? Please describe in a few sentences.",
                                      :from :system,
                                      :id 1,
-                                     :pursuing-DS :process/warm-up-with-challenges,
-                                     :time #inst "2025-09-11T18:32:38.426-00:00"}
+                                     :pursuing-DS
+                                     :process/warm-up-with-challenges,
+                                     :time
+                                     #inst "2025-09-13T18:39:17.136-00:00"}
                            #:message{:SCR
-                                     "{:manufacturing_process [{:step \"mashing\", :description \"Combine malted grains with hot water to create a mash.\", :duration \"90 minutes\"} {:step \"lautering\", :description \"Separate the wort from the grains.\", :duration nil} {:step \"boiling\", :description \"Boil the wort and add hops for bitterness and aroma.\", :duration \"60 minutes\"} {:step \"cooling\", :description \"Rapidly cool the wort and transfer to fermentation tanks.\", :duration nil} {:step \"fermentation\", :description \"Yeast is added to convert sugars into alcohol.\", :duration \"1 to 2 weeks\"} {:step \"conditioning\", :description \"Enhance flavor and clarity.\", :duration \"1 week\"} {:step \"packaging\", :description \"Package the beer in kegs, bottles, or cans for distribution.\", :duration nil}], :quality_control \"Strict quality control to ensure beer meets standards.\"}",
+                                     "{:scheduling-challenges [\"bottleneck-processes\" \"resource-assignment\" \"equipment-availability\" \"equipment-utilization\" \"raw-material-uncertainty\"], :one-more-thing \"Managing fermentation times for different beer types is a complex task that requires careful coordination.\", :product-or-service-name \"craft beer\"}",
                                      :content
-                                     "Certainly! At Acme Craft Beer Company, our manufacturing process involves several key steps. First, we begin with mashing, which takes about 90 minutes. In this step, we combine malted grains with hot water to create a mash. Next, we move to lautering, where we separate the wort from the grains. After that, we boil the wort for roughly 60 minutes, during which we add hops for bitterness and aroma. \n\nFollowing the boil, we rapidly cool the wort and transfer it to fermentation tanks. Fermentation usually lasts between 1 to 2 weeks, depending on the beer style, during which yeast is added to convert sugars into alcohol. Once fermentation is complete, we condition the beer for another week to enhance its flavor and clarity. Finally, we package the beer either in kegs, bottles, or cans for distribution. Throughout the process, we maintain strict quality control to ensure our beer meets our standards.",
+                                     "🟠 Expert Response:\nAt Acme Craft-beer Company, we specialize in producing a variety of craft beers, including IPAs, lagers, stouts, and seasonal brews. The main scheduling challenge involves coordinating the fermentation times for different beer types, as they vary from one to four weeks. Additionally, managing the availability of fermentation tanks, coordinating with ingredient supply chains, and aligning production with packaging schedules are critical aspects that require careful attention to avoid bottlenecks and delays.",
                                      :from :human,
                                      :id 2,
-                                     :pursuing-DS :process/warm-up-with-challenges,
-                                     :time #inst "2025-09-11T18:32:45.935-00:00"}],
+                                     :pursuing-DS
+                                     :process/warm-up-with-challenges,
+                                     :time
+                                     #inst "2025-09-13T18:40:01.327-00:00"}],
                           :status :in-progress}
            #:conversation{:id :data, :status :not-started}
            #:conversation{:id :resources, :status :not-started}
            #:conversation{:id :optimality, :status :not-started}],
           :execution-status :running,
           :id :sur-craft-beer,
-          :name "Surrogate craft beer Interview"}
+          :name "Surrogate craft-beer Interview"}
 ]

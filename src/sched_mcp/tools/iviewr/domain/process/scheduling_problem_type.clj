@@ -4,7 +4,7 @@
    [clojure.pprint :refer [cl-format pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? ds-valid? combine-ds!]]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete?]]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [alog!]]))
@@ -95,30 +95,29 @@
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
+(defmethod dsu/ds-combine :process/scheduling-problem-type
+  [_tag scr ascr]
+  ;; Combine a new SCR with an existing ASCR for scheduling-problem-type.
+  ;; This is a merge strategy with special handling for keyword conversions.
+  (let [stripped-scr (dsu/strip-annotations scr)
+        ;; Convert string values to keywords as needed
+        processed-scr (cond-> stripped-scr
+                        (:principal-problem-type stripped-scr)
+                        (update :principal-problem-type keyword)
+                        (:problem-components stripped-scr)
+                        (update :problem-components (fn [pcomps] (mapv #(keyword %) pcomps))))]
+    (merge ascr processed-scr)))
+
 ;;; ------------------------------- checking for completeness ---------------
 ;;; Collect and combine :process/scheduling-problem-type ds refinements, favoring recent over earlier versions.
-(defmethod combine-ds! :process/scheduling-problem-type
-  [tag pid]
-  (let [merged (->> (pdb/get-msg-SCR pid tag)
-                    (sort-by :msg-id)
-                    (reduce (fn [r m] (merge r m)) {})
-                    dsu/strip-annotations)
-        merged (-> merged
-                   (update :principal-problem-type keyword)
-                   (update :problem-components (fn [pcomps] (mapv #(keyword %) pcomps))))]
-    (pdb/put-ASCR! pid tag merged)
-    merged))
 
 (defn completeness-test [_ds] true)
 
-(defmethod ds-complete? :process/scheduling-problem-type
-  [tag pid]
-  (let [ds (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
-        complete? (completeness-test ds)]
-    (alog! (cl-format nil "{:log-comment \"This is the ASCR for ~A  (complete? =  ~A):~%~S\"}"
-                      tag complete? (with-out-str (pprint ds)))
-           {:console? true :elide-console 130})
-    complete?))
+(defmethod dsu/ds-complete? :process/scheduling-problem-type
+  [_tag ascr]
+  ;; Check if scheduling-problem-type ASCR is complete
+  (let [stripped-ascr (dsu/strip-annotations ascr)]
+    (completeness-test stripped-ascr)))
 
 ;;; (sptype/init-scheduling-problem-type)
 ;;; ------------------------------- starting and stopping ---------------

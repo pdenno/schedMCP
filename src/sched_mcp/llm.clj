@@ -187,36 +187,34 @@
 ;;; Discovery Schema Prompt Templates
 
 (defn ds-question-prompt
-  "Create a prompt for generating questions from DS + ASCR"
-  [{:keys [ds ascr _message-history budget-remaining]}]
+  "Create a prompt for generating questions from DS + ASCR according to base-iviewr-instructions"
+  [{:keys [ds ascr message-history budget-remaining interview-objective]}]
   (build-prompt
-   :system (get-agent-prompt :process-interviewer)
-   :context (str "Discovery Schema:\n"
-                 ds ; ds is already a JSON string
-                 "\n\nCurrent ASCR:\n"
-                 (json/write-str ascr :indent true)
-                 "\n\nBudget remaining: " budget-remaining " questions")
-   :user "Generate the next interview question to gather missing information."
-   :format "Return JSON with fields:
-            - question: The natural language question
-            - help: Additional context or examples
-            - rationale: Why this question now
-            - targets: Array of DS fields this aims to fill"))
+   :system (get-agent-prompt :generic-interviewer)
+   :user (str "Interview Objective:\n" interview-objective
+              "\n\nTask Input:\n"
+              (json/write-str
+               {:task-type "formulate-question"
+                :conversation-history message-history
+                :discovery-schema ds ; Pass the DS object as is ; ds is already a JSON string, need to parse it
+                :ASCR ascr
+                :budget budget-remaining}
+               :indent true))))
 
 (defn ds-interpret-prompt
-  "Create a prompt for interpreting response into SCR"
-  [{:keys [ds question answer]}]
+  "Create a prompt for interpreting response into SCR according to base-iviewr-instructions"
+  [{:keys [ds question answer message-history ascr budget-remaining interview-objective]}]
   (build-prompt
-   :system "You are an expert at extracting structured data from natural language."
-   :context (str "Discovery Schema structure:\n"
-                 ds) ; ds is already a JSON string
-   :user (str "Question asked: " question
-              "\n\nAnswer received: " answer)
-   :format "Extract a Schema-Conforming Response (SCR) that matches the DS structure.
-            Return JSON with:
-            - scr: Object matching DS field structure
-            - confidence: 0-1 score
-            - ambiguities: Array of unclear points"))
+   :system (get-agent-prompt :generic-interviewer)
+   :user (str "Interview Objective:\n" interview-objective
+              "\n\nTask Input:\n"
+              (json/write-str
+               {:task-type "interpret-response"
+                :conversation-history message-history
+                :discovery-schema ds ; ds is already a JSON string, need to parse it
+                :ASCR ascr
+                :budget budget-remaining}
+               :indent true))))
 
 ;;; Initialization
 
@@ -224,6 +222,8 @@
   "Initialize LLM subsystem"
   []
   ;; Load agent prompts
+  (load-agent-prompt! :generic-interviewer
+                      "resources/agents/base-iviewr-instructions.md")
   (load-agent-prompt! :process-interviewer
                       "resources/agents/process-interviewer-agent.md")
   (load-agent-prompt! :data-interviewer

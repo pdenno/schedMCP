@@ -144,6 +144,11 @@
         _session (init-expert-session (:pid project-result) persona
                                       :conversation-id (:cid project-result))]
 
+;; Add claim that this is a surrogate project
+    (pdb/add-claim! (:pid project-result)
+                    (list 'surrogate (:pid project-result))
+                    {:conversation-id :process})
+
     {:project-id (:pid project-result)
      :conversation-id (name (:cid project-result))
      :expert-id (:expert-id persona)

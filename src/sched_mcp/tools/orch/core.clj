@@ -194,8 +194,8 @@
     (alog! (str "orch_complete_ds " pid " " cid))
     (if-not active-ds
       {:error "No active DS to complete"}
-      (let [;; Get final ASCR
-            ascr (dsu/combine-ds! active-ds pid)]
+      (let [;; Get the current ASCR (which is already up-to-date)
+            ascr (pdb/get-ASCR pid active-ds)]
         ;; Mark ASCR as complete
         (pdb/mark-ASCR-complete! pid active-ds)
         ;; Add to completed DS list for the conversation

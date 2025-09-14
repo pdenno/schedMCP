@@ -73,9 +73,10 @@
           _ (when question-id
               (pdb/update-msg! pid cid mid
                                {:message/answers-question (Long/parseLong (str question-id))}))
-          ;; Check if DS is complete after this response
+;; Check if DS is complete after this response
           ;; (The actual SCR extraction and ASCR update happens in interpret-response)
-          complete? (when ds-id (dsu/ds-complete? ds-id pid))
+          ascr (when ds-id (pdb/get-ASCR pid ds-id))
+          complete? (when (and ds-id ascr) (dsu/ds-complete? ds-id ascr))
           budget-left (when ds-id (pdb/get-questioning-budget-left! pid ds-id))]
       {:success true
        :message-id mid

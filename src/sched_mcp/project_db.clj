@@ -2,6 +2,7 @@
   "Database functions for projects - includes backup/restore for schema migrations"
   (:require
    [clojure.edn :as edn]
+   [clojure.core.unify :as u]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.string :as str]
@@ -620,6 +621,162 @@
   (log! :info (str "Recreating these projects: " (sdb/list-projects)))
   (doseq [pid (sdb/list-projects)]
     (recreate-project-db! pid)))
+
+;; ===== Claims functionality =====
+(defn get-claims
+  "Return the claims (ground propositions) for the argument project.
+   Options:
+     :objects? - if true, return full claim objects with metadata,
+                 otherwise return just the predicate forms as a set."
+  [pid & {:keys [objects?]}]
+  (let [conn @(connect-atm pid)]
+    (if objects?
+      ;; Return full claim objects with metadata
+      (let [eids (d/q '[:find [?eid ...] :where [?eid :claim/string]] conn)]
+        (for [eid eids]
+          (let [{:claim/keys [string conversation-id confidence]}
+                (dp/pull conn '[*] eid)]
+            (cond-> {:claim (edn/read-string string)}
+              conversation-id (assoc :conversation-id conversation-id)
+              confidence (assoc :confidence confidence)))))
+      ;; Return just predicate forms as a set
+      (if-let [facts (d/q '[:find [?s ...]
+                            :where
+                            [_ :project/claims ?pp]
+                            [?pp :claim/string ?s]]
+                          conn)]
+        (-> (mapv edn/read-string facts) set)
+        #{}))))
+
+(defn add-claim!
+  "Add a claim (ground proposition) to the project.
+   claim - a predicate form (list) e.g. '(surrogate :sur-craft-beer)
+   opts - optional map with :conversation-id and/or :confidence
+
+   Example usage:
+     (add-claim! :sur-craft-beer '(surrogate :sur-craft-beer))
+     (add-claim! :my-project '(expert-type :my-project :surrogate) {:conversation-id :process})
+     (add-claim! :my-project '(has-resource :my-project \"drill-press\") {:confidence 1})
+
+   Returns the transaction result."
+  ([pid claim] (add-claim! pid claim {}))
+  ([pid claim {:keys [conversation-id confidence] :as opts}]
+   (assert (list? claim) "Claim must be a list")
+   (let [conn (connect-atm pid)
+         proj-eid (d/q '[:find ?eid . :where [?eid :project/id]] @conn)]
+     (if proj-eid
+       (d/transact conn {:tx-data [{:db/id proj-eid
+                                    :project/claims
+                                    (cond-> {:claim/string (str claim)}
+                                      conversation-id (assoc :claim/conversation-id conversation-id)
+                                      confidence (assoc :claim/confidence confidence))}]})
+       (throw (ex-info "No project entity found" {:pid pid}))))))
+
+(defn claim-exists?
+  "Check if a specific claim exists in the project.
+   predicate can be either a string or a Clojure form.
+
+   Example:
+     (claim-exists? :sur-craft-beer '(surrogate :sur-craft-beer))
+     (claim-exists? :sur-craft-beer \"(surrogate :sur-craft-beer)\")"
+  [pid predicate]
+  (let [claim-str (if (string? predicate) predicate (str predicate))
+        claims (get-claims pid)]
+    (contains? claims (edn/read-string claim-str))))
+
+(defn surrogate-project?
+  "Returns true if the project is using a surrogate expert.
+   Checks for claims like (surrogate <pid>) or (expert-type <pid> :surrogate)."
+  [pid]
+  (let [claims (get-claims pid)]
+    (or (contains? claims (list 'surrogate pid))
+        (contains? claims (list 'expert-type pid :surrogate)))))
+
+(defn unify-claim
+  "Unify a claim pattern against all claims in the project.
+   Returns a vector of non-empty binding maps, or nil if no matches.
+
+   pid - the project ID
+   pattern - a claim form with logic variables, e.g. '(project-name ?pid ?name)
+
+   Example:
+     (unify-claim :sur-craft-beer '(project-name ?pid ?name))
+     => [{?pid :sur-craft-beer, ?name \"Craft Beer Interview\"}]
+
+     (unify-claim :sur-craft-beer '(surrogate ?p))
+     => [{?p :sur-craft-beer}]
+
+     (unify-claim :sur-craft-beer '(expert-type ?p :surrogate))
+     => nil  ; if no such claim exists"
+  [pid pattern]
+  (let [claims (get-claims pid)
+        results (for [claim claims]
+                  (try
+                    (u/unify pattern claim)
+                    (catch Exception _ nil)))]
+    (when-let [bindings (seq (remove nil? results))]
+      (vec bindings))))
+
+(defn find-claims
+  "Find all claims matching a pattern, returning both the claim and bindings.
+   Returns a vector of maps with :claim and :bindings keys.
+
+   Example:
+     (find-claims :sur-craft-beer '(project-name ?pid ?name))
+     => [{:claim '(project-name :sur-craft-beer \"Test\")
+          :bindings {?pid :sur-craft-beer, ?name \"Test\"}}]"
+  [pid pattern]
+  (let [claims (get-claims pid)]
+    (vec (for [claim claims
+               :let [bindings (try (u/unify pattern claim)
+                                   (catch Exception _ nil))]
+               :when bindings]
+           {:claim claim
+            :bindings bindings}))))
+
+(defn query-claims
+  "Query claims using multiple patterns, returning bindings that satisfy all patterns.
+   Patterns can share variables for joins.
+
+   Example:
+     (query-claims [['(project-name ?pid ?name)
+                     '(surrogate ?pid)]]
+                   :sur-craft-beer)
+     => [{?pid :sur-craft-beer, ?name \"Test\"}]"
+  [pid patterns]
+
+  (let [claims (get-claims pid)
+        ;; For each pattern, find all matching claims and their bindings
+        pattern-results (for [pattern patterns]
+                          (for [claim claims
+                                :let [bindings (try (u/unify pattern claim)
+                                                    (catch Exception _ nil))]
+                                :when bindings]
+                            bindings))]
+    ;; Find bindings that work for all patterns (join on shared variables)
+    (when (every? seq pattern-results)
+      (let [first-results (first pattern-results)
+            rest-results (rest pattern-results)]
+        (vec (for [base-bindings first-results
+                   :when (every? (fn [results]
+                                   (some (fn [other-bindings]
+                                           ;; Check if bindings are compatible
+                                           (every? (fn [[var val]]
+                                                     (or (not (contains? other-bindings var))
+                                                         (= val (get other-bindings var))))
+                                                   base-bindings))
+                                         results))
+                                 rest-results)]
+               ;; Merge all compatible bindings
+               (reduce (fn [acc results]
+                         (merge acc (first (filter (fn [other]
+                                                     (every? (fn [[var val]]
+                                                               (or (not (contains? other var))
+                                                                   (= val (get other var))))
+                                                             acc))
+                                                   results))))
+                       base-bindings
+                       rest-results)))))))
 
 ;;; -------------------------- Starting and stopping ------------------------------
 (defn register-project-dbs!

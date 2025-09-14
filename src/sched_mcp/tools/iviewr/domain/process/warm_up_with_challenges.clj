@@ -1,11 +1,11 @@
-(ns sched-mcp.iviewr.domain.process.warm-up-with-challenges
+(ns sched-mcp.tools.iviewr.domain.process.warm-up-with-challenges
   "Define a discovery schema to elicit general information about the scheduling problem the interviewees are interested in solving."
   (:require
    [clojure.pprint :refer [cl-format pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? combine-ds! ds-valid?]]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete?]]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [alog!]]))
 
@@ -113,23 +113,18 @@
 
 (defn completeness-test [_ds] true)
 
-(defmethod combine-ds! :process/warm-up-with-challenges
-  [tag pid]
-  (let [merged (->> (pdb/get-msg-SCR pid tag)
-                    (sort-by :msg-id)
-                    (reduce (fn [r m] (merge r m)) {})
-                    dsu/strip-annotations)]
-    (pdb/put-ASCR! pid tag merged)
-    merged)) ;; Return merged, not the TxReport from put-ASCR!
+(defmethod dsu/ds-combine :process/warm-up-with-challenges
+  [_tag scr ascr]
+  ;; Combine a new SCR with an existing ASCR for warm-up-with-challenges.
+  ;; This is a simple merge strategy - newer values override older ones.
+  (let [stripped-scr (dsu/strip-annotations scr)]
+    (merge ascr stripped-scr)))
 
-(defmethod ds-complete? :process/warm-up-with-challenges
-  [tag pid]
-  (let [ascr (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
-        complete? (completeness-test ascr)]
-    (alog! (cl-format nil "{:log-comment \"This is the ASCR for ~A  (complete? =  ~A):~%~S\"}"
-                      tag complete? (with-out-str (pprint ascr)))
-           {:console? true #_#_:elide-console 130})
-    complete?))
+(defmethod dsu/ds-complete? :process/warm-up-with-challenges
+  [_tag ascr]
+  ;; Check if warm-up-with-challenges ASCR is complete
+  (let [stripped-ascr (dsu/strip-annotations ascr)]
+    (completeness-test stripped-ascr)))
 
 ;;; (warm/init-warm-up-with-challenges)
 ;;; ------------------------------- starting and stopping ---------------

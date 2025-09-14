@@ -3,15 +3,15 @@
        As the case is with flow-shop problems, this structure defines the flow of work through resources.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer."
   (:require
-   [clojure.pprint                 :refer [cl-format pprint]]
-   [clojure.set                    :as set]
-   [clojure.spec.alpha             :as s]
-   [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [combine-ds! ds-complete? ds-valid? graph-semantics-ok?]]
-   [sched-mcp.project-db           :as pdb]
-   [sched-mcp.sutil                :as sutil]
-   [sched-mcp.system-db            :as sdb]
-   [sched-mcp.util                 :as util :refer [alog!]]))
+   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.set :as set]
+   [clojure.spec.alpha :as s]
+   [mount.core :as mount :refer [defstate]]
+   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete? graph-semantics-ok?]]
+   [sched-mcp.project-db :as pdb]
+   [sched-mcp.sutil :as sutil]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.util :as util :refer [alog!]]))
 
 ;;; ToDo: Consider replacing spec with Malli, https://github.com/metosin/malli .
 ;;; ToDo: Someday it might make sense to have an agent with strict response format following these specs.
@@ -26,7 +26,7 @@
 (s/def ::comment string?) ; About annotations
 
 (s/def ::DS (s/keys :req-un [::process-id ::inputs ::outputs ::resources ::subprocesses]
-                      :opt-un [::duration ::msg-id ::DS-ref ::DS-id]))
+                    :opt-un [::duration ::msg-id ::DS-ref ::DS-id]))
 (s/def :flow-shop/graph (s/and graph-semantics-ok? (s/keys :req-un [::inputs ::outputs ::resources ::subprocesses] :opt-un [::duration])))
 (s/def ::DS-id #(= % :process/flow-shop))
 
@@ -47,7 +47,7 @@
 
 (s/def ::quantity (s/or :normal :quantity/val :annotated ::annotated-quantity))
 (s/def :quantity/val (s/or :normal (s/keys :req-un [::units ::value-string]) :annotated ::annotated-quantity))
-(s/def ::units (s/or :normal :units/val  :annotated ::annotated-units))
+(s/def ::units (s/or :normal :units/val :annotated ::annotated-units))
 (s/def ::annotated-quantity (s/keys :req-un [:units/val ::comment]))
 (s/def :units/val string?)
 
@@ -60,7 +60,7 @@
 
 (s/def ::inputs (s/or :normal :inputs/val :annotated ::annotated-inputs))
 (s/def :inputs/val (s/coll-of :input/val :kind vector?))
-(s/def :input/val  (s/or :simple ::thing :with-origin ::input-with-origin))
+(s/def :input/val (s/or :simple ::thing :with-origin ::input-with-origin))
 (s/def ::input-with-origin (s/keys :req-un [::item-id ::from]))
 (s/def ::annotated-inputs (s/keys :req-un [:inputs/val ::comment]))
 (s/def ::from (s/or :normal :from/val :annotated ::annotated-from))
@@ -69,7 +69,7 @@
 
 (s/def ::outputs (s/or :normal :outputs/val :annotated ::annotated-outputs))
 (s/def :outputs/val (s/coll-of :input/val :kind vector?))
-(s/def :input/val  ::thing)
+(s/def :input/val ::thing)
 (s/def ::annotated-outputs (s/keys :req-un [:outputs/val ::comment]))
 
 (s/def ::resources (s/or :normal :resources/val :annotated ::annotated-resources))
@@ -116,12 +116,12 @@
                  :comment "This is the top-level process. You can name it as you see fit; don't ask the interviewees."}
 
     :inputs {:val ["graphite", "clay", "water", "cedar wood", "metal", "eraser material", "paint"],
-              :comment "These are all the raw materials used to make the product. It is a collection of all the raw materials in subprocesses."}
+             :comment "These are all the raw materials used to make the product. It is a collection of all the raw materials in subprocesses."}
 
     :outputs {:val [{:item-id "finished pencils",
                      :quantity {:units "finished pencils" :value-string "100000"}}]
               :comment (str "inputs and outputs can either be simple strings like we used above, 'graphite', clay..., or objects like this, with an 'item-id' and 'quantity'.\n"
-                             "Use disgression (mindful of the questioning budget) about where you ask for quantities. Start simple and pursue details were the budget allows.")}
+                            "Use disgression (mindful of the questioning budget) about where you ask for quantities. Start simple and pursue details were the budget allows.")}
 
     :resources {:val ["extruder", "kiln", "milling machine", "glue applicator", "shaping machine"],
                 :comment "Resources, unlike inputs, are durable and reusable. Do not ask about quantities of resources; that's a conversation for another interviewer."},
@@ -139,7 +139,7 @@
                                     :outputs [{:item-id "graphite clay paste",
                                                :quantity {:units "liters", :value-string "100"}}],
                                     :resources ["mixer"],
-                                    :duration  {:units "hours", :value-string "1"}
+                                    :duration {:units "hours", :value-string "1"}
                                     :subprocesses {:val []
                                                    :comment (str "We use empty array val values to signify that we don't think there are any interesting subprocess from the standpoint of scheduling.\n"
                                                                  "Of course, this could be updated later if subsequent discussion suggests we are wrong.")}}
@@ -149,7 +149,7 @@
                                     :outputs [{:item-id "extruded graphite rods",
                                                :quantity {:units "extruded graphite core", :value-string "100000"}}],
                                     :resources ["extruder"],
-                                    :duration  {:units "minutes", :value-string "20"}
+                                    :duration {:units "minutes", :value-string "20"}
                                     :subprocesses []},
 
                                    {:process-id "dry-and-bake-core",
@@ -157,7 +157,7 @@
                                     :outputs [{:item-id "finished graphite rods",
                                                :quantity {:units "extruded graphite core", :value-string "100000"}}],
                                     :resources ["kiln"],
-                                    :duration  {:units "hours", :value-string "2"}
+                                    :duration {:units "hours", :value-string "2"}
                                     :subprocesses []}]}
 
                    {:process-id "wood-casing-production",
@@ -167,13 +167,13 @@
                     :subprocess-flow {:val "individuals-from-batch",
                                       :comment (str "The string 'individuals-from-batch' means that it isn't necessary to wait for all the slats to be created;\n"
                                                     "you can start 'cut-grooves-in-slats' as soon as the first slat is available.")}
-                    :duration  {:val  {:units "hours", :value-string "2"} ; ToDo: Review this comment. Improve it.
-                                :comment "Because 'individuals-from-batch', this process's duration is (roughly speaking) the same as maximum of the two subprocesses."}
+                    :duration {:val {:units "hours", :value-string "2"} ; ToDo: Review this comment. Improve it.
+                               :comment "Because 'individuals-from-batch', this process's duration is (roughly speaking) the same as maximum of the two subprocesses."}
                     :subprocesses [{:process-id "mill-wood-slats",
                                     :inputs ["cedar wood"],
                                     :outputs ["milled wood slats"],
                                     :resources ["milling machine"],
-                                    :duration  {:units "hours", :value-string "2"}
+                                    :duration {:units "hours", :value-string "2"}
                                     :subprocess-flow {:val :individuals-from-batch,
                                                       :comment (str "'subprocess-flow' is about whether a batch must move through production steps as a batch or, alternatively, individuals from the batch can move.\n"
                                                                     "The string value 'individuals-from-batch' here means that it isn't necessary to wait for all the slats to be created, the process 'cut-grooves-in-slats'\n"
@@ -184,15 +184,15 @@
                                     :inputs ["milled wood slats"],
                                     :outputs ["wood slats with grooves"],
                                     :resources ["groove cutter"],
-                                    :duration  {:units "hours", :value-string "2"}
+                                    :duration {:units "hours", :value-string "2"}
                                     :subprocesses []}]},
 
                    {:process-id "assemble",
-                    :inputs  {:val [{:item-id "finished graphite rods", :from "graphite-core-production"},
-                                    {:item-id "wood slats with grooves", :from "wood-casing-production"}
-                                    "metal", "erasers", "paint"]
-                              :comment (str "The 'from' property names a process that must occur before a process that uses it as an input (e.g. this 'assembly' process).\n"
-                                            "The 'from' property is essential to understanding process ordering and potential for concurrency.")}
+                    :inputs {:val [{:item-id "finished graphite rods", :from "graphite-core-production"},
+                                   {:item-id "wood slats with grooves", :from "wood-casing-production"}
+                                   "metal", "erasers", "paint"]
+                             :comment (str "The 'from' property names a process that must occur before a process that uses it as an input (e.g. this 'assembly' process).\n"
+                                           "The 'from' property is essential to understanding process ordering and potential for concurrency.")}
                     :outputs ["finished pencil"],
                     :resources ["glue applicator", "shaping machine"],
                     :subprocesses [{:process-id "insert-core-into-slats",
@@ -208,8 +208,8 @@
                                     :subprocesses []},
 
                                    {:process-id "attach-eraser",
-                                    :optional?  {:val true,
-                                                 :comment "'optional?' means that the process does not occur for every product. Not every pencil has an eraser."}
+                                    :optional? {:val true,
+                                                :comment "'optional?' means that the process does not occur for every product. Not every pencil has an eraser."}
                                     :inputs ["shaped and painted pencils", "metal", "erasers"],
                                     :outputs ["finished pencils"],
                                     :resources ["crimping tool"],
@@ -225,15 +225,24 @@
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
+(defmethod dsu/ds-combine :process/flow-shop
+  [_tag scr ascr]
+  ;; Combine a new SCR with an existing ASCR for flow-shop.
+  ;; For flow-shop, we take the most complete/recent SCR as the ASCR.
+  (let [stripped-scr (dsu/strip-annotations scr)]
+    ;; For flow-shop, the newer SCR typically represents a more complete graph
+    ;; So we replace the ASCR entirely with the new SCR
+    (if (empty? ascr)
+      stripped-scr
+      ;; If ASCR exists and SCR has more subprocess detail, use SCR
+      (if (and (contains? stripped-scr :subprocesses)
+               (or (not (contains? ascr :subprocesses))
+                   (> (count (:subprocesses stripped-scr))
+                      (count (:subprocesses ascr)))))
+        stripped-scr
+        ascr))))
+
 ;;; We don't accumulate in the :process/flow-shop DS.
-(defmethod combine-ds! :process/flow-shop
-  [tag pid]
-  (when-let [msg-scr (pdb/get-msg-SCR pid tag)]
-    (let [ds (apply max-key :msg-id msg-scr)]
-      (pdb/put-ASCR! pid
-                     :process/flow-shop
-                     (assoc ds :DS-id tag))
-      ds)))
 
 ;;; See if it compiles.
 (when-not (s/valid? :flow-shop/DS-message flow-shop)
@@ -259,20 +268,18 @@
                                    (doseq [[_ v] obj] (ck-elab v)))
                       (vector? obj) (doseq [v obj] (ck-elab v)))))]
       (or exhausted?
-          (if (and  (contains? ds :subprocesses)
-                    (> (-> ds :subprocesses count) 0))
+          (if (and (contains? ds :subprocesses)
+                   (> (-> ds :subprocesses count) 0))
             (do (ck-elab (:subprocesses ds)) @elaborated?) ; We don't require the toplevel process to have a duration.
             false)))))
 
+(defmethod dsu/ds-complete? :process/flow-shop
+  [_tag ascr]
+  ;; Check if flow-shop ASCR is complete
+  (let [stripped-ascr (dsu/strip-annotations ascr)]
+    (completeness-test stripped-ascr)))
+
 ;;; ------------------------------- checking for completeness ---------------
-(defmethod ds-complete? :process/flow-shop
-  [tag pid]
-  (let [ds (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
-        complete? (completeness-test ds)]
-    (alog! (cl-format nil "{:log-comment \"This is the summary DS for ~A  (complete? =  ~A):~%~S\"}"
-                      tag complete? (with-out-str (pprint ds)))
-           {:console? true #_#_:elide-console 130})
-    complete?))
 
 ;;; -------------------- Starting and stopping -------------------------
 ;;; (fshop/init-flow-shop)
