@@ -11,6 +11,8 @@
 
 (def ^:diag diag (atom nil))
 
+(defn now [] (new java.util.Date))
+
 (defn agents-log-output-fn
   "Output verbatim agent interactions to a log file."
   ([] :can-be-a-no-op)
@@ -18,23 +20,23 @@
    (when (= (:kind signal) :agents)
      (let [{:keys [msg_]} signal
            msg (if-let [s (not-empty (force msg_))] s "\"\"")]
-       (str msg "\n")))))
-
-(defn now [] (new java.util.Date))
+       (str (now) " " msg "\n")))))
 
 (defn alog!
   "Log info-string to agent log. Using this, and not console, is essential to MCP server operation."
   ([msg-text] (alog! msg-text {}))
   ([msg-text {:keys [level] :or {level :info}}]
-   (tel/with-kind-filter {:allow :agents}
-     (tel/signal!
-      {:kind :agents, :level (or level :info), :msg msg-text}))
-   nil))
+   (binding [*out* *err*] ; Perhaps not necessary; there was a call before (mount/start).
+     (tel/with-kind-filter {:allow :agents}
+       (tel/signal!
+        {:kind :agents, :level (or level :info), :msg msg-text}))
+     nil)))
 
 (defn log!
   "This is to keep cider stepping from stumbling over the telemere log! macro."
   [log-key s]
-  (tel/log! log-key s))
+  ;;(tel/log! log-key s)
+  (alog! s {:level log-key}))
 
 (defn print-bling*
   "Like print-bling but outputs to *err* instead of *out*"
@@ -63,19 +65,20 @@
   "Configure Telemere: set reporting levels and specify a custom :output-fn.
    Only MCP can use console out."
   []
-  ;; Remove any default console handler that might exist
-  (tel/remove-handler! :default/console)
-  (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn}))
-  (tel/add-handler! :agent/log (tel/handler:file {:output-fn agents-log-output-fn
-                                                  :path "./logs/agents-log.edn"
-                                                  :interval :daily}))
-  (tel-log/tools-logging->telemere!) ;; Send tools.logging through telemere. Check this with (tel/check-interop)
-  (tel/streams->telemere!)
-  (tel/event! ::config-log {:level :info :msg (str "Logging configured:\n" (with-out-str (pprint (tel/check-interop))))})
-  ;; The following is needed because of datahike; no timbre-logging->telemere!
-  (timbre/set-config! (assoc timbre/*config* :min-level [[#{"datahike.*"} :error]
-                                                         [#{"konserve.*"} :error]]))
-  (log! :info (str "======= Starting. config-log! executed " (now) " ==========")))
+  (binding [*out* *err*]
+    ;; Remove any default console handler that might exist
+    (tel/remove-handler! :default/console)
+    (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn}))
+    (tel/add-handler! :agent/log (tel/handler:file {:output-fn agents-log-output-fn
+                                                    :path "./logs/agents-log.edn"
+                                                    :interval :daily}))
+    (tel-log/tools-logging->telemere!) ;; Send tools.logging through telemere. Check this with (tel/check-interop)
+    (tel/streams->telemere!)
+    (tel/event! ::config-log {:level :info :msg (str "Logging configured:\n" (with-out-str (pprint (tel/check-interop))))})
+    ;; The following is needed because of datahike; no timbre-logging->telemere!
+    (timbre/set-config! (assoc timbre/*config* :min-level [[#{"datahike.*"} :error]
+                                                           [#{"konserve.*"} :error]]))
+    (log! :info (str "======= Starting. config-log! executed " (now) " =========="))))
 
 (defn ^:diag unconfig-log!
   "Set :default/console back to its default handler. Typically done at REPL."

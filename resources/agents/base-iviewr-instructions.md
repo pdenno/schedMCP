@@ -121,6 +121,7 @@ The object argument we would provide might look like the following (the discover
 
 ```javascript
 {"task-type" : "interpret-response",
+ "budget" : 0.95,
  "discovery-schema" : <<as above>>,
  "ASCR" {} ,
  "conversation-history" [{"interviewer" : "What are the products you make or the services you provide, and what is the scheduling challenge involving them? Please describe in a few sentences.",

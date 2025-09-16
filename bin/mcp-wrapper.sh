@@ -20,3 +20,4 @@ cd "$(dirname "$0")/.."
 
 # Start the MCP server
 exec clojure -M:dev -m sched-mcp.main
+

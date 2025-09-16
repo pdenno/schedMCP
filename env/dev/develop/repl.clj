@@ -28,7 +28,7 @@ dutil/learn-schema!
    ;'dutil 'develop.dutil
    ;'repl 'develop.repl
    'mount 'mount.core
-   ;;'p 'promesa.core
+   'p 'promesa.core
    ;;'px 'promesa.exec
    ;'iviewr 'sched-mcp.interview
    ;;'main   'sched-mcp.main ; This isn't used in development

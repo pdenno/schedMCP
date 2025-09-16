@@ -28,8 +28,6 @@
   "Start the schedMCP system for development"
   []
   (mount/start)
-  (log! :info "Mount components started. System ready for MCP connections.")
-  (log! :info "To start MCP server, run: clojure -M -m sched-mcp.main")
   :started)
 
 (defn stop

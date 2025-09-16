@@ -4,6 +4,7 @@
   (:require
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
+   [promesa.core :as p]
    [sched-mcp.project-db] ; For mount
    [sched-mcp.system-db] ; For mount
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
@@ -19,8 +20,7 @@
             McpSchema$ServerCapabilities
             McpSchema$Tool
             McpSchema$CallToolResult
-            McpSchema$TextContent
-            McpSchema$LoggingLevel]
+            McpSchema$TextContent]
            [reactor.core.publisher Mono]
            [com.fasterxml.jackson.databind ObjectMapper]))
 
@@ -124,6 +124,7 @@
 
 (def server-instance (atom nil))
 (def server-transport (atom nil))
+(def server-promise (p/deferred))
 
 (defn start-server
   "Start the MCP server"
@@ -144,6 +145,7 @@
       server)
     (catch Exception e
       (log! :error (str "Failed to start server: " (.getMessage e)))
+      (p/resolve! server-promise :failed-to-start)
       (throw e))))
 
 (defn stop-server
@@ -152,6 +154,7 @@
   (log! :info "Stopping schedMCP server...")
   (when-let [server @server-instance]
     (.closeGracefully server))
+  (p/resolve! server-promise :exiting)
   (reset! server-instance nil)
   (reset! server-transport nil)
   (log! :info "MCP server stopped"))

@@ -24,7 +24,7 @@
         net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}
 
         ;; Java MCP SDK for proper MCP server implementation
-        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.10.0"}}
+        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.12.1"}} ; was 0.10.0. 12.1 is the newest as of 2025-09-15. Released 2025-09-08.
 
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl -m sched-mcp.main 2>> ./logs/nrepl-error.log (starts as shown in the :nrepl :alias below.)

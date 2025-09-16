@@ -114,7 +114,8 @@ Phase 2.5 involved testing entire cycles of the following 6 tasks:
   - Uses consistent `{question-to-ask: "..."}` format for questions
   - Returns SCRs directly as the response
   - Handles the comment/val annotation structure correctly
-- ✅ Successfully tested full cycle with craft beer surrogate expert
+- ✅ Successfully tested full cycle with craft beer surrogate expert.
+     (No significant orchestration demonstrated, however. That is, Claude did not choose any subsequent DSs.)
 
 The system now correctly:
 - Formulates domain-appropriate questions (no more plate glass confusion)
@@ -124,16 +125,23 @@ The system now correctly:
 
 ### 4. Phase 2.5.5 Tasks: ds-combine!
 
-- The dsu/ds-combine! methods are poorly designed. They should take only a SCR and an ASCR and it should return an ASCR.
+- ✅ Redesign ds-combine! (now ds-combine) and ds-complete?.
+   The dsu/ds-combine! methods were poorly designed. They should take only a SCR and an ASCR and it should return an ASCR.
    There should be no actions on the DBs to make this happen. We'll fix this first. (We'll call it ds-combine (no exclamation mark) since it won't touch the DB.)
-- More comprehensively, I think there is occassionally the need for an LLM-based agent to perform the combination, if the SCR's come back from the interviewer
-  messed, for example. The problem is it isn't clear how we should manage this. We can easily define a dsu/ds-valid? method on each DS; it returns true if
+- To Do: Make schedMCP work as stand alone.
+  Currently if you start schedMCP using `clojure -M:dev -m sched-mcp.main` it produces output from startup as below, and then immediate exits.
+  That's what we coded but not what we want!
+  I tried adding a promise and await it. Perhaps that helps, but the client is still disconnecting.
+  **This is the problem we are currently investigating.**
+- To Do: More comprehensively, I think there is occassionally the need for an LLM-based agent to perform the combination, if the SCR's come back from the interviewer messed up, for example.
+  The problem is it isn't clear how we should manage this. We can easily define a dsu/ds-valid? method on each DS; it returns true if
   the SCR or ASCR is structurally valid. I suppose that is part of the solution.
 - The question: How would we best try the deterministic code dsu/ds-combine and only if dsu/ds-valid? returns false call the agent?
   Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
 
 ### 5. "Phase 2.6" Tasks
-- Demonstrate Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen
+- Test Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen in clojure_eval and related entries.
+- Test Claude orchestrating multiple DSs.
 
 ## Post-2.6 Architecture Discussion
 
