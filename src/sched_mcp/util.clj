@@ -73,7 +73,8 @@
                                                     :path "./logs/agents-log.edn"
                                                     :interval :daily}))
     (tel-log/tools-logging->telemere!) ;; Send tools.logging through telemere. Check this with (tel/check-interop)
-    (tel/streams->telemere!)
+    ;; ONLY redirect streams if NOT running as MCP server..... I think it is okay if we NEVER redirect streams.
+    ;;(when-not (System/getenv "MCP_MODE") (tel/streams->telemere!))
     (tel/event! ::config-log {:level :info :msg (str "Logging configured:\n" (with-out-str (pprint (tel/check-interop))))})
     ;; The following is needed because of datahike; no timbre-logging->telemere!
     (timbre/set-config! (assoc timbre/*config* :min-level [[#{"datahike.*"} :error]

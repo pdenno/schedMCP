@@ -33,7 +33,7 @@
  ;;;  4) claude-desktop
 
 ;; See .dir-locals.el for some defaults on CIDER C-c M-j
- :aliases {:dev {:extra-paths ["test" "env/dev"]
+ :aliases {:dev {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
                  :jvm-opts ["-Djdk.attach.allowAttachSelf"]
                  :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
                               com.lambdaisland/classpath {:mvn/version "0.6.58"}
@@ -44,7 +44,7 @@
 
            ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
            ;; Include all paths you want available for development.
-           :nrepl {:extra-paths ["test" "env/dev"]
+           :nrepl {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
                    :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
                                 com.lambdaisland/classpath {:mvn/version "0.6.58"}
                                 expound/expound {:mvn/version "0.9.0"} ; more readable spec messages

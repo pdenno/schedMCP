@@ -2,10 +2,10 @@
   "Central registry for all schedMCP tools"
   (:require
    ;;[sched-mcp.tools.iviewr-tools :as itools]
-   [sched-mcp.tools.iviewr.core  :as iviewr]
-   [sched-mcp.tools.orch.core    :as orch]
-   [sched-mcp.tools.surrogate    :as surrogate]
-   [sched-mcp.tool-system        :as toolsys]))
+   [sched-mcp.tools.iviewr.core :as iviewr]
+   [sched-mcp.tools.orch.core :as orch]
+   [sched-mcp.tools.surrogate :as surrogate]
+   [sched-mcp.tool-system :as toolsys]))
 
 ;;; System atom for sharing state between tools
 (def system-atom (atom {}))
@@ -21,13 +21,13 @@
 
 ;;; Wrap original tools to add DS schema
 #_(defn wrap-start-interview
-  "Wrap start-interview to ensure DS schema"
-  [original-fn]
-  (fn [params]
-    (let [result (original-fn params)]
-      (when (:project_id result)
-        (ensure-ds-schema! (keyword (:project_id result))))
-      result)))
+    "Wrap start-interview to ensure DS schema"
+    [original-fn]
+    (fn [params]
+      (let [result (original-fn params)]
+        (when (:project_id result)
+          (ensure-ds-schema! (keyword (:project_id result))))
+        result)))
 
 ;;; Build complete tool registry
 (defn build-tool-registry
@@ -51,7 +51,7 @@
         ]
     ;; Combine all tools
     (vec (concat #_original-specs
-                 new-tool-specs
+          new-tool-specs
                  surrogate/tool-specs))))
 
 ;;; Main registry
