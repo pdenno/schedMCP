@@ -1,13 +1,13 @@
 {:paths ["src"]
  :deps {camel-snake-kebab/camel-snake-kebab {:mvn/version "0.4.3"}
-        cheshire/cheshire {:mvn/version "6.0.0"}
+        cheshire/cheshire {:mvn/version "6.1.0"}
         cljs-ajax/cljs-ajax {:mvn/version "0.8.4"}
         com.cemerick/url {:mvn/version "0.1.1"}
         com.github.pdenno/mznp {:mvn/version "1.0.89"}
         com.taoensso/timbre {:mvn/version "6.8.0"}
         com.taoensso/telemere {:mvn/version "1.1.0"}
         com.taoensso/telemere-slf4j {:mvn/version "1.1.0"} ; Just adding it here initializes it; try (tel/check-interop).
-        org.slf4j/slf4j-api {:mvn/version "2.0.16"}
+        org.slf4j/slf4j-api {:mvn/version "2.0.17"}
         dk.ative/docjure {:mvn/version "1.21.0"} ; spreadsheets
         io.github.paintparty/bling {:mvn/version "0.8.8"}
         funcool/promesa {:mvn/version "11.0.678"}
@@ -15,7 +15,7 @@
         metosin/jsonista {:mvn/version "0.3.13"}
         mount/mount {:mvn/version "0.1.23"}
         org.clojure/data.json {:mvn/version "2.5.1"}
-        org.apache.logging.log4j/log4j-core {:mvn/version "2.25.1"} ; Used by jetty
+        org.apache.logging.log4j/log4j-core {:mvn/version "2.25.2"} ; Used by jetty
         org.clj-commons/hickory {:mvn/version "0.7.7"}
         org.clojure/clojure {:mvn/version "1.12.2"}
         org.clojure/core.unify {:mvn/version "0.7.0"}
@@ -24,7 +24,7 @@
         net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}
 
         ;; Java MCP SDK for proper MCP server implementation
-        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.12.1"}} ; was 0.10.0. 12.1 is the newest as of 2025-09-15. Released 2025-09-08.
+        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.12.1"}}
 
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl -m sched-mcp.main 2>> ./logs/nrepl-error.log (starts as shown in the :nrepl :alias below.)
@@ -33,51 +33,65 @@
  ;;;  4) claude-desktop
 
 ;; See .dir-locals.el for some defaults on CIDER C-c M-j
- :aliases {:dev {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
-                 :jvm-opts ["-Djdk.attach.allowAttachSelf"]
-                 :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
+ :aliases {:dev
+           {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
+            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
+                 :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
                               com.lambdaisland/classpath {:mvn/version "0.6.58"}
                               expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
-                              nrepl/nrepl {:mvn/version "1.3.1"}
+                              nrepl/nrepl {:mvn/version "1.3.0"}
                               org.clojure/java.classpath {:mvn/version "1.1.0"}
                               org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
            ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
            ;; Include all paths you want available for development.
-           :nrepl {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
-                   :extra-deps {cider/cider-nrepl {:mvn/version "0.56.0"}
-                                com.lambdaisland/classpath {:mvn/version "0.6.58"}
-                                expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
-                                nrepl/nrepl {:mvn/version "1.3.1"}
-                                org.clojure/java.classpath {:mvn/version "1.1.0"}
-                                org.clojure/tools.namespace {:mvn/version "1.5.0"}}
-                   :jvm-opts ["-Djdk.attach.allowAttachSelf"]
-                   :main-opts ["-m" "nrepl.cmdline"
-                               "--middleware" "[cider.nrepl/cider-middleware]" ; https://docs.cider.mx/cider/basics/middleware_setup.html#using-tools-deps
-                               "--port" "7888"]}
+           :nrepl
+           {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
+            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
+            :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
+                         clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
+                         com.lambdaisland/classpath {:mvn/version "0.6.58"}
+                         expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
+                         nrepl/nrepl {:mvn/version "1.3.0"}
+                         org.clojure/java.classpath {:mvn/version "1.1.0"}
+                         org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
-           :test {:extra-paths ["test" "env/test"]
-                  :main-opts ["-m" "kaocha.runner"]
-                  :extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}
-                                         ;; Since I'm running from the command line, bin/koacha, need to repeat these.
-                               com.lambdaisland/classpath {:mvn/version "0.6.58"}
-                               org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
+           :nrepl-cmdline
+           {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
+            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
+            :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
+                         clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
+                         com.lambdaisland/classpath {:mvn/version "0.6.58"}
+                         expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
+                         nrepl/nrepl {:mvn/version "1.3.0"}
+                         org.clojure/java.classpath {:mvn/version "1.1.0"}
+                         org.clojure/tools.namespace {:mvn/version "1.5.0"}}
+            :main-opts ["-m" "nrepl.cmdline"
+                        "--middleware" "[cider.nrepl/cider-middleware]" ; https://docs.cider.mx/cider/basics/middleware_setup.html#using-tools-deps
+                        "--port" "7888"]}
 
-           :build {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
-                   :ns-default build}}}
+           :test
+           {:extra-paths ["test" "env/test"]
+            :main-opts ["-m" "kaocha.runner"]
+            :extra-deps {lambdaisland/kaocha {:mvn/version "1.91.1392"}
+                         ;; Since I'm running from the command line, bin/koacha, need to repeat these.
+                         com.lambdaisland/classpath {:mvn/version "0.6.58"}
+                         org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
+
+           :build
+           {:deps {io.github.clojure/tools.build {:mvn/version "0.10.10"}}
+            :ns-default build}}}
 
 ;;; clj -X:search/outdated
 ;;;
+;;;   |    :file |                               :name | :current |  :latest |
 ;;;   |----------+-------------------------------------+----------+----------|
-;;;   | deps.edn |                   cider/cider-nrepl |   0.56.0 |   0.57.0 | not yet
-;;;   |          |                   cider/cider-nrepl |   0.56.0 |   0.57.0 | not yet
-;;;   |          |               com.taoensso/telemere |    1.0.0 |    1.1.0 |
-;;;   |          |         com.taoensso/telemere-slf4j |    1.0.0 |    1.1.0 |
-;;;   |          |                 com.taoensso/timbre |    6.7.1 |    6.8.0 |
-;;;   |          |       io.github.clojure/tools.build |   0.10.9 |  0.10.10 |
-;;;   |          |          io.github.paintparty/bling |    0.6.0 |    0.8.8 |
-;;;   |          |              io.replikativ/datahike | 0.6.1594 | 0.6.1603 |
-;;;   |          |     net.clojars.wkok/openai-clojure |   0.18.1 |   0.23.0 |
-;;;   |          | org.apache.logging.log4j/log4j-core |   2.24.3 |   2.25.1 |
-;;;   |          |                 org.clojure/clojure |   1.12.0 |   1.12.2 |
-;;;   |          |               org.clojure/data.json |    2.4.0 |    2.5.1 |
+;;;   | deps.edn |                   cheshire/cheshire |    6.0.0 |    6.1.0 |
+;;;   |          |                   cider/cider-nrepl |   0.56.0 |   0.57.0 |
+;;;   |          |                   cider/cider-nrepl |   0.56.0 |   0.57.0 |
+;;;   |          |     io.modelcontextprotocol.sdk/mcp |   0.12.1 |   0.13.1 |
+;;;   |          |              io.replikativ/datahike | 0.6.1594 | 0.6.1607 | ; Not now
+;;;   |          |                         nrepl/nrepl |    1.3.1 |    1.4.0 | ; Not now
+;;;   |          |                         nrepl/nrepl |    1.3.1 |    1.4.0 | ; Not now
+;;;   |          | org.apache.logging.log4j/log4j-core |   2.25.1 |   2.25.2 |
+;;;   |          |                 org.slf4j/slf4j-api |   2.0.16 |   2.0.17 |

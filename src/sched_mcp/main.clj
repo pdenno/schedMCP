@@ -1,17 +1,15 @@
 (ns sched-mcp.main
   "Main entry point for schedMCP server"
   (:require
+   [cider.nrepl :refer [cider-middleware]]
    [mount.core :as mount]
-   [nrepl.server :as nrepl]
+   [nrepl.server :as server]
    [promesa.core :as p]
-   [sched-mcp.project-db]                    ; For mount
-   [sched-mcp.system-db]                     ; For mount
-   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
-   [sched-mcp.tools.iviewr-tools]            ; For mount
-   [sched-mcp.llm]                           ; For mount
-   [sched-mcp.tools.registry :as registry]   ; For mount
    [sched-mcp.mcp-core :as mcore]
    [sched-mcp.util :refer [alog! log! now]]))
+
+(def cider-handler
+  (apply server/default-handler cider-middleware))
 
 (defonce server-port (atom nil))
 
@@ -32,8 +30,16 @@
   (if (claim-port)
     (try
       (when-not @nrepl-server
-        (reset! nrepl-server (nrepl/start-server :port 7888))
-        (alog! "Started nREPL server on port 7888"))
+        (alog! "About to start nREPL server...")
+        (try
+          ;(binding [*out* *err*]
+            (reset! nrepl-server (server/start-server :port 7888
+                                                      :handler cider-handler
+                                                      :bind "127.0.0.1")) ;)
+          (alog! (str "Started nREPL server on port 7888: " @nrepl-server))
+          (catch Exception e
+          (alog! (str "Failed to start nREPL: " (.getMessage e))))))
+
       ;; Start all components, including the MCP server.
       (mount/start)
 
@@ -52,5 +58,5 @@
         (mount/stop #'sched-mcp.mcp-core/mcp-core-server)
         (System/exit 0)))
     (do
-      (alog! "Another instance is already running, exiting")
+      (alog! "Another instance is already running. Exiting.")
       (System/exit 0))))

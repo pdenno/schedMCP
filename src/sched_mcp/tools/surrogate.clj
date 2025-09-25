@@ -1,7 +1,8 @@
 (ns sched-mcp.tools.surrogate
   "MCP tools for surrogate expert functionality"
   (:require
-   [sched-mcp.surrogate :as surrogate]))
+   [clojure.string :as str]
+   [sched-mcp.surrogate :as sur]))
 
 ;;; Tool definitions for surrogate expert
 
@@ -24,16 +25,18 @@
    :tool-fn
    (fn [{:keys [domain company_name project_name]}]
      (try
-       (let [result (surrogate/start-surrogate-interview
+       (let [result (sur/start-surrogate-interview
                      {:domain (keyword domain)
                       :company-name company_name
                       :project-name project_name})]
          ;; Format for display with orange color indication
-         (str "🟠 " (:message result) "\n"
-              "Project ID: " (:project-id result) "\n"
-              "Expert ID: " (:expert-id result)))
+         {:status "success"
+          :message (:message result)
+          :project_id (:project-id result)
+          :expert_id (:expert-id result)})
        (catch Exception e
-         (str "Error starting surrogate expert: " (.getMessage e)))))})
+         {:status "error"
+          :message (.getMessage e)})))})
 
 (def answer-question-tool-spec
   {:name "sur_answer"
@@ -52,42 +55,19 @@
    :tool-fn
    (fn [{:keys [project_id question]}]
      (try
-       (let [result (surrogate/surrogate-answer-question
+       (let [result (sur/surrogate-answer-question
                      {:project-id project_id
                       :question question})]
          (if (:error result)
-           (:error result)
-           ;; Format response with orange indicator
-           (str "🟠 Expert Response:\n" (:response result))))
+           {:status "error"
+            :message (:error result)}
+           {:status "success"
+            :expert_response (:response result)}))
        (catch Exception e
-         (str "Error getting response: " (.getMessage e)))))})
-
-(def get-session-tool-spec
-  {:name "sur_get_session"
-   :description "Get the current state of the surrogate expert session for debugging"
-   :schema
-   {:type "object"
-    :properties
-    {:project_id {:type "string"
-                  :description "Project ID to inspect"}}
-    :required ["project_id"]}
-
-   :tool-fn
-   (fn [{:keys [project_id]}]
-     (try
-       (if-let [session (surrogate/get-surrogate-session project_id)]
-         (str "Session for " project_id ":\n"
-              "Expert: " (get-in session [:expert-persona :company-name]) "\n"
-              "Domain: " (get-in session [:expert-persona :domain]) "\n"
-              "Products: " (clojure.string/join ", "
-                                                (get-in session [:expert-persona :products])) "\n"
-              "Conversation history: " (count (:conversation-history session)) " exchanges")
-         "No session found")
-       (catch Exception e
-         (str "Error: " (.getMessage e)))))})
+         {:status "error"
+          :message (.getMessage e)})))})
 
 ;;; Collect all surrogate tools
 (def tool-specs
   [start-surrogate-tool-spec
-   answer-question-tool-spec
-   get-session-tool-spec])
+   answer-question-tool-spec])

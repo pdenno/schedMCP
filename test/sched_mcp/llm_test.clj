@@ -33,3 +33,15 @@
       {:role "user"   :content (str "Describe a plan for counting the numer of 'r's in the word 'raspberry',\n"
                                     "then execute that plan.")}]
      :llm-provider :openai)))
+
+
+(defn llm-query
+  [model-provider text]
+  (llm/query-llm
+   [{:role "system" :content "You are a helpful assistant."}
+    {:role "user"   :content text}]
+   :llm-provider model-provider))
+
+  
+(llmt/llm-query :meta "How many 'r's are there in 'raspberry'?")
+(llmt/llm-query :meta "Describe a plan for counting the numer of 'r's in the word 'raspberry', then execute that plan.")

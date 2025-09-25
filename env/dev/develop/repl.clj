@@ -35,17 +35,19 @@ dutil/learn-schema!
    'pdb    'sched-mcp.project-db
    ;;'dsld   'sched-mcp.ds-loader
    ;;'dssch  'sched-mcp.ds-schema
-   'dsu    'sched-mcp.tools.orch.ds-util
+
    'mcore  'sched-mcp.mcp-core
-   'orch   'sched-mcp.tools.orch.core
    'sur    'sched-mcp.surrogate
    'sutil  'sched-mcp.sutil
    'schema 'sched-mcp.schema
    'sdb    'sched-mcp.system-db
-   ;'iview  'sched-mcp.tools.interview
+   ;;'iview  'sched-mcp.tools.interview
+   'orch   'sched-mcp.tools.orch.core
+   'dsu    'sched-mcp.tools.orch.ds-util
    'itools 'sched-mcp.tools.iviewr-tools
    'orm    'sched-mcp.tools.iviewr.domain.data.orm
    'reg    'sched-mcp.tools.registry
+   'surt   'sched-mcp.tools.surrogate
    'util   'sched-mcp.util
    ;'warm   'sched-mcp.warm-up
    'tel    'taoensso.telemere

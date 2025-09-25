@@ -92,7 +92,7 @@
   tag)
 
 (defmulti ds-combine
-  "Pure function to combine a Schema-Conforming Response (SCR) with an existing 
+  "Pure function to combine a Schema-Conforming Response (SCR) with an existing
    Aggregated Schema-Conforming Response (ASCR). Returns the updated ASCR.
    This is a pure function with no side effects - no database operations."
   #'dispatch-ds-combine)

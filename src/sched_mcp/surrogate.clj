@@ -62,6 +62,7 @@
 (defonce current-expert-session
   (atom nil))
 
+;;; ToDo: Eradicate the notion of session.
 (defn init-expert-session
   "Initialize a new expert session"
   [project-id expert-persona & {:keys [conversation-id]}]
@@ -163,47 +164,3 @@
   [{:keys [project-id question]}]
   ;; Ensure project-id is a keyword for comparison with session
   (generate-expert-response (keyword project-id) question))
-
-(defn get-surrogate-session
-  "Get the current session if it matches the project-id"
-  [project-id]
-  (when-let [session @current-expert-session]
-    ;; Ensure project-id is a keyword for comparison
-    (when (= (:project-id session) (keyword project-id))
-      session)))
-
-(defn get-conversation-history
-  "Retrieve conversation history from the database"
-  [project-id]
-  (when-let [conn (connect-atm (keyword project-id))]
-    (let [messages (d/q '[:find ?from ?type ?content ?timestamp
-                          :where
-                          [?e :message/from ?from]
-                          [?e :message/type ?type]
-                          [?e :message/content ?content]
-                          [?e :message/time ?timestamp]]
-                        @conn)]
-      (->> messages
-           (sort-by #(nth % 3)) ; Sort by timestamp
-           (map (fn [[from type content timestamp]]
-                  {:from from
-                   :type type
-                   :content content
-                   :timestamp timestamp}))))))
-
-;;; Convenience functions for REPL testing
-(comment
-  ;; Start a craft beer surrogate
-  (def session (start-surrogate-interview {:domain :craft-beer
-                                           :company-name "Mountain Peak Brewery"
-                                           :project-name "Craft Beer Test"}))
-
-  ;; Ask a question
-  (surrogate-answer-question {:project-id (:project-id session)
-                              :question "What are the main steps in your brewing process?"})
-
-  ;; Check session state
-  (get-surrogate-session (:project-id session))
-
-  ;; List all sessions
-  (list-surrogate-sessions))

@@ -5,13 +5,13 @@
    [clojure.data.json :as json]
    [mount.core :as mount :refer [defstate]]
    [promesa.core :as p]
-   [sched-mcp.project-db] ; For mount
-   [sched-mcp.system-db] ; For mount
+   [sched-mcp.project-db]                    ; For mount
+   [sched-mcp.system-db]                     ; For mount
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
-   [sched-mcp.tools.iviewr-tools] ; For mount
-   [sched-mcp.llm] ; For mount
-   [sched-mcp.tools.registry :as registry] ; For mount
-   [sched-mcp.util :as util :refer [alog! log!]])
+   [sched-mcp.tools.iviewr-tools]            ; For mount
+   [sched-mcp.llm]                           ; For mount
+   [sched-mcp.tools.registry :as registry]   ; For mount
+   [sched-mcp.util :as util :refer [log!]])
   (:import [io.modelcontextprotocol.server.transport
             StdioServerTransportProvider]
            [io.modelcontextprotocol.server McpServer McpServerFeatures
@@ -74,7 +74,7 @@
     (McpServerFeatures$AsyncToolSpecification.
      tool
      (reify java.util.function.BiFunction
-       (apply [_ exchange arguments]
+       (apply [_ _exchange arguments]
          (create-mono-from-callback
           (fn []
             (try

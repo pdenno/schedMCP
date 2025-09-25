@@ -89,7 +89,7 @@
                       :him "/etc/other-dbs/him")
                     (str base-dir))]
     (cond-> db-template
-      ;true (assoc :allow-unsafe-config true) ; ToDo: This is a new problem with Datahike 0.6.1603; it wasn't a problem in 0.6.1594
+      true (assoc :allow-unsafe-config true) ; ToDo: This is a new problem with Datahike 0.6.1603; it wasn't a problem in 0.6.1594
       true (assoc :base-dir base-dir)
       (not in-mem?) (assoc :store {:backend :file :path db-dir})
       in-mem? (assoc :store {:backend :mem :id (name id)}))))
@@ -228,6 +228,16 @@
            (str s ": " msg))
          s))
      s)))
+
+(defn stringify-keys
+  "We don't use lists anywhere, right? So use this to stringify keys."
+  [obj]
+  (letfn [(sk [x]
+            (cond (map? x)     (reduce-kv (fn [m k v] (assoc m (str k) (sk v))) {} x)
+                  (vector? x)  (mapv sk x)
+                  (seq? x)     (throw (ex-info "stringify-keys: Called with a list." {:x x}))
+                  :else        x))]
+    (sk obj)))
 
 (defn yes-no-unknown
   "Return :yes :no or :unknown based on lexical analysis of the argument answer text."

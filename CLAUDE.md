@@ -47,6 +47,7 @@ As much as possible, it uses code from schedulingTBD, particularly its database 
 ### Data Structures
 - Use maps, vectors, sets, and primitive data types to store data.
 - **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.
+- **Do NOT use clojure.walk/stringify-keys** See sutil/stringify-keys.
 
 ### Clojure defn
 - The comment comes before the arguments:

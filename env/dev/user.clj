@@ -16,7 +16,7 @@
 [ns-setup! undo-ns-setup!] ; for mount
 
 ;;; uncomment to enable hot loading for deps
-(watch-deps/start! {:aliases [:dev :test]})
+(watch-deps/start! {:aliases [:nrepl :dev :test]})
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 (add-tap (bound-fn* clojure.pprint/pprint))
