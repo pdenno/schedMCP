@@ -5,8 +5,9 @@
    [sched-mcp.tools.iviewr.core  :as iviewr]
    [sched-mcp.tools.orch.core    :as orch]
    [sched-mcp.tools.surrogate    :as surrogate]
-   [sched-mcp.tool-system        :as toolsys]
-   [sched-mcp.util :as util :refer [alog! log!]]))
+   [sched-mcp.tool-system        :as tool-system]
+   [sched-mcp.sutil              :as sutil]
+   [sched-mcp.util               :as util :refer [alog! log!]]))
 
 ;;; System atom for sharing state between tools
 (def system-atom (atom {}))
@@ -24,13 +25,13 @@
        ~@body)))
 
 ;;; Helper to convert our tool configs to MCP specs
-(defn tool-config->spec
+#_(defn tool-config->spec
   "Convert our tool configuration to MCP tool spec"
   [tool-config]
-  {:name (toolsys/tool-name tool-config)
-   :description (toolsys/tool-description tool-config)
-   :schema (toolsys/tool-schema tool-config)
-   :tool-fn #(toolsys/execute-tool-safe tool-config %)})
+  {:name (tool-system/tool-name tool-config)
+   :description (tool-system/tool-description tool-config)
+   :schema (tool-system/tool-schema tool-config)
+   :tool-fn #(tool-system/execute-tool-safe tool-config %)})
 
 ;;; Lazy loading of clojure-mcp tools
 (defn ^:admin load-clojure-mcp-tools []
@@ -38,15 +39,10 @@
     (require '[clojure-mcp.tools :as cmcp-tools]
              '[clojure-mcp.nrepl :as cmcp-nrepl])
     ;; Initialize nREPL connection if needed
-    (with-redirected-out 1
-      (when-not @nrepl-client-atom
-        (reset! nrepl-client-atom
-                ((resolve 'clojure-mcp.nrepl/create)
-                 {:port 7888
-                  :clojure-mcp.config/config {:nrepl-user-dir (System/getProperty "user.dir")}}))))
+    (when-not @sutil/nrepl-server (sutil/start-nrepl-server))
     true
     (catch Exception e
-      (log! :error (str "Failed to load clojure-mcp:" (.getMessage e)))
+      (log! :error (str "Failed to load clojure-mcp tools:" (.getMessage e)))
       false)))
 
 (defn ^:admin load-clojure-mcp-prompts []
@@ -82,6 +78,7 @@
         (log! :error (str "Failed to get clojure-mcp tools:" (.getMessage e)))
         []))))
 
+
 ;;; Build complete tool registry based on enabled categories
 (defn build-tool-registry
   "Build the complete set of tools for schedMCP"
@@ -90,15 +87,12 @@
   (let [;; Always include schedMCP tools
         interviewer-tools (iviewr/create-interviewer-tools system-atom)
         orchestrator-tools (orch/create-orchestrator-tools system-atom)
-
-        ;; Convert to specs
-        sched-tool-specs (mapv tool-config->spec
-                              (concat interviewer-tools
-                                      orchestrator-tools))
+        sched-tool-specs (mapv tool-system/registration-map ; Convert to MCP tool specs <===================================== Wrong? Might need something else? (was tool-system/create-tool-spec)
+                              (into interviewer-tools orchestrator-tools))
 
         ;; Get enabled clojure-mcp tools
         clojure-mcp-specs (with-redirected-out 4
-                            (if (contains? @enabled-tools :clojure-mcp-all)
+                            (if (contains? @enabled-tools :clojure-mcp-all) ; Fix this (cond->
                               (get-clojure-mcp-tools :all)
                               (vec (concat
                                  (when (contains? @enabled-tools :clojure-mcp-read-only)

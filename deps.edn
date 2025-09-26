@@ -36,16 +36,18 @@
  :aliases {:dev
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
-                 :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
-                              com.lambdaisland/classpath {:mvn/version "0.6.58"}
-                              expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
-                              nrepl/nrepl {:mvn/version "1.3.0"}
-                              org.clojure/java.classpath {:mvn/version "1.1.0"}
-                              org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
+            :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
+                         clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
+                         com.lambdaisland/classpath {:mvn/version "0.6.58"}
+                         expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
+                         nrepl/nrepl {:mvn/version "1.3.0"}
+                         org.clojure/java.classpath {:mvn/version "1.1.0"}
+                         org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
            ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
            ;; Include all paths you want available for development.
-           :nrepl
+           ;; I'm not sure this one is useful. I can start -M:dev, add clojure-mcp tools with the fns in registry.clj instead?
+           #_#_:nrepl
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
@@ -56,7 +58,7 @@
                          org.clojure/java.classpath {:mvn/version "1.1.0"}
                          org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
-           :nrepl-cmdline
+           :nrepl
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}

@@ -2,13 +2,12 @@
   "Core interviewer tools for Discovery Schema based interviews
    These tools use LLMs to formulate questions and interpret responses"
   (:require
-   [clojure.edn :as edn]
    [clojure.string :as str]
    [clojure.data.json :as json]
    [sched-mcp.llm :as llm]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-combine ds-complete?]]
+   [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.util :refer [alog! log!]]))
 
@@ -29,12 +28,6 @@
   "Creates the tool for getting current DS and ASCR"
   [system-atom]
   {:tool-type :get-current-ds
-   :system-atom system-atom})
-
-(defn create-get-interview-progress-tool
-  "Creates the tool for getting overall interview progress"
-  [system-atom]
-  {:tool-type :get-interview-progress
    :system-atom system-atom})
 
 ;;; Formulate Question Tool
@@ -225,7 +218,7 @@
                                                                         (clojure.string/replace #"The correct response.*\"OK\"\}\." "")
                                                                         str/trim)})
               result (llm/complete-json prompt :model-class :extract)
-;; The SCR should be the entire result per the prompt instructions
+              ;; The SCR should be the entire result per the prompt instructions
               ;; Remove any ASCR metadata that might have been included
               scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
 
@@ -245,14 +238,14 @@
               ;; Initialize ASCR if needed
               _ (when-not (pdb/ASCR-exists? pid ds-id)
                   (pdb/init-ASCR! pid ds-id))
-;; Update ASCR with new SCR using the pure function
+              ;; Update ASCR with new SCR using the pure function
               current-ascr-data (pdb/get-ASCR pid ds-id)
               current-ascr (or (:ascr/dstruct current-ascr-data) {})
               updated-ascr (dsu/ds-combine ds-id scr current-ascr)
               _ (pdb/put-ASCR! pid ds-id updated-ascr)
               ;; Reduce budget
               _ (pdb/reduce-questioning-budget! pid ds-id)
-;; Check if DS is complete using the pure function
+              ;; Check if DS is complete using the pure function
               complete? (dsu/ds-complete? ds-id updated-ascr)]
 
           ;; Only mark complete if actually complete
@@ -354,32 +347,6 @@
        :current_ascr ascr
        :pursuit_status (if completed? :completed :incomplete)})))
 
-;;; Get Interview Progress Tool
-
-(defmethod tool-system/tool-name :get-interview-progress [_]
-  "sys_get_interview_progress")
-
-(defmethod tool-system/tool-description :get-interview-progress [_]
-  "Returns overall interview progress including completed Discovery Schemas and current phase.")
-
-(defmethod tool-system/tool-schema :get-interview-progress [_]
-  {:type "object"
-   :properties {:project_id tool-system/project-id-schema}
-   :required ["project_id"]})
-
-(defmethod tool-system/validate-inputs :get-interview-progress [_ inputs]
-  (tool-system/validate-required-params inputs [:project-id]))
-
-(defmethod tool-system/execute-tool :get-interview-progress
-  [{:keys [_system-atom]} {:keys [project-id]}]
-  (alog! "sys_get_interview_progress (NYI)!!!")
-  (try
-    (let [progress {:status :not-yet-implemented}] ; (orch/get-interview-progress (keyword project-id))]
-      progress)
-    (catch Exception e
-      (log! :info (str "Error in get-interview-progress: " (.getMessage e)))
-      {:error (.getMessage e)})))
-
 ;;; Helper to create all interviewer tools
 
 (defn create-interviewer-tools
@@ -387,5 +354,4 @@
   [system-atom]
   [(create-formulate-question-tool system-atom)
    (create-interpret-response-tool system-atom)
-   (create-get-current-ds-tool system-atom)
-   (create-get-interview-progress-tool system-atom)])
+   (create-get-current-ds-tool system-atom)])

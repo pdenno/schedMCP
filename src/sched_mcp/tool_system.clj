@@ -4,44 +4,76 @@
   (:require
    [clojure.string :as str]
    [clojure.tools.logging :as log]
+   [clojure.walk :as walk]
    [sched-mcp.util :as util :refer [log!]]))
 
-;;; Tool definition multimethods
-;;; Each tool implementation must provide these methods
+;; Core multimethods for tool behavior
 
 (defmulti tool-name
-  "Return the MCP tool name (string) for this tool configuration"
+  "Returns the name of the tool as a string. Dispatches on :tool-type."
   :tool-type)
 
 (defmethod tool-name :default [tool-config]
-  (throw (ex-info "No tool-name implementation for tool type"
-                  {:tool-type (:tool-type tool-config)})))
+  (-> tool-config
+      :tool-type
+      name
+      (str/replace "-" "_")))
+
+(defmulti tool-id :tool-type)
+
+(defmethod tool-id :default [tool-config]
+  (keyword (tool-name tool-config)))
 
 (defmulti tool-description
-  "Return the tool description for MCP"
+  "Returns the description of the tool as a string. Dispatches on :tool-type."
   :tool-type)
 
 (defmulti tool-schema
   "Return the JSON schema for tool parameters"
   :tool-type)
 
-(defmulti validate-inputs
+#_(defmulti validate-inputs
   "Validate and transform tool inputs. Return validated inputs or throw."
   :tool-type)
+
+(defmulti validate-inputs
+  "Validates inputs against the schema and returns validated/coerced inputs.
+   Throws exceptions for invalid inputs.
+   Dispatches on :tool-type in the tool-config."
+  (fn [tool-config _inputs] (:tool-type tool-config)))
+
 
 (defmethod validate-inputs :default [tool-config inputs]
   ;; Default: just return inputs as-is
   inputs)
 
 (defmulti execute-tool
+  "Executes the tool with the validated inputs and returns the result.
+   Dispatches on :tool-type in the tool-config."
+  (fn [tool-config inputs] (:tool-type tool-config)))
+
+#_(defmulti execute-tool
   "Execute the tool with validated inputs. Return result map."
   :tool-type)
 
-(defmulti format-results
+#_(defmulti format-results
   "Format tool results for MCP response. Return formatted map."
-  :tool-type)
+    :tool-type)
 
-(defmethod format-results :default [tool-config results]
+(defmulti format-results
+  "Formats the results from tool execution into the expected MCP response format.
+   Must return a map with :result (a vector or sequence of strings) and :error (boolean).
+   The MCP protocol requires that results are always provided as a sequence of strings,
+   never as a single string.
+
+   This standardized format is then used by the tool-fn to call the callback with:
+   (callback (:result formatted) (:error formatted))
+
+   Dispatches on :tool-type in the tool-config."
+  (fn [tool-config _result] (:tool-type tool-config)))
+
+
+(defmethod format-results :default [_tool-config results]
   ;; Default: return results as-is
   results)
 
@@ -68,22 +100,73 @@
     (sequential? m) (mapv keywordize-keys m)
     :else m))
 
-;;; Tool execution wrapper
+;; Multimethod to assemble the registration map
 
-(defn execute-tool-safe
+(defmulti registration-map
+  "Creates the MCP registration map for a tool.
+   Dispatches on :tool-type."
+  :tool-type)
+
+;; Function to handle java.util.Map and other collection types before keywordizing
+(defn convert-java-collections
+  "Converts Java collection types to their Clojure equivalents recursively."
+  [x]
+  (clojure.walk/prewalk
+   (fn [node]
+     (cond
+       (instance? java.util.Map node) (into {} node)
+       (instance? java.util.List node) (into [] node)
+       (instance? java.util.Set node) (into #{} node)
+       :else node))
+   x))
+
+;; Helper function to keywordize map keys while preserving underscores
+(defn keywordize-keys-preserve-underscores
+  "Recursively transforms string map keys into keywords.
+   Unlike clojure.walk/keywordize-keys, this preserves underscores.
+   Works with Java collection types by converting them first."
+  [m]
+  (walk/keywordize-keys (convert-java-collections m)))
+
+;; Default implementation for registration-map
+(defmethod registration-map :default [tool-config]
+  {:name (tool-name tool-config)
+   :id (tool-id tool-config)
+   :description (tool-description tool-config)
+   :schema (tool-schema tool-config)
+   :tool-fn (fn [_ params callback]
+              (try
+                (let [keywordized-params (keywordize-keys-preserve-underscores params)
+                      validated (validate-inputs tool-config keywordized-params)
+                      result (execute-tool tool-config validated)
+                      formatted (format-results tool-config result)]
+                  (callback (:result formatted) (:error formatted)))
+                (catch Exception e
+                  (log/error e)
+                  ;; On error, create a sequence of error messages
+                  (let [error-msg (or (ex-message e) "Unknown error")
+                        data (ex-data e)
+                        ;; Construct error messages sequence
+                        error-msgs (cond-> [error-msg]
+                                     ;; Add any error-details from ex-data if available
+                                     (and data (:error-details data))
+                                     (concat (if (sequential? (:error-details data))
+                                               (:error-details data)
+                                               [(:error-details data)])))]
+                    (callback error-msgs true)))))})
+
+
+;;; ----------------------- Tool execution wrapper (old stuff) ----------------------
+#_(defn execute-tool-safe
   "Execute a tool with error handling and logging"
   [tool-config inputs]
   (try
     (log! :info (str "Executing tool: " (tool-name tool-config)
                      " with inputs: " (pr-str inputs)))
-    (let [;; Convert underscore keys to hyphenated keywords
-          inputs (keywordize-keys inputs)
-          ;; Validate
-          validated (validate-inputs tool-config inputs)
-          ;; Execute
-          results (execute-tool tool-config validated)
-          ;; Format
-          formatted (format-results tool-config results)]
+    (let [inputs (keywordize-keys inputs)                 ; Convert underscore keys to hyphenated keywords
+          validated (validate-inputs tool-config inputs)  ; Validate
+          results (execute-tool tool-config validated)    ; Execute
+          formatted (format-results tool-config results)] ; Format
       (log! :info (str "Tool " (tool-name tool-config) " completed successfully"))
       formatted)
     (catch Exception e
@@ -93,7 +176,8 @@
 
 ;;; Tool registration
 
-(defn create-tool-spec
+;;; Was not used! See registry.clj tool-config->spec WHICH ITSELF SHOULD BE REPLACED BY tool-system/registration-map (see above).
+#_(defn create-tool-spec
   "Create an MCP tool specification from a tool configuration"
   [tool-config]
   {:name (tool-name tool-config)
@@ -101,7 +185,8 @@
    :schema (tool-schema tool-config)
    :handler (fn [inputs] (execute-tool-safe tool-config inputs))})
 
-(defn register-tool
+;;; Was not used???
+#_(defn register-tool
   "Register a tool configuration for use with MCP"
   [tool-config]
   (let [spec (create-tool-spec tool-config)]
@@ -121,3 +206,45 @@
 (def ds-id-schema
   {:type "string"
    :description "Discovery Schema ID (e.g., 'process/warm-up-with-challenges')"})
+
+(comment
+  ;; === Simple testing for the tool-system ===
+
+  ;; Set up nREPL client for testing
+  (require '[clojure-mcp.nrepl :as nrepl])
+  (require '[clojure-mcp.tools.eval.tool :as eval-tool])
+
+  (def client-atom (atom (nrepl/create {:port 7888})))
+  (nrepl/start-polling @client-atom)
+
+  ;; Create a tool instance
+  (def eval-tool-instance (eval-tool/create-eval-tool client-atom))
+
+  ;; Generate the registration map with our debug println statements
+  (def reg-map (registration-map eval-tool-instance))
+
+  ;; Get the tool-fn
+  (def tool-fn (:tool-fn reg-map))
+
+  ;; Test it directly with string keys (like it would receive from MCP)
+  (tool-fn nil {"code" "(+ 1 2)"}
+           (fn [result error] (println "RESULT:" result "ERROR:" error)))
+
+  ;; See what happens with malformed code
+  (tool-fn nil {"code" "(+ 1"}
+           (fn [result error] (println "ERROR RESULT:" result "ERROR FLAG:" error)))
+
+  ;; Helper function to make testing easier
+  (defn test-eval [code]
+    (let [p (promise)]
+      (tool-fn nil {"code" code}
+               (fn [result error]
+                 (deliver p {:result result :error? error})))
+      @p))
+
+  (test-eval "(+ 1 2)")
+  (test-eval "(println \"hello\")\n(+ 3 4)")
+  (test-eval "(/ 1 0)") ;; Should trigger error handling
+
+  ;; Clean up
+  (nrepl/stop-polling @client-atom))

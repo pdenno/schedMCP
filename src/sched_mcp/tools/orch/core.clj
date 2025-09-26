@@ -4,7 +4,6 @@
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.util :refer [alog! log!]]
    [datahike.api :as d]
    [sched-mcp.sutil :refer [connect-atm]])) ; <================================================= FIX THIS
