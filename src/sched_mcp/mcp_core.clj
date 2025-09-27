@@ -3,32 +3,32 @@
    Based on clojure-mcp approach for compatibility.
    Allows selection of t/r/p from clojure-mcp, as well as ours."
   (:require
-   [clojure.data.json            :as json]
-   [clojure.java.io              :as io]
-   [clojure.pprint               :refer [pprint]]
-   [clojure.spec.alpha           :as s]
+   [clojure.data.json :as json]
+   [clojure.java.io :as io]
+   [clojure.pprint :refer [pprint]]
+   [clojure.spec.alpha :as s]
 
    ;; ToDo: These will be moved into functions once we make use of clojure-mcp optional
-   [clojure-mcp.nrepl            :as nrepl]
-   [clojure-mcp.nrepl-launcher   :as nrepl-launcher]
-   [clojure-mcp.prompts          :as prompts]
-   [clojure-mcp.resources        :as resources]
-   [clojure-mcp.tools            :as tools]
+   [clojure-mcp.nrepl :as nrepl]
+   [clojure-mcp.nrepl-launcher :as nrepl-launcher]
+   [clojure-mcp.prompts :as prompts]
+   [clojure-mcp.resources :as resources]
+   [clojure-mcp.tools :as tools]
 
-   [mount.core                   :as mount :refer [defstate]]
-   [promesa.core                 :as p]
-   [sched-mcp.file-content       :as file-content]
-   [sched-mcp.llm]                              ; For mount
-   [sched-mcp.project-db]                       ; For mount
-   [sched-mcp.sutil              :as sutil]
-   [sched-mcp.system-db]                        ; For mount
-   [sched-mcp.tools.iviewr.core  :as iviewr]
-   [sched-mcp.tools.iviewr.discovery-schema]    ; For mount
-   [sched-mcp.tools.iviewr-tools]               ; For mount
-   [sched-mcp.tools.orch.core    :as orch]
-   [sched-mcp.tools.surrogate    :as surrogate]
-   [sched-mcp.tool-system        :as tool-system]
-   [sched-mcp.util               :as util :refer [alog! log!]])
+   [mount.core :as mount :refer [defstate]]
+   [promesa.core :as p]
+   [sched-mcp.file-content :as file-content]
+   [sched-mcp.llm] ; For mount
+   [sched-mcp.project-db] ; For mount
+   [sched-mcp.sutil :as sutil]
+   [sched-mcp.system-db] ; For mount
+   [sched-mcp.tools.iviewr.core :as iviewr]
+   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
+   [sched-mcp.tools.iviewr-tools] ; For mount
+   [sched-mcp.tools.orch.core :as orch]
+   [sched-mcp.tools.surrogate :as surrogate]
+   [sched-mcp.tool-system :as tool-system]
+   [sched-mcp.util :as util :refer [alog! log!]])
   (:import [io.modelcontextprotocol.server.transport
             StdioServerTransportProvider]
            [io.modelcontextprotocol.server McpServer
@@ -78,10 +78,10 @@
   (try
     (case category
       :read-only ((resolve 'clojure-mcp.tools/build-read-only-tools) nrepl-client-atom)
-      :eval      ((resolve 'clojure-mcp.tools/build-eval-tools)      nrepl-client-atom)
-      :editing   ((resolve 'clojure-mcp.tools/build-editing-tools)   nrepl-client-atom)
-      :agent     ((resolve 'clojure-mcp.tools/build-agent-tools)     nrepl-client-atom)
-      :all       ((resolve 'clojure-mcp.tools/build-all-tools)       nrepl-client-atom)
+      :eval ((resolve 'clojure-mcp.tools/build-eval-tools) nrepl-client-atom)
+      :editing ((resolve 'clojure-mcp.tools/build-editing-tools) nrepl-client-atom)
+      :agent ((resolve 'clojure-mcp.tools/build-agent-tools) nrepl-client-atom)
+      :all ((resolve 'clojure-mcp.tools/build-all-tools) nrepl-client-atom)
       [])
     (catch Exception e
       (log! :error (str "Failed to get clojure-mcp tools:" (.getMessage e)))
@@ -99,10 +99,10 @@
         clojure-mcp-tools (if (enabled-tool-category? :cmcp-all)
                             (get-clojure-mcp-tools :all nrepl-client-atom)
                             (cond-> []
-                              (enabled-tool-category? :cmcp-read-only)   (into (get-clojure-mcp-tools :read-only nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-eval)        (into (get-clojure-mcp-tools :eval      nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-editing)     (into (get-clojure-mcp-tools :editing   nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-agent)       (into (get-clojure-mcp-tools :agent     nrepl-client-atom))))
+                              (enabled-tool-category? :cmcp-read-only) (into (get-clojure-mcp-tools :read-only nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-eval) (into (get-clojure-mcp-tools :eval nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-editing) (into (get-clojure-mcp-tools :editing nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-agent) (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
         all-tools (vec (concat sched-tool-specs surrogate/tool-specs clojure-mcp-tools))]
     (alog! (str "Total tools registered: " (count all-tools) ":\n"
                 (with-out-str (pprint (mapv :name all-tools)))))
@@ -376,7 +376,7 @@
       (log! :debug "Environment initialized")
       nrepl-client-map #_nrepl-client-map-with-config)
     (catch Exception e
-      (log! :error (str  "Failed to create nREPL connection: " e))
+      (log! :error (str "Failed to create nREPL connection: " e))
       (throw e))))
 
 (defn close-servers
@@ -585,6 +585,11 @@
                                     (assoc nrepl-client-map :nrepl-process process)
                                     nrepl-client-map)
         _ (reset! nrepl-client-atom nrepl-client-with-process)
+        _ (swap! nrepl-client-atom
+                 #(assoc % :clojure-mcp.config/config
+                         {:nrepl-user-dir "/home/pdenno/Documents/git/schedMCP"
+                          :allowed-directories ["/home/pdenno/Documents/git/schedMCP"]
+                          :write-file-guard false}))
         ;; Setup MCP server with stdio transport
         server-result (setup-mcp-server nrepl-client-atom
                                         working-dir
@@ -638,13 +643,13 @@
 ;; Note: working-dir param kept for compatibility with core API but unused
 ;; Note: No sched-mcp prompts yet!
 (defn make-prompts [nrepl-client-atom _working-dir]
-  ((resolve 'clojure-mcp.prompts/make-prompts) nrepl-client-atom))
+  (prompts/make-prompts nrepl-client-atom))
 
 ;; Delegate to resources namespace
 ;; Note: working-dir param kept for compatibility with core API but unused
 ;; Note: No sched-mcp resources yet!
 (defn make-resources [nrepl-client-atom _working-dir]
-  #_((resolve 'clojure-mcp.resources/make-resources) nrepl-client-atom)) ; <==================================================== ToDo
+  (resources/make-resources nrepl-client-atom)) ; <==================================================== ToDo
 
 (def server-promise
   "This is used in main to keep the server from exiting immediately."
