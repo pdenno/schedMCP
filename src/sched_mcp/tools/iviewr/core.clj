@@ -11,6 +11,8 @@
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.util :refer [alog! log!]]))
 
+;;; system-atom here is something that has :pid and :cid for conversation.
+
 ;;; Tool configurations
 (defn create-formulate-question-tool
   "Creates the tool for formulating interview questions"

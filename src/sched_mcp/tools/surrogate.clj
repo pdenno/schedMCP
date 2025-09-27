@@ -1,8 +1,8 @@
 (ns sched-mcp.tools.surrogate
   "MCP tools for surrogate expert functionality"
   (:require
-   [clojure.string :as str]
-   [sched-mcp.surrogate :as sur]))
+   [sched-mcp.surrogate   :as sur]
+   [sched-mcp.tool-system :as tool-system]))
 
 ;;; Tool definitions for surrogate expert
 
@@ -66,6 +66,15 @@
        (catch Exception e
          {:status "error"
           :message (.getMessage e)})))})
+
+(defmethod tool-system/format-results :sur-start-expert [_ result]
+  (if (:error result)
+    {:result [(:message result)]
+     :error true}
+    {:result [(str "Started surrogate expert for " (:domain result)
+                   "\nProject ID: " (:project-id result)
+                   "\nExpert ID: " (:expert-id result))]
+     :error false}))
 
 ;;; Collect all surrogate tools
 (def tool-specs

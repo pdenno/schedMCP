@@ -139,7 +139,7 @@ The system now correctly:
 - The question: How would we best try the deterministic code dsu/ds-combine and only if dsu/ds-valid? returns false call the agent?
   Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
 
-### 5. "Phase 2.6" Tasks
+### 5. "Phase 2.6" Tasks: Using clojure-mcp in sched-mcp
 - Test Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen in clojure_eval and related entries.
 - Test Claude orchestrating multiple DSs.
 

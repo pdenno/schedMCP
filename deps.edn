@@ -33,7 +33,8 @@
  ;;;  4) claude-desktop
 
 ;; See .dir-locals.el for some defaults on CIDER C-c M-j
- :aliases {:dev
+ :aliases {:dev ; This will start an nrepl server using sutil/start-server when registry.clj has clojure-mcp tools enabled.
+                ; How does the value of that compare to what's in the atom used by clojure-mcp?
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}

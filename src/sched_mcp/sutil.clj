@@ -369,9 +369,11 @@
   (try
     (reset! nrepl-server (server/start-server :port 7888
                                               :bind "127.0.0.1"
-                                              :handler cider-handler
-                                              :clojure-mcp.config/config {:nrepl-user-dir (System/getProperty "user.dir")}))
-
+                                              :handler cider-handler))
+    (swap! nrepl-server #(assoc % :clojure-mcp.config/config {:nrepl-user-dir (System/getProperty "user.dir")}))
     (alog! (str "Started nREPL server on port 7888: " @nrepl-server))
     (catch Exception e
       (alog! (str "Failed to start nREPL: " (.getMessage e))))))
+
+(defn ^:admin stop-nrepl-server []
+  (server/stop-server @nrepl-server))

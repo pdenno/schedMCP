@@ -4,8 +4,7 @@
   (:require
    [clojure.string :as str]
    [clojure.tools.logging :as log]
-   [clojure.walk :as walk]
-   [sched-mcp.util :as util :refer [log!]]))
+   [clojure.walk :as walk]))
 
 ;; Core multimethods for tool behavior
 
@@ -29,11 +28,7 @@
   :tool-type)
 
 (defmulti tool-schema
-  "Return the JSON schema for tool parameters"
-  :tool-type)
-
-#_(defmulti validate-inputs
-  "Validate and transform tool inputs. Return validated inputs or throw."
+  "Returns the parameter validation schema for the tool. Dispatches on :tool-type."
   :tool-type)
 
 (defmulti validate-inputs
@@ -42,23 +37,10 @@
    Dispatches on :tool-type in the tool-config."
   (fn [tool-config _inputs] (:tool-type tool-config)))
 
-
-(defmethod validate-inputs :default [tool-config inputs]
-  ;; Default: just return inputs as-is
-  inputs)
-
 (defmulti execute-tool
   "Executes the tool with the validated inputs and returns the result.
    Dispatches on :tool-type in the tool-config."
-  (fn [tool-config inputs] (:tool-type tool-config)))
-
-#_(defmulti execute-tool
-  "Execute the tool with validated inputs. Return result map."
-  :tool-type)
-
-#_(defmulti format-results
-  "Format tool results for MCP response. Return formatted map."
-    :tool-type)
+  (fn [tool-config _inputs] (:tool-type tool-config)))
 
 (defmulti format-results
   "Formats the results from tool execution into the expected MCP response format.
@@ -71,34 +53,6 @@
 
    Dispatches on :tool-type in the tool-config."
   (fn [tool-config _result] (:tool-type tool-config)))
-
-
-(defmethod format-results :default [_tool-config results]
-  ;; Default: return results as-is
-  results)
-
-;;; Helper functions
-
-(defn validate-required-params
-  "Check that all required parameters are present"
-  [inputs required-params]
-  (doseq [param required-params]
-    (when-not (get inputs param)
-      (throw (ex-info (str "Missing required parameter: " (name param))
-                      {:missing-param param
-                       :inputs inputs}))))
-  inputs)
-
-(defn keywordize-keys
-  "Recursively convert map keys to keywords, handling underscores"
-  [m]
-  (cond
-    (map? m) (into {} (map (fn [[k v]]
-                             [(keyword (str/replace (name k) "_" "-"))
-                              (keywordize-keys v)])
-                           m))
-    (sequential? m) (mapv keywordize-keys m)
-    :else m))
 
 ;; Multimethod to assemble the registration map
 
@@ -155,44 +109,6 @@
                                                [(:error-details data)])))]
                     (callback error-msgs true)))))})
 
-
-;;; ----------------------- Tool execution wrapper (old stuff) ----------------------
-#_(defn execute-tool-safe
-  "Execute a tool with error handling and logging"
-  [tool-config inputs]
-  (try
-    (log! :info (str "Executing tool: " (tool-name tool-config)
-                     " with inputs: " (pr-str inputs)))
-    (let [inputs (keywordize-keys inputs)                 ; Convert underscore keys to hyphenated keywords
-          validated (validate-inputs tool-config inputs)  ; Validate
-          results (execute-tool tool-config validated)    ; Execute
-          formatted (format-results tool-config results)] ; Format
-      (log! :info (str "Tool " (tool-name tool-config) " completed successfully"))
-      formatted)
-    (catch Exception e
-      (log! :error (str "Tool " (tool-name tool-config) " failed: " (.getMessage e)))
-      {:error (.getMessage e)
-       :tool-type (:tool-type tool-config)})))
-
-;;; Tool registration
-
-;;; Was not used! See registry.clj tool-config->spec WHICH ITSELF SHOULD BE REPLACED BY tool-system/registration-map (see above).
-#_(defn create-tool-spec
-  "Create an MCP tool specification from a tool configuration"
-  [tool-config]
-  {:name (tool-name tool-config)
-   :description (tool-description tool-config)
-   :schema (tool-schema tool-config)
-   :handler (fn [inputs] (execute-tool-safe tool-config inputs))})
-
-;;; Was not used???
-#_(defn register-tool
-  "Register a tool configuration for use with MCP"
-  [tool-config]
-  (let [spec (create-tool-spec tool-config)]
-    (log! :info (str "Registered tool: " (:name spec)))
-    spec))
-
 ;;; Common schemas
 
 (def project-id-schema
@@ -248,3 +164,14 @@
 
   ;; Clean up
   (nrepl/stop-polling @client-atom))
+
+;;; Stuff particularly for sched-mcp
+(defn validate-required-params
+  "Check that all required parameters are present"
+  [inputs required-params]
+  (doseq [param required-params]
+    (when-not (get inputs param)
+      (throw (ex-info (str "Missing required parameter: " (name param))
+                      {:missing-param param
+                       :inputs inputs}))))
+  inputs)

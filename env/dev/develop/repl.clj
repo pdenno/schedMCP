@@ -46,7 +46,7 @@ dutil/learn-schema!
    'dsu    'sched-mcp.tools.orch.ds-util
    'itools 'sched-mcp.tools.iviewr-tools
    'orm    'sched-mcp.tools.iviewr.domain.data.orm
-   'reg    'sched-mcp.tools.registry
+   ;;'reg    'sched-mcp.tools.registry
    'surt   'sched-mcp.tools.surrogate
    'tool-system 'sched-mcp.tool-system
    'util   'sched-mcp.util
