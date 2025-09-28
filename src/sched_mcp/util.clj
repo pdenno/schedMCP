@@ -26,7 +26,7 @@
   "Log info-string to agent log. Using this, and not console, is essential to MCP server operation."
   ([msg-text] (alog! msg-text {}))
   ([msg-text {:keys [level] :or {level :info}}]
-   (binding [*out* *err*] ; Perhaps not necessary; there was a call before (mount/start).
+   (binding [*out* *err*]
      (tel/with-kind-filter {:allow :agents}
        (tel/signal!
         {:kind :agents, :level (or level :info), :msg msg-text}))
@@ -35,7 +35,7 @@
 (defn log!
   "This is to keep cider stepping from stumbling over the telemere log! macro."
   [log-key s]
-  ;;(tel/log! log-key s)
+  (tel/log! log-key s)
   (alog! s {:level log-key}))
 
 (defn print-bling*
@@ -48,18 +48,19 @@
   "I don't want to see hostname and time, etc. in console logging."
   ([] :can-be-a-no-op) ; for shutdown, at least.
   ([signal]
-   (when-not (= (:kind signal) :agents)
-     (let [{:keys [kind level location msg_]} signal
-           file (:file location)
-           file (when (string? file)
-                  (let [[_ stbd-file] (re-matches #"^.*(sched-mcp.*)$" file)]
-                    (or stbd-file file)))
-           line (:line location)
-           msg (if-let [s (not-empty (force msg_))] s "\"\"")
-           heading (-> (str (name kind) "/" (name level) " ") str/upper-case)]
-       (cond (= :error level) (print-bling* (bling [:bold.red.white-bg heading] " " [:red (str file ":" line " - " msg)]))
-             (= :warn level) (print-bling* (bling [:bold.blue heading] " " [:yellow (str file ":" line " - " msg)]))
-             :else (print-bling* (bling [:bold.blue heading] " " [:olive (str file ":" line " - " msg)])))))))
+   (binding [*out* *err*]
+     (when-not (= (:kind signal) :agents)
+       (let [{:keys [kind level location msg_]} signal
+             file (:file location)
+             file (when (string? file)
+                    (let [[_ stbd-file] (re-matches #"^.*(sched-mcp.*)$" file)]
+                      (or stbd-file file)))
+             line (:line location)
+             msg (if-let [s (not-empty (force msg_))] s "\"\"")
+             heading (-> (str (name kind) "/" (name level) " ") str/upper-case)]
+         (cond (= :error level) (print-bling* (bling [:bold.red.white-bg heading] " " [:red (str file ":" line " - " msg)]))
+               (= :warn level) (print-bling* (bling [:bold.blue heading] " " [:yellow (str file ":" line " - " msg)]))
+               :else (print-bling* (bling [:bold.blue heading] " " [:olive (str file ":" line " - " msg)]))))))))
 
 (defn config-log!
   "Configure Telemere: set reporting levels and specify a custom :output-fn.

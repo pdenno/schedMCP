@@ -7,14 +7,6 @@
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
-
-   ;; ToDo: These will be moved into functions once we make use of clojure-mcp optional
-   [clojure-mcp.nrepl :as nrepl]
-   [clojure-mcp.nrepl-launcher :as nrepl-launcher]
-   [clojure-mcp.prompts :as prompts]
-   [clojure-mcp.resources :as resources]
-   [clojure-mcp.tools :as tools]
-
    [mount.core :as mount :refer [defstate]]
    [promesa.core :as p]
    [sched-mcp.file-content :as file-content]
@@ -76,12 +68,13 @@
 ;;; Get clojure-mcp tools by category
 (defn get-clojure-mcp-tools [category nrepl-client-atom]
   (try
+    (require '[clojure-mcp.tools :as cmcp-tools])
     (case category
-      :read-only ((resolve 'clojure-mcp.tools/build-read-only-tools) nrepl-client-atom)
-      :eval ((resolve 'clojure-mcp.tools/build-eval-tools) nrepl-client-atom)
-      :editing ((resolve 'clojure-mcp.tools/build-editing-tools) nrepl-client-atom)
-      :agent ((resolve 'clojure-mcp.tools/build-agent-tools) nrepl-client-atom)
-      :all ((resolve 'clojure-mcp.tools/build-all-tools) nrepl-client-atom)
+      :read-only ((resolve 'cmcp-tools/build-read-only-tools) nrepl-client-atom)
+      :eval      ((resolve 'cmcp-tools/build-eval-tools)      nrepl-client-atom)
+      :editing   ((resolve 'cmcp-tools/build-editing-tools)   nrepl-client-atom)
+      :agent     ((resolve 'cmcp-tools/build-agent-tools)     nrepl-client-atom)
+      :all       ((resolve 'cmcp-tools/build-all-tools)       nrepl-client-atom)
       [])
     (catch Exception e
       (log! :error (str "Failed to get clojure-mcp tools:" (.getMessage e)))
@@ -100,12 +93,12 @@
                             (get-clojure-mcp-tools :all nrepl-client-atom)
                             (cond-> []
                               (enabled-tool-category? :cmcp-read-only) (into (get-clojure-mcp-tools :read-only nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-eval) (into (get-clojure-mcp-tools :eval nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-editing) (into (get-clojure-mcp-tools :editing nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-agent) (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
+                              (enabled-tool-category? :cmcp-eval)      (into (get-clojure-mcp-tools :eval nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-editing)   (into (get-clojure-mcp-tools :editing nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-agent)     (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
         all-tools (vec (concat sched-tool-specs surrogate/tool-specs clojure-mcp-tools))]
-    (alog! (str "Total tools registered: " (count all-tools) ":\n"
-                (with-out-str (pprint (mapv :name all-tools)))))
+    (log! :info (str "Total tools registered: " (count all-tools) ":\n"
+                     (with-out-str (pprint (mapv :name all-tools)))))
     all-tools))
 
 ;;; ----------------------------- Based on clojure-mcp/core.clj
@@ -355,11 +348,12 @@
   [{:keys [_project-dir _config-file] :as initial-config}]
   (log! :info (str "Creating nREPL connection with config: " initial-config))
   (try
-    (let [nrepl-client-map (nrepl/create (dissoc initial-config :project-dir :nrepl-env-type))
+    (require '[clojure-mcp.nrepl :as nrepl])
+    (let [nrepl-client-map ((resolve 'nrepl/create) (dissoc initial-config :project-dir :nrepl-env-type))
           #_#_cli-env-type (:nrepl-env-type initial-config)
           _ (do
               (log! :info "nREPL client map created")
-              (nrepl/start-polling nrepl-client-map)
+              ((resolve 'nrepl/start-polling) nrepl-client-map)
               (log! :info "Started polling nREPL"))]
           ;; Detect environment type early
           ;; TODO this needs to be sorted out
@@ -389,13 +383,15 @@
   [nrepl-client-atom]
   (log! :info "Shutting down servers")
   (try
+    (require '[clojure-mcp.nrepl :as nrepl])
+    (require '[clojure-mcp.nrepl-launcher :as nrepl-launcher])
     (when-let [client @nrepl-client-atom]
       (log! :info "Stopping nREPL polling")
-      (nrepl/stop-polling client)
+      ((resolve 'nrepl/stop-polling) client)
       ;; Clean up auto-started nREPL process if present
       (when-let [nrepl-process (:nrepl-process client)]
         (log! :info "Cleaning up auto-started nREPL process")
-        (nrepl-launcher/destroy-nrepl-process nrepl-process))
+        ((resolve 'nrepl-launcher/destroy-nrepl-process) nrepl-process))
       (when-let [mcp-server (:mcp-server client)]
         (log! :info "Closing MCP server gracefully")
         (.closeGracefully mcp-server)
@@ -632,9 +628,10 @@
 
    Returns: nil"
   [nrepl-args component-factories]
+  (require '[clojure-mcp.nrepl-launcher :as nrepl-launcher])
   (-> nrepl-args
       validate-options
-      nrepl-launcher/maybe-start-nrepl-process
+      ((resolve 'nrepl-launcher/maybe-start-nrepl-process))
       ensure-port
       (build-and-start-mcp-server-impl component-factories)))
 
@@ -643,13 +640,21 @@
 ;; Note: working-dir param kept for compatibility with core API but unused
 ;; Note: No sched-mcp prompts yet!
 (defn make-prompts [nrepl-client-atom _working-dir]
-  (prompts/make-prompts nrepl-client-atom))
+  (require '[clojure-mcp.prompts :as prompts])
+  (let [prompts ((resolve 'prompts/make-prompts) nrepl-client-atom)]
+    (log! :info (str "Total prompts registered: " (count prompts) ":\n"
+                     (with-out-str (pprint (mapv :name prompts)))))
+    prompts))
 
 ;; Delegate to resources namespace
 ;; Note: working-dir param kept for compatibility with core API but unused
 ;; Note: No sched-mcp resources yet!
 (defn make-resources [nrepl-client-atom _working-dir]
-  (resources/make-resources nrepl-client-atom)) ; <==================================================== ToDo
+  (require '[clojure-mcp.resources :as resources])
+  (let [resources ((resolve 'resources/make-resources) nrepl-client-atom)]
+    (log! :info (str "Total resources registered: " (count resources) ":\n"
+                     (with-out-str (pprint (mapv :name resources)))))
+    resources))
 
 (def server-promise
   "This is used in main to keep the server from exiting immediately."
@@ -665,7 +670,7 @@
       :make-prompts-fn make-prompts
       :make-resources-fn make-resources})
     (catch Exception e
-      (alog! (str "Server exception: " e))
+      (log! :error (str "Server exception: " e))
       (p/resolve! server-promise :failed-to-start))))
 
 (defn stop-mcp-server
