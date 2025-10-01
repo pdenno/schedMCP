@@ -140,12 +140,47 @@ The system now correctly:
   Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
 
 ### 5. "Phase 2.6" Tasks: Using clojure-mcp in sched-mcp
+
+#### Completed (2025-09-28):
+- ✅ **Fixed integration issues between schedMCP and clojure-mcp:**
+  - Corrected path casing issues in mcp_core.clj (schedMCP → schedMCP)
+  - Updated make-resources and make-prompts functions to use direct function calls instead of resolve
+  - Verified all configuration paths are consistent
+
+- ✅ **Verified clojure-mcp tools integration:**
+  - All 17 clojure-mcp tools are loading correctly in schedMCP
+  - Tools include: LS, read_file, grep, glob_files, think, clojure_inspect_project, clojure_eval, bash, clojure_edit, clojure_edit_replace_sexp, file_edit, file_write, dispatch_agent, architect, code_critique, clojure_edit_agent, scratch_pad
+  - Successfully executed comprehensive test suite: 58 tests with 579 assertions - all passing with 0 failures
+
+- ✅ **Verified MCP resources functionality:**
+  - Resources loading properly (4 resources total)
+  - Successfully loading: PROJECT_SUMMARY.md, README.md, CLAUDE.md, and dynamic "Clojure Project Info"
+  - Resource tests passing: 8 tests with 51 assertions
+
+- ✅ **Confirmed combined tool registry:**
+  - SchedMCP tools (9): iviewr_formulate_question, iviewr_interpret_response, sys_get_current_ds, orch_get_next_ds, orch_start_ds_pursuit, orch_complete_ds, orch_get_progress, sur_start_expert, sur_answer
+  - Clojure-mcp tools (17): All tools listed above
+  - Total: 26 tools successfully registered and available
+
+#### Remaining Tasks:
+- The client (Claude Desktop) is not able to see any of resources that should have been registered. (I believe `CLAUDE.md`,  `PROJECT_SUMMARY.md` and `LLM_CODING_STYLE.md` were to be registered.)
+  The problem is likely to be rooted in `mcp_core.clj` not implementing the system configuration capabilities of `examples/clojure-mcp/src/clojure_mcp/core.clj`.
+  I have a version of `mcp_core.clj` named `mcp_core-hold.clj` that implements some of clojure-mcp's config capabilities, but running the MCP server with that version was not possible.
+  Errors reported that might be related is:
+[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Failed to send notification: Failed to enqueue message[0;m
+[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
+[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Failed to send notification: Failed to enqueue message[0;m
+[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
+[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
+ (See `logs/wrapper.log`).
+
 - Test Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen in clojure_eval and related entries.
-- Test Claude orchestrating multiple DSs.
+- Test Claude orchestrating multiple DSs with full clojure-mcp toolset available.
 
 ## Post-2.6 Architecture Discussion
 
-We need to determine where to take things next. Possible next steps:
+We need to determine where to take things next. (I will describe some ideas for this section later.)
+
 
 ### Discuss Design for more-encompassing activity
  - Our plan for this system is that it can

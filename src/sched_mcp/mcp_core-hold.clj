@@ -4,13 +4,13 @@
    Allows selection of t/r/p from clojure-mcp, as well as ours."
   (:require
    [clojure.data.json :as json]
-   [clojure.edn :as edn]
    [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
    [promesa.core :as p]
    [sched-mcp.config :as config]
+   [sched-mcp.dialects :as dialects]
    [sched-mcp.file-content :as file-content]
    [sched-mcp.llm] ; For mount
    [sched-mcp.project-db] ; For mount
@@ -55,7 +55,20 @@
            [reactor.core.publisher Mono]
            [com.fasterxml.jackson.databind ObjectMapper]))
 
-(def nrepl-client-atom (atom nil))
+;;; Basic call stack for creating an MCP server with components (tools, prompts, resources)
+;;;    start-mcp-server ->
+;;;    build-and-start-mcp-server ->
+;;;    build-and-stard-mcp-server-impl ->
+;;;    setup-mcp-server [build-components]  ->
+;;;    add-tool ->
+;;;    create-async-tool (MCP SDK calls)
+
+(def nrepl-client-atom
+  (atom nil))
+
+(def ^:diag components-atm
+  "This is just for studying what gets made."
+  (atom {}))
 
 ;;; ----------------------------- Based on deprecated sched-mcp/registry.clj and clojure-mcp/main.clj
 ;;; ToDo: I wonder whether this is necessary or useful?!?
@@ -73,10 +86,10 @@
     (require '[clojure-mcp.tools :as cmcp-tools])
     (case category
       :read-only ((resolve 'cmcp-tools/build-read-only-tools) nrepl-client-atom)
-      :eval ((resolve 'cmcp-tools/build-eval-tools) nrepl-client-atom)
-      :editing ((resolve 'cmcp-tools/build-editing-tools) nrepl-client-atom)
-      :agent ((resolve 'cmcp-tools/build-agent-tools) nrepl-client-atom)
-      :all ((resolve 'cmcp-tools/build-all-tools) nrepl-client-atom)
+      :eval      ((resolve 'cmcp-tools/build-eval-tools)      nrepl-client-atom)
+      :editing   ((resolve 'cmcp-tools/build-editing-tools)   nrepl-client-atom)
+      :agent     ((resolve 'cmcp-tools/build-agent-tools)     nrepl-client-atom)
+      :all       ((resolve 'cmcp-tools/build-all-tools)       nrepl-client-atom)
       [])
     (catch Exception e
       (log! :error (str "Failed to get clojure-mcp tools:" (.getMessage e)))
@@ -95,23 +108,24 @@
                             (get-clojure-mcp-tools :all nrepl-client-atom)
                             (cond-> []
                               (enabled-tool-category? :cmcp-read-only) (into (get-clojure-mcp-tools :read-only nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-eval) (into (get-clojure-mcp-tools :eval nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-editing) (into (get-clojure-mcp-tools :editing nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-agent) (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
+                              (enabled-tool-category? :cmcp-eval)      (into (get-clojure-mcp-tools :eval nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-editing)   (into (get-clojure-mcp-tools :editing nrepl-client-atom))
+                              (enabled-tool-category? :cmcp-agent)     (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
         all-tools (vec (concat sched-tool-specs surrogate/tool-specs clojure-mcp-tools))]
     (log! :info (str "Total tools registered: " (count all-tools) ":\n"
                      (with-out-str (pprint (mapv :name all-tools)))))
+    (swap! components-atm #(assoc % :tools all-tools))
     all-tools))
 
 ;;; ----------------------------- Based on clojure-mcp/core.clj
 
 (defn create-mono-from-callback
   "Creates a function that takes the exchange and the arguments map and
-  returns a Mono promise The callback function should take three
-  arguments:
-   - exchange: The MCP exchange object
-   - arguments: The arguments map sent in the request
-   - continuation: A function that will be called with the result and will fullfill the promise"
+   returns a Mono promise.  The callback function should take three
+   arguments:
+    - exchange: The MCP exchange object
+    - arguments: The arguments map sent in the request
+    - continuation: A function that will be called with the result and will fullfill the promise"
   [callback-fn]
   (fn [exchange arguments]
     (Mono/create
@@ -301,88 +315,39 @@
       (log! :error (str "Failed to initialize MCP server: " e))
       (throw e))))
 
-(defn mcp-server
-  "Creates a basic stdio mcp server"
-  []
-  (log! :info "Starting MCP server")
+(defn load-config-handling-validation-errors [config-file user-dir]
   (try
-    (let [transport-provider (StdioServerTransportProvider. (ObjectMapper.))
-          server (-> (McpServer/async transport-provider)
-                     (.serverInfo "schedMCP" "0.1.0")
-                     (.capabilities (-> (McpSchema$ServerCapabilities/builder)
-                                        (.tools true)
-                                        (.prompts true)
-                                        (.resources true true) ;; resources method takes two boolean parameters
-                                        #_(.logging)
-                                        (.build)))
-                     (.build))]
-
-      (log! :info "MCP server initialized successfully")
-      server)
+    (config/load-config config-file user-dir)
     (catch Exception e
-      (log! :error (str "Failed to initialize MCP server: " e))
-      (throw e))))
+      (if (= ::config/schema-error (-> e ex-data :type))
+        (let [{:keys [errors file-path]} (ex-data e)]
+          (binding [*out* *err*]
+            (println "\n❌ Configuration validation failed!\n")
+            (when file-path
+              (println (str "File: " file-path "\n")))
+            (println "Errors found:")
+            (doseq [[k v] errors]
+              (let [msg (if (sequential? v) (first v) v)]
+                (println (str " 👉 " k " - " msg))))
+            (println "\nPlease fix these issues and try again.")
+            (println "See CONFIG.md for documentation.\n"))
+          (throw e))
+        ;; Other error - re-throw
+        (throw e)))))
 
-(defn load-and-validate-config
-  "Load config from project directory, validate it, and return processed config.
-   Simplified version that doesn't use dialects - just loads config.edn from project root."
-  [project-dir]
-  (try
-    (let [config-file (io/file project-dir "config.edn")
-          raw-config (if (.exists config-file)
-                       (edn/read-string (slurp config-file))
-                       {})
-          _ (when (seq raw-config)
-              (log! :info (str "Loaded config from: " (.getPath config-file))))
-          ;; Validate and process config
-          processed-config (if (seq raw-config)
-                             (config/load-config (.getPath config-file) project-dir)
-                             ;; No config file, use minimal defaults
-                             {:nrepl-user-dir project-dir
-                              :allowed-directories [project-dir]
-                              :write-file-guard false})]
-      (log! :info (str "Processed config: " (keys processed-config)))
-      processed-config)
-    (catch Exception e
-      (log! :warn (str "Failed to load config, using defaults: " (.getMessage e)))
-      ;; Return minimal defaults on error
-      {:nrepl-user-dir project-dir
-       :allowed-directories [project-dir]
-       :write-file-guard false})))
+(defn fetch-config [nrepl-client-map config-file cli-env-type env-type project-dir]
+  (let [user-dir (dialects/fetch-project-directory nrepl-client-map env-type project-dir)]
+    (when-not user-dir
+      (log! :warn "Could not determine working directory")
+      (throw (ex-info "No project directory!!" {})))
+    (log! :info (str "Working directory set to:" user-dir))
 
-;;; (defn load-config-handling-validation-errors [config-file user-dir]
-;;;   (try
-;;;     (config/load-config config-file user-dir)
-;;;     (catch Exception e
-;;;       (if (= ::config/schema-error (-> e ex-data :type))
-;;;         (let [{:keys [errors file-path]} (ex-data e)]
-;;;           (binding [*out* *err*]
-;;;             (println (str "\n❌ Configuration validation failed!\n"))
-;;;             (when file-path
-;;;               (println (str "File: " file-path "\n")))
-;;;             (println "Errors found:")
-;;;             (doseq [[k v] errors]
-;;;               (let [msg (if (sequential? v) (first v) v)]
-;;;                 (println (str " 👉 " k " - " msg))))
-;;;             (println "\nPlease fix these issues and try again.")
-;;;             (println "See CONFIG.md for documentation.\n"))
-;;;           (throw e))
-;;;         ;; Other error - re-throw
-;;;         (throw e)))))
-;;;
-;;; (defn fetch-config [nrepl-client-map config-file cli-env-type env-type project-dir]
-;;;   (let [user-dir (dialects/fetch-project-directory nrepl-client-map env-type project-dir)]
-;;;     (when-not user-dir
-;;;       (log/warn "Could not determine working directory")
-;;;       (throw (ex-info "No project directory!!" {})))
-;;;     (log/info "Working directory set to:" user-dir)
-;;;
-;;;     (let [config (load-config-handling-validation-errors config-file user-dir)
-;;;           final-env-type (or cli-env-type
-;;;                              (if (contains? config :nrepl-env-type)
-;;;                                (:nrepl-env-type config)
-;;;                                env-type))]
-;;;        (assoc nrepl-client-map ::config/config (assoc config :nrepl-env-type final-env-type)))))
+    (let [config (load-config-handling-validation-errors config-file user-dir)
+          final-env-type (or cli-env-type
+                             (if (contains? config :nrepl-env-type)
+                               (:nrepl-env-type config)
+                               env-type))]
+       (assoc nrepl-client-map ::config/config (assoc config :nrepl-env-type final-env-type)))))
 
 (defn create-and-start-nrepl-connection
   "Convenience higher-level API function to create and initialize an nREPL connection.
@@ -396,30 +361,30 @@
 
    Takes initial-config map with :port and optional :host, :project-dir, :nrepl-env-type, :config-file.
    Returns the configured nrepl-client-map with ::config/config attached."
-  [{:keys [_project-dir _config-file] :as initial-config}]
+  [{:keys [project-dir config-file] :as initial-config}]
   (log! :info (str "Creating nREPL connection with config: " initial-config))
   (try
     (require '[clojure-mcp.nrepl :as nrepl])
     (let [nrepl-client-map ((resolve 'nrepl/create) (dissoc initial-config :project-dir :nrepl-env-type))
-          #_#_cli-env-type (:nrepl-env-type initial-config)
+          cli-env-type (:nrepl-env-type initial-config)
           _ (do
               (log! :info "nREPL client map created")
               ((resolve 'nrepl/start-polling) nrepl-client-map)
-              (log! :info "Started polling nREPL"))]
+              (log! :info "Started polling nREPL"))
           ;; Detect environment type early
           ;; TODO this needs to be sorted out
-;;;          env-type (dialects/detect-nrepl-env-type nrepl-client-map)
-;;;          nrepl-client-map-with-config (fetch-config nrepl-client-map
-;;;                                                     config-file
-;;;                                                     cli-env-type
-;;;                                                     env-type
-;;;                                                     project-dir)
-;;;          nrepl-env-type' (config/get-config nrepl-client-map-with-config :nrepl-env-type)]
+          env-type (dialects/detect-nrepl-env-type nrepl-client-map)
+          nrepl-client-map-with-config (fetch-config nrepl-client-map
+                                                     config-file
+                                                     cli-env-type
+                                                     env-type
+                                                     project-dir)
+          nrepl-env-type' (config/get-config nrepl-client-map-with-config :nrepl-env-type)]
       (log! :debug "Initializing Clojure environment")
-;;;      (dialects/initialize-environment nrepl-client-map-with-config nrepl-env-type')
-;;;      (dialects/load-repl-helpers nrepl-client-map-with-config nrepl-env-type')
+      (dialects/initialize-environment nrepl-client-map-with-config nrepl-env-type')
+      (dialects/load-repl-helpers nrepl-client-map-with-config nrepl-env-type')
       (log! :debug "Environment initialized")
-      nrepl-client-map #_nrepl-client-map-with-config)
+       nrepl-client-map-with-config)
     (catch Exception e
       (log! :error (str "Failed to create nREPL connection: " e))
       (throw e))))
@@ -622,23 +587,21 @@
 
    Returns: nil"
   [nrepl-args component-factories]
+  ;; the nrepl-args are a map with :port and optional :host
+  ;; Note: validation should be done by caller
   (let [_ (assert (:port nrepl-args) "Port must be provided for build-and-start-mcp-server-impl")
         nrepl-client-map (create-and-start-nrepl-connection nrepl-args)
-        working-dir (or (:project-dir nrepl-args) "/home/pdenno/Documents/git/schedMCP")
-
-        ;; Load and validate config from config.edn
-        loaded-config (load-and-validate-config working-dir)
-
+        working-dir "/home/pdenno/Documents/git/schedMCP" ;(config/get-nrepl-user-dir nrepl-client-map)
         ;; Store nREPL process (if auto-started) in client map for cleanup
         nrepl-client-with-process (if-let [process (:nrepl-process nrepl-args)]
                                     (assoc nrepl-client-map :nrepl-process process)
                                     nrepl-client-map)
         _ (reset! nrepl-client-atom nrepl-client-with-process)
-
-        ;; Store the loaded config under the expected key
         _ (swap! nrepl-client-atom
-                 #(assoc % :clojure-mcp.config/config loaded-config))
-
+                 #(assoc % :clojure-mcp.config/config
+                         {:nrepl-user-dir "/home/pdenno/Documents/git/schedMCP"
+                          :allowed-directories ["/home/pdenno/Documents/git/schedMCP"]
+                          :write-file-guard false}))
         ;; Setup MCP server with stdio transport
         server-result (setup-mcp-server nrepl-client-atom
                                         working-dir
@@ -697,19 +660,18 @@
   (let [prompts ((resolve 'prompts/make-prompts) nrepl-client-atom)]
     (log! :info (str "Total prompts registered: " (count prompts) ":\n"
                      (with-out-str (pprint (mapv :name prompts)))))
+    (swap! components-atm #(assoc % :prompts prompts))
     prompts))
 
 ;; Delegate to resources namespace
 ;; Note: working-dir param kept for compatibility with core API but unused
 ;; Note: No sched-mcp resources yet!
-(defn make-resources
-  "Create schedMCP-specific resources.
-   Delegates to sched-mcp.resources namespace."
-  [nrepl-client-atom _working-dir]
-  (require '[sched-mcp.resources :as smcp-resources])
-  (let [resources ((resolve 'smcp-resources/make-resources) nrepl-client-atom)]
+(defn make-resources [nrepl-client-atom _working-dir]
+  (require '[clojure-mcp.resources :as resources])
+  (let [resources ((resolve 'resources/make-resources) nrepl-client-atom)]
     (log! :info (str "Total resources registered: " (count resources) ":\n"
                      (with-out-str (pprint (mapv :name resources)))))
+    (swap! components-atm #(assoc % :resources resources))
     resources))
 
 (def server-promise

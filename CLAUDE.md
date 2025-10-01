@@ -1,11 +1,12 @@
 # CLAUDE.md - AI Coding Copilot Instructions
 
 Essential operating instructions for any LLM agent (Claude, GPT, etc.) working on this Clojure project.
-This project performs the functions of an existing project, schedulingTBD, found in the `examples/schedulingTBD` directory, but uses MCP.
-As much as possible, it uses code from schedulingTBD, particularly its database functions and database schema.
+The system is started on Claude Desktop as specified in `claude_desktop_config.json`.
+The equivalent way to start the system without Claude involvement is to run `clojure -M:dev` from a shell or emacs and run `(start)` from the user namespace.
+Even when started from Claude, the developer can nREPL-connect to the running systems (e.g. using emacs M-x cider-connect).
 
 ## Documents to read (in the `docs` directory.
-  1.
+  1. development-plan.md
 
 ## Starting up
 - The system, including its MCP loop, is probably running when you join. If you
@@ -49,27 +50,6 @@ As much as possible, it uses code from schedulingTBD, particularly its database 
 - **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.
 - **Do NOT use clojure.walk/stringify-keys** See sutil/stringify-keys.
 
-### Clojure defn
-- The comment comes before the arguments:
-  ```clojure
-      (defn my-fn
-      "comment"
-       [args]
-      ...)
-
-      ;; NOT
-      (defn bad-fn [args]
-        "comment"
-        ...) ; It is not like common-lisp!
-      ```
-- **Use :diag or :admin metadata** on function definitions that are not referenced by other code and are only used at by developers and in the REPL.
-  ```clojure
-    (defn ^:diag run-me-in-repl
-    []
-    "Hi, Peter! No code calls me.")
-    ```
-## Editing Etiquette
-
 ### Surgical Changes Only
 - Make **minimal, targeted edits** - don't reformat entire functions
 - **Preserve existing spacing and indentation**
@@ -87,31 +67,11 @@ As much as possible, it uses code from schedulingTBD, particularly its database 
 - Don't introduce unnecessary formatting changes
 - Focus edits on the specific functionality being modified
 
-## Quick Reference
-
-```clojure
-;; Start system in the `user` namespace, which uses `mount` a tool for loading and starting the system.
-(start)
-
-;; Check system status and explore
-develop.repl/alias-map                          ; Map of namespaces keyed by consistently used aliases.
-(clj-mcp.repl-tools/list-ns)                    ; List namespaces
-(clj-mcp.repl-tools/list-vars 'some.namespace)  ; List functions
-(clj-mcp.repl-tools/doc-symbol 'function-name)  ; Get documentation
-
-;; Common patterns
-(def active? (atom true))           ; Boolean atom
-(defn update-state! [new-state] ..) ; Mutating function
-(def ^:diag diag (atom nil))        ; Diagnostic helper
-```
-
 ## schedMCP Design Decisions
 
 ### Independence from clojure-mcp
-- We DO NOT reference clojure-mcp in our deps.edn
-- Instead, we borrow design patterns and code structures from clojure-mcp
-- Copy and adapt code rather than creating dependencies
-- This keeps schedMCP self-contained and focused on scheduling domain
+- We DO NOT `require` (the Clojure namespace form) clojure-mcp namespace in the `ns` form.
+ Instead, we `require` and `resolve` in functions that are only called if the configuration intends to run clojure-mcp (the MCP-based programming assistant).
 
 ---
 *Keep this file under 120 lines for quick loading. Last updated: $(date)*

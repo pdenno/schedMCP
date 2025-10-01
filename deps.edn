@@ -13,6 +13,7 @@
         funcool/promesa {:mvn/version "11.0.678"}
         io.replikativ/datahike {:mvn/version "0.6.1594"} ; Not upgrading yet!
         metosin/jsonista {:mvn/version "0.3.13"}
+        metosin/malli {:mvn/version "0.19.1"}            ; for configuration validation
         mount/mount {:mvn/version "0.1.23"}
         org.clojure/data.json {:mvn/version "2.5.1"}
         org.apache.logging.log4j/log4j-core {:mvn/version "2.25.2"} ; Used by jetty
@@ -45,21 +46,9 @@
                          org.clojure/java.classpath {:mvn/version "1.1.0"}
                          org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
-           ;; clojure-mcp: nREPL server for AI to connect to; similar to dev, but uses a different port for http (so I can run both).
-           ;; Include all paths you want available for development.
-           ;; I'm not sure this one is useful. I can start -M:dev, add clojure-mcp tools with the fns in registry.clj instead?
+           ;; This is essentially the same as above but uses the main function to call mount/start and waits on a promise.
+           ;; It is what MCP clients such as Claude Desktop would do.
            #_#_:nrepl
-           {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
-            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
-            :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
-                         clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
-                         com.lambdaisland/classpath {:mvn/version "0.6.58"}
-                         expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
-                         nrepl/nrepl {:mvn/version "1.3.0"}
-                         org.clojure/java.classpath {:mvn/version "1.1.0"}
-                         org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
-
-           :nrepl
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}

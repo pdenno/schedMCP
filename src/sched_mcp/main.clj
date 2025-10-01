@@ -35,7 +35,7 @@
         (mount/stop #'sched-mcp.mcp-core/mcp-core-server)
         (System/exit 1))
       (finally
-        (log! :info "Executing finally on main.")
+        (log! :info "Exiting: Executing finally on main.")
         (mount/stop #'sched-mcp.mcp-core/mcp-core-server)
         (System/exit 0)))
     (do

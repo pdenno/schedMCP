@@ -324,18 +324,6 @@
             (io/delete-file file))]
     (-> path java.io.File. ddr)))
 
-(defn ^:diag mcp-loop-running?
-  "Check if the MCP server loop is running.
-   Returns true if the MCP future exists and is in :pending state."
-  []
-  (when-let [mcp-future-var (try
-                              (requiring-resolve 'sched-mcp.mcp-core/mcp-main-loop-future)
-                              (catch Exception _ nil))]
-    (when-let [mcp-atom @mcp-future-var]
-      (when-let [future-val @mcp-atom]
-        (and (future? future-val)
-             (not (future-done? future-val)))))))
-
 ;;;--------------------------------------- Shared stuff for mocking ----------------
 (def mocking?
   "This is set to true when we start mocking a project execution."

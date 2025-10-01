@@ -1,16 +1,23 @@
 # schedMCP - Manufacturing Scheduling Interview System
 
-schedMCP is an MCP (Model Context Protocol) server that conducts structured interviews to understand manufacturing scheduling challenges and help build MiniZinc scheduling specifications through human/AI collaboration.
+schedMCP is an MCP (Model Context Protocol) server that conducts structured interviews of users to understand the manufacturing scheduling challenges they face and help build MiniZinc scheduling solutions based on those interviews.
+It is both a research prototype to study human/AI teaming and (we hope) something that is directly useful to small and medium-sized manufacturers to help them build production scheduling systems for their operatoins.
 
 ## Overview
 
 This project reimplements the core interview functionality from schedulingTBD as an MCP server, allowing AI assistants like Claude to conduct scheduling interviews through a structured tool interface.
 Its implementation-- currently under development --borrows ideas and code from [clojure-mcp](https://github.com/bhauman/clojure-mcp)
-For use with AI programming assistants, schedulingTBD can be found in `examples/schedulingTBD` and a snapshot of clojure-mcp can be found at `examples/clojure-mcp`.
-
-
+schedulingTBD can be found in `examples/schedulingTBD` and a snapshot of clojure-mcp can be found at `examples/clojure-mcp`.
 
 ## Architecture
+
+Discussion here is limited to discussion of the elements involved in interviewing.
+When the system is complete, the additional capabilities of generating MiniZinc and mentoring of users will be discussed.
+
+`Interviewing` is the term we use to describe the
+
+
+
 
 ### Databases
 - `src/sched-mcp/schema.clj` - Datahike (graph DB) schema for the system and project DBs
@@ -19,24 +26,10 @@ For use with AI programming assistants, schedulingTBD can be found in `examples/
 
 The system uses an orchestrator-driven approach that dynamically selects appropriate Discovery Schemas based on the current state of knowledge. Key MCP tools:
 
-### Interview Tools
-- `iviewr_formulate_question` - Generate contextual questions from Discovery Schemas and current knowledge
-- `iviewr_interpret_response` - Extract structured data (SCRs) from natural language answers
 
-### System Query Tools
-- `sys_get_current_ds` - Check current Discovery Schema and aggregated knowledge (ASCR)
-- `sys_get_interview_progress` - View overall interview progress
+### MCP Tools, Prompts, and Resources (Components)
 
-### Orchestration Tools
-- `orch_get_next_ds` - Get comprehensive DS status for orchestration decisions
-- `orch_start_ds_pursuit` - Begin working on a specific Discovery Schema
-- `orch_complete_ds` - Mark a Discovery Schema as complete
-- `orch_get_progress` - Get overall interview progress
-
-### Surrogate Expert Tools (for testing)
-- `sur_start_expert` - Initialize a domain expert simulation
-- `sur_answer` - Get expert responses to questions
-- `sur_get_session` - Debug surrogate session state
+See `PROJECT_SUMMARY.md` for discriptions of MCP components
 
 ## Prerequisites
 
@@ -89,11 +82,10 @@ Add to your Claude Desktop configuration file:
 {
   "mcpServers": {
     "schedmcp": {
-      "command": "clojure",
-      "args": ["-M", "-m", "sched-mcp.main"],
-      "cwd": "/path/to/schedMCP",
+      "command": "<PATH TO schedMCP>/bin/mcp-wrapper.sh",
       "env": {
-        "SCHED_MCP_DB": <path to directory, possibly in the project ./test/dbs/"
+        "SCHED_MCP_DB": "./test/dbs/",
+        "MCP_MODE": "true"
       }
     }
   }

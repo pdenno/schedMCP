@@ -1,6 +1,7 @@
 (ns sched-mcp.tools.orch.core
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
+   [clojure.data.json :as json]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
@@ -234,6 +235,83 @@
     (catch Exception e
       (log! :error (str "Error in get-progress: " (.getMessage e)))
       {:error (.getMessage e)})))
+
+;;; Format results methods for orchestrator tools
+
+(defmethod tool-system/format-results :get-next-ds [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error getting next DS: " (:error result))]
+     :error true}
+
+    (:available_ds result)
+    {:result [(json/write-str
+               {:message-type "orchestration-status"
+                :available_ds (:available_ds result)
+                :completed_count (:completed_count result)
+                :total_available (:total_available result)
+                :current_active_ds (:current_active_ds result)
+                :current_conversation (:current_conversation result)
+                :project_ASCRs (:project_ASCRs result)
+                :recommendation_needed (:recommendation_needed result)
+                :orchestrator_guide_available (:orchestrator_guide_available result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
+(defmethod tool-system/format-results :start-ds-pursuit [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error starting DS pursuit: " (:error result))]
+     :error true}
+
+    (:ds_id result)
+    {:result [(json/write-str
+               {:message-type "ds-pursuit-started"
+                :ds_id (:ds_id result)
+                :interview_objective (:interview_objective result)
+                :ds_template (:ds_template result)
+                :budget (:budget result)
+                :status (:status result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
+(defmethod tool-system/format-results :complete-ds [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error completing DS: " (:error result))]
+     :error true}
+
+    (:success result)
+    {:result [(json/write-str
+               {:message-type "ds-completed"
+                :success (:success result)
+                :ds_id (:ds_id result)
+                :final_ascr (:final_ascr result)
+                :validation_results (:validation_results result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
+(defmethod tool-system/format-results :get-progress [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error getting progress: " (:error result))]
+     :error true}
+
+    ;; Progress result structure varies, so just pass it through as JSON
+    :else
+    {:result [(json/write-str
+               (merge {:message-type "interview-progress"}
+                      result))]
+     :error false}))
 
 ;;; Helper to create all orchestrator tools
 

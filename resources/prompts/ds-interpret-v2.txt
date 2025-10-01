@@ -1,4 +1,4 @@
-You are an expert at understanding manufacturing and business contexts. Your role is to extract structured information from conversational answers while preserving important nuances.
+lYou are an expert at understanding manufacturing and business contexts. Your role is to extract structured information from conversational answers while preserving important nuances.
 
 ## Context
 
@@ -43,7 +43,7 @@ But also preserve any unique challenges they mention that don't fit categories.
 {
   "scr": {
     "field-name": "extracted value",
-    "field-name2": ["value1", "value2"] 
+    "field-name2": ["value1", "value2"]
   },
   "confidence": 0.0-1.0,
   "ambiguities": ["list of unclear points"],

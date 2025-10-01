@@ -34,35 +34,9 @@ These documents evolve as the project develops:
 - `development-guidelines.md` - Coding standards and practices
 - Other design documents as needed
 
-### Source Directories
-- `src/` - New MCP-based implementation (currently in early development)
-- `examples/schedulingTBD/` - Original implementation for reference
-- `examples/clojure-mcp/` - MCP patterns we borrow (but don't depend on in the sense of deps.edn)
-- `resources/discovery-schemas/` - DS templates organized by domain
-
-### Reference Implementation
-The `examples/schedulingTBD/` directory contains the original system that we're reimplementing with MCP. Key locations:
-- Discovery Schemas: `examples/schedulingTBD/resources/agents/iviewrs/EADS/`
-- Domain implementations: `examples/schedulingTBD/src/server/scheduling_tbd/iviewr/domain/`
-- Orchestrator logic: `examples/schedulingTBD/resources/agents/orchestrator.txt`
-
-## Development Status
-
-- See docs/
-
-## Key Architectural Decisions
-
-1. **MCP Tools are Stateless** - All state lives in the database; tools receive complete context
-2. **Independent from clojure-mcp** - We borrow patterns but maintain no dependencies
-3. **Flexible Orchestration** - Tools provide information, not prescriptions, preserving LLM reasoning
-
 ## For AI Assistants
 
-When working on this project:
-- Always check `/docs/` for the latest design decisions
-- Refer to `CLAUDE.md` for specific AI coding instructions
-- Use examples from `schedulingTBD` as authoritative patterns
-- Borrow (don't reference) patterns from `clojure-mcp`
+
 
 ## Getting Started
 

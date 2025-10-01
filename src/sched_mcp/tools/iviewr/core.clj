@@ -38,7 +38,8 @@
   "iviewr_formulate_question")
 
 (defmethod tool-system/tool-description :formulate-question [_]
-  "Generate contextually appropriate interview questions based on Discovery Schema and current ASCR. This tool uses LLM reasoning to create natural questions that gather required information.")
+  "Generate contextually appropriate interview questions based on Discovery Schema and current ASCR.
+This tool uses LLM reasoning to create natural questions that gather required information.")
 
 (defmethod tool-system/tool-schema :formulate-question [_]
   {:type "object"
@@ -348,6 +349,65 @@
        :interview_objective (:interview-objective dstruct)
        :current_ascr ascr
        :pursuit_status (if completed? :completed :incomplete)})))
+
+;;; Format results methods for interviewer tools
+
+(defmethod tool-system/format-results :formulate-question [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error formulating question: " (:error result))]
+     :error true}
+
+    (:question result)
+    {:result [(json/write-str
+               {:message-type "question-generated"
+                :question (:question result)
+                :context (:context result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
+(defmethod tool-system/format-results :interpret-response [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error interpreting response: " (:error result))]
+     :error true}
+
+    (:scr result)
+    {:result [(json/write-str
+               {:message-type "response-interpreted"
+                :scr (:scr result)
+                :message_id (:message_id result)
+                :ascr_updated (:ascr_updated result)
+                :ds_complete (:ds_complete result)
+                :budget_remaining (:budget_remaining result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
+(defmethod tool-system/format-results :get-current-ds [_ result]
+  (cond
+    (:error result)
+    {:result [(str "Error getting current DS: " (:error result))]
+     :error true}
+
+    (:ds_id result)
+    {:result [(json/write-str
+               {:message-type "current-ds-status"
+                :ds_id (:ds_id result)
+                :ds_template (:ds_template result)
+                :interview_objective (:interview_objective result)
+                :current_ascr (:current_ascr result)
+                :pursuit_status (:pursuit_status result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
 
 ;;; Helper to create all interviewer tools
 
