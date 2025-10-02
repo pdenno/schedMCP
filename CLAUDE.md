@@ -13,7 +13,7 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
   To check that things are as they should be:
   1. `clojure_eval` (an MCP tool) the sexp `(develop.repl/ns-setup!)`; That will allow you to use the same NS aliases that I typically use.
   2. `clojure_eval` the sexp `(sutil/connect-atm :system)`; it should return a connection object, such as `#<Connection@1840adbd: #datahike/DB {:max-tx 536870914 :max-eid 10}>`, and
-  3. `clojure_eval` the sexp `(->> reg/tool-specs (mapv :name))`, it should return a vector of (currently 11) tool names.
+  3. `clojure_eval` the express `@mcore/components-atm apv :name))`, it should return a clojure map with three keys `:tools`, `:prompts` and `:resources` the values of each are vectors of maps describing the associated components.
 
 ## Coding Rules
 

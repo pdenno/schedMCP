@@ -14,29 +14,19 @@ The next phase will enhance the system with structured data collection capabilit
 
 ### Core Concepts
 
-1. **Discovery Schema (DS)** - JSON/EDN structures that define the information to be collected during interviews. These replace the deprecated term "EADS" (Example Annotated Data Structures).
+1. **Runs on an MCP client** - All the tasks that SchedMCP performs are orchestrated by an MCP client.
 
-2. **Schema-Conforming Response (SCR)** - Structured data extracted from individual user responses that conforms to the DS template.
+2. **Discovery Schema (DS)** - JSON/EDN structures that define the information to be collected during interviews. These replace the deprecated term "EADS" (Example Annotated Data Structures).
 
-3. **Aggregated Schema-Conforming Response (ASCR)** - Combined SCRs that represent the complete state of information collected for a DS.
+3. **Schema-Conforming Response (SCR)** - Structured data extracted from individual user responses that conforms to the DS template.
 
-4. **Orchestration** - The process of selecting and sequencing DS interviews based on collected information and domain logic.
+4. **Aggregated Schema-Conforming Response (ASCR)** - Combined SCRs that represent the complete state of information collected for a DS.
 
-### Architectural Principles
+5. **Orchestration** - The process of selecting and sequencing DS interviews based on collected information and domain logic. In the current implementation is is performed by Claude.
 
-1. **Stateless Tools**: MCP tools are pure functions, with all state managed in the database
-2. **Tool Composition**: Complex interactions decomposed into smaller, composable tools
-3. **Natural Flow**: Conversational interface preserved while collecting structured data
-4. **Flexibility**: Support for both AI-driven and human-guided orchestration
+6. **clojure-mcp integration** - The MCP client can run all the clojure-mcp tools, prompts and resources to develop the system. Future work will make loading and unloading these dynamic; our MCP clients are quite ready for that, it seems.
 
-### The Magic Formula
-```
-Domain Expertise (in DS) + General Intelligence (LLM) = Flexible Expert System
-```
-
-## Current Implementation Status
-
-### Completed Features
+## Current Implementation Status: Completed Features
 
 1. **Basic Interview Flow (Phase 1)**
    - Warm-up phase with scheduling challenges questions
@@ -45,8 +35,8 @@ Domain Expertise (in DS) + General Intelligence (LLM) = Flexible Expert System
 
 2. **Discovery Schema Infrastructure (Phase 2)**
    - 8 DS templates loaded from JSON:
-     - Process: warm-up, flow-shop, job-shop (3 variants), timetabling
-     - Data: ORM (Object-Role Modeling)
+	 - Process: warm-up, flow-shop, job-shop (3 variants), timetabling
+	 - Data: ORM (Object-Role Modeling)
    - ASCR (Aggregated Schema-Conforming Response) management
 
 3. **LLM Integration**
@@ -54,26 +44,24 @@ Domain Expertise (in DS) + General Intelligence (LLM) = Flexible Expert System
    - `iviewr_interpret_response`: Extracts structured data from natural language
    - Integration with OpenAI GPT-4
 
-4. **Surrogate Expert System**
+4. **Surrogate Scheduling Domain Expert System**
    - LLM-based domain expert simulation
-   - Supports multiple manufacturing domains
+   - Supports any given manufacturing domain where LLMs are likely to have at least passing competence.
    - Maintains conversation consistency
-   - Integration with "How It's Made" database (~1600 manufacturing processes)
+   - Plans for testing with a database of episode segment names from the Science Channel's "How It's Made" (~1600 manufacturing processes)
 
 5. **Orchestration Foundation**
-   - Flow graph defining DS progression paths
-   - Priority-based DS selection
-   - Multi-phase interview support
+   - Orchestration is a key capability implemented our MCP components.
+   - Currently, it is limited to selecting next Discovery Schema to delegate detailed interviewing to an interviewer.
+   - Plans (described in this document) to develop comprehensive capabilities (See section `### Plans for Comprehensive Orchestration`)
 
-### Existing Assets
+6. We have an existing React table implementation in `examples/schedulingTBD/src/app/stbd_app/components/table2.cljs` that uses MUI DataGrid. This component already handles:
+   - Table rendering with editable cells
+   - Row addition/removal
+   - Row reordering
+   - Data transformation between internal format and display format
 
-**Important Note**: We have an existing React table implementation in `examples/schedulingTBD/src/app/stbd_app/components/table2.cljs` that uses MUI DataGrid. This component already handles:
-- Table rendering with editable cells
-- Row addition/removal
-- Row reordering
-- Data transformation between internal format and display format
-
-This existing implementation can serve as a reference or potentially be adapted for the MCP-UI integration.
+   This existing implementation can serve as a reference or potentially be adapted for the MCP-UI integration.
 
 ## Recent Architectural Decisions (September 2025)
 
@@ -115,7 +103,7 @@ Phase 2.5 involved testing entire cycles of the following 6 tasks:
   - Returns SCRs directly as the response
   - Handles the comment/val annotation structure correctly
 - ✅ Successfully tested full cycle with craft beer surrogate expert.
-     (No significant orchestration demonstrated, however. That is, Claude did not choose any subsequent DSs.)
+	 (No significant orchestration demonstrated, however. That is, Claude did not choose any subsequent DSs.)
 
 The system now correctly:
 - Formulates domain-appropriate questions (no more plate glass confusion)
@@ -128,16 +116,6 @@ The system now correctly:
 - ✅ Redesign ds-combine! (now ds-combine) and ds-complete?.
    The dsu/ds-combine! methods were poorly designed. They should take only a SCR and an ASCR and it should return an ASCR.
    There should be no actions on the DBs to make this happen. We'll fix this first. (We'll call it ds-combine (no exclamation mark) since it won't touch the DB.)
-- To Do: Make schedMCP work as stand alone.
-  Currently if you start schedMCP using `clojure -M:dev -m sched-mcp.main` it produces output from startup as below, and then immediate exits.
-  That's what we coded but not what we want!
-  I tried adding a promise and await it. Perhaps that helps, but the client is still disconnecting.
-  **This is the problem we are currently investigating.**
-- To Do: More comprehensively, I think there is occassionally the need for an LLM-based agent to perform the combination, if the SCR's come back from the interviewer messed up, for example.
-  The problem is it isn't clear how we should manage this. We can easily define a dsu/ds-valid? method on each DS; it returns true if
-  the SCR or ASCR is structurally valid. I suppose that is part of the solution.
-- The question: How would we best try the deterministic code dsu/ds-combine and only if dsu/ds-valid? returns false call the agent?
-  Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
 
 ### 5. "Phase 2.6" Tasks: Using clojure-mcp in sched-mcp
 
@@ -162,55 +140,75 @@ The system now correctly:
   - Clojure-mcp tools (17): All tools listed above
   - Total: 26 tools successfully registered and available
 
-#### Remaining Tasks:
-- The client (Claude Desktop) is not able to see any of resources that should have been registered. (I believe `CLAUDE.md`,  `PROJECT_SUMMARY.md` and `LLM_CODING_STYLE.md` were to be registered.)
-  The problem is likely to be rooted in `mcp_core.clj` not implementing the system configuration capabilities of `examples/clojure-mcp/src/clojure_mcp/core.clj`.
-  I have a version of `mcp_core.clj` named `mcp_core-hold.clj` that implements some of clojure-mcp's config capabilities, but running the MCP server with that version was not possible.
-  Errors reported that might be related is:
-[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Failed to send notification: Failed to enqueue message[0;m
-[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
-[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Failed to send notification: Failed to enqueue message[0;m
-[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
-[38;5;196;1;48;5;231mSLF4J/ERROR [0;m [38;5;196m: - Operator called default onErrorDropped[0;m
- (See `logs/wrapper.log`).
+#### Remaining "Phase 2.6" Tasks (October, 2025):
 
-- Test Claude running MCP with a surrogate where all conversation is visible from Claude Desktop, rather than (as it is in current testing) only seen in clojure_eval and related entries.
-- Test Claude orchestrating multiple DSs with full clojure-mcp toolset available.
+- **This is the problem we are currently investigating.** :The client (Claude Desktop) is not able to see any of resources that should have been registered.
+   (I believe `README.mc`, `CLAUDE.md`, `PROJECT_SUMMARY.md` and `LLM_CODING_STYLE.md` and `Clojure Project Info (dynamic)` are registered.)
+   I wrote `sched_mcp.mcp_core/reload-components`, which should be helpful to debugging this problem and development generally, if it doesn't cause the MCP client to lose connection.
+   Two immediate tasks WRT this are:
+   1. Investigate the error generated by its execution, **SLF4J/ERROR  : - Operator called default onErrorDropped**, and
+   2. Determine whether, even with the above corrected it causes the MCP client to lose connection.
+   
+   Footnote: We (and clojure-mcp) use the the term "MCP components" to refer collectively to MCP tools, prompts and resources.
+
+- When the above is working: Make schedMCP work as stand alone.
+  Currently if you start schedMCP using `clojure -M:dev -m sched-mcp.main` it produces output from startup as below, and then immediate exits.
+  That's what we coded but not what we want!
+  I tried adding a promise and await it. Perhaps that helps, but the client is still disconnecting.
+
+#### Take another pass at ds-combine!
+- To Do: More comprehensively, I think there is occassionally the need for an LLM-based agent to perform the combination, if the SCR's come back from the interviewer messed up, for example.
+  The problem is it isn't clear how we should manage this. We can easily define a dsu/ds-valid? method on each DS; it returns true if
+  the SCR or ASCR is structurally valid. I suppose that is part of the solution.
+- The question: How would we best try the deterministic code dsu/ds-combine and only if dsu/ds-valid? returns false call the agent?
+  Perhaps the agent is not an MCP tool, but maybe there a better way with an MCP tool or two?
 
 ## Post-2.6 Architecture Discussion
 
 We need to determine where to take things next. (I will describe some ideas for this section later.)
 
+### Plans for Comprehensive Orchestration
+
+- Currently, orchestration is simplistic; it is restricted to selecting among a few discovery schema to direct interviewing.
+- A more comprehensive viewpoint on 'orchestration' is that it is about influencing how interaction with users proceeds in **all** aspects of collaboration. Specifically, this includes,
+	1. driving interviews forward by selecting discovery schema and delegating to the interviewer(as we do now),
+	2. initiating validation tasks using diagrams created from ASCRs.
+	3. refining and testing the  MiniZinc model as we learn more about the domain problem from the interviewees (users),
+	4. mentoring users on how the system works, how it integrates with their data, and how MiniZinc works to solve their scheduling problem, and
+	5. quizzing users to help them assess how well they understand the system. (This might be implemented as separate mode of operation from the previous 4 responsibilities.)
+- We think the key to implementing this more comprehensive notion of orchestration might hinge on providing comprehensive MCP tools, prompts, and resources about the project and our scheduling expertise. For example:
+	- An *MCP Tool* that is feature rich for allowing inspection of the project database.
+	- An *MCP Resource* that describes the schema of the project database so as to support the
+
 
 ### Discuss Design for more-encompassing activity
  - Our plan for this system is that it can
-    1. Mentor users in use of the system and the MiniZinc technology
-    2. Quiz users to ensure that they 'stay in the loop' about the solution,
-    3. Present diagrams for verification and validation (V&V) illustrating our interpretation of what the inteviewees have told us about their processes and challenges,
-    4. Integrate itself into the existing production system architecture. For example, it might need to make API calls or upload spreadsheets to obtain customer orders.
-    5. Provide an an agile, interative-refinement process (Start with the most rudimentary MiniZinc solution possible, for example, running through a manufacturing process with just one product
-       and refine the solution through interleaved discussion and mentoring.)
+	1. Mentor users in use of the system and the MiniZinc technology
+	2. Quiz users to ensure that they 'stay in the loop' about the solution,
+	3. Present diagrams for verification and validation (V&V) illustrating our interpretation of what the inteviewees have told us about their processes and challenges,
+	4. Integrate itself into the existing production system architecture. For example, it might need to make API calls or upload spreadsheets to obtain customer orders.
+	5. Provide an an agile, interative-refinement process (Start with the most rudimentary MiniZinc solution possible, for example, running through a manufacturing process with just one product
+	   and refine the solution through interleaved discussion and mentoring.)
  - The above requirements raises questions about how the system operates. Is it all performed through MCP? Is there a role for LangGraph? MCP UI? What else?
 
-### Discuss MCP Prompts and Resources for Orchestration
-- Compared to `Discuss Design for more-encompassing activity` above this is a discussion that assumes we are using MCP prompts and resources to perform
-
-
-###  Discuss LangGraph4j for Orchestration
+###  Discuss LangGraph4j for Orchestration (On hold until we investigate the 'Plans for Comprehensive Orchestration' above)
+LangGraph can enhance the orchestration layer by providing:
+- Dynamic flow control based on interview responses
+- Parallel execution of independent DS
+- Backtracking when contradictions are discovered
+- State checkpointing for complex interviews
 - LangGraph provides dynamic flow control based on responses and enables backtracking and state checkpointing.
 - Is it a natural fit for the ASCR accumulation pattern?
-- Does this supplant use of MCP prompts and resources as discussed above in `Discuss MCP Prompts and Resources for Orchestration`?
 
+## MCP-UI Integration Strategy
 
-### MCP-UI Integration Strategy
-
-#### 1. Research Phase (Week 2)
+### 1. Research Phase (Week 2)
 
 - Study mcp-ui documentation at https://mcpui.dev/
 - Analyze how our existing React table component could be adapted
 - Design integration architecture
 
-#### 2. Proof of Concept (Week 2)
+### 2. Proof of Concept (Week 2)
 
 ```javascript
 // Conceptual MCP-UI component
@@ -219,17 +217,17 @@ const TableEditor = ({ tableSpec, initialData, onSubmit }) => {
   // Convert between MCP format and DataGrid format
   // Handle validation on client side
   return (
-    <DataGrid
-      rows={initialData}
-      columns={tableSpec.columns}
-      onRowUpdate={handleUpdate}
-      // ... other props
-    />
+	<DataGrid
+	  rows={initialData}
+	  columns={tableSpec.columns}
+	  onRowUpdate={handleUpdate}
+	  // ... other props
+	/>
   );
 };
 ```
 
-#### 3. Integration Architecture (Week 2-3)
+### 3. Integration Architecture (Week 2-3)
 
 - MCP server provides table specifications
 - UI renders editable tables client-side
@@ -237,14 +235,6 @@ const TableEditor = ({ tableSpec, initialData, onSubmit }) => {
 - Results returned through standard MCP channels
 
 ## LangGraph Integration Exploration
-
-### Rationale
-
-LangGraph can enhance the orchestration layer by providing:
-- Dynamic flow control based on interview responses
-- Parallel execution of independent DS
-- Backtracking when contradictions are discovered
-- State checkpointing for complex interviews
 
 ### Proposed Architecture
 
@@ -255,153 +245,59 @@ from langgraph import StateGraph, END
 from typing import TypedDict, List, Dict
 
 class InterviewState(TypedDict):
-    """State maintained throughout the interview"""
-    project_id: str
-    current_ds: str
-    completed_ds: List[str]
-    ascr: Dict
-    confidence_scores: Dict
-    discovered_constraints: List[str]
+	"""State maintained throughout the interview"""
+	project_id: str
+	current_ds: str
+	completed_ds: List[str]
+	ascr: Dict
+	confidence_scores: Dict
+	discovered_constraints: List[str]
 
 def create_interview_graph():
-    """Create the LangGraph workflow for interviews"""
-    graph = StateGraph(InterviewState)
+	"""Create the LangGraph workflow for interviews"""
+	graph = StateGraph(InterviewState)
 
-    # Add nodes for each phase
-    graph.add_node("warm_up", warm_up_interview)
-    graph.add_node("determine_process_type", analyze_process_type)
-    graph.add_node("flow_shop_details", flow_shop_interview)
-    graph.add_node("job_shop_details", job_shop_interview)
-    graph.add_node("resource_mapping", resource_interview)
-    graph.add_node("constraints", constraint_interview)
-    graph.add_node("optimization", optimization_interview)
+	# Add nodes for each phase
+	graph.add_node("warm_up", warm_up_interview)
+	graph.add_node("determine_process_type", analyze_process_type)
+	graph.add_node("flow_shop_details", flow_shop_interview)
+	graph.add_node("job_shop_details", job_shop_interview)
+	graph.add_node("resource_mapping", resource_interview)
+	graph.add_node("constraints", constraint_interview)
+	graph.add_node("optimization", optimization_interview)
 
-    # Add conditional routing
-    graph.add_conditional_edges(
-        "determine_process_type",
-        route_by_process_type,
-        {
-            "flow": "flow_shop_details",
-            "job": "job_shop_details",
-            "hybrid": "hybrid_process_details"
-        }
-    )
+	# Add conditional routing
+	graph.add_conditional_edges(
+		"determine_process_type",
+		route_by_process_type,
+		{
+			"flow": "flow_shop_details",
+			"job": "job_shop_details",
+			"hybrid": "hybrid_process_details"
+		}
+	)
 
-    # Add parallel execution for independent phases
-    graph.add_edge("flow_shop_details", "resource_mapping")
-    graph.add_edge("job_shop_details", "resource_mapping")
+	# Add parallel execution for independent phases
+	graph.add_edge("flow_shop_details", "resource_mapping")
+	graph.add_edge("job_shop_details", "resource_mapping")
 
-    # Compile and return
-    return graph.compile()
+	# Compile and return
+	return graph.compile()
 ```
-
-### Integration Points
-
-1. **MCP Tools as Graph Nodes**
-   - Each node calls appropriate MCP tools
-   - State passed between nodes via LangGraph
-
-2. **Dynamic Routing**
-   - Based on ASCR content and confidence scores
-   - Can return to earlier nodes if needed
-
-3. **Checkpoint Management**
-   - Save state at each node completion
-   - Resume from any point in the interview
 
 ## State Management Architecture
 
-Since MCP tools are stateless, robust state management is critical. We believe the project DBs are sufficient for managing conversation state.
+Since MCP tools are stateless, robust state management is critical.
+We believe the project DBs are sufficient for managing conversation state (and project state more generally).
 
 ### Key State Management Insights
 
-1. **Stateless Tool Challenge**: Every tool call receives DS template + current ASCR
+1. **Stateless Tool Challenge**: Every tool call used in interviewing receives DS template + current ASCR + conversation history.
 2. **Pure Function Design**: Tools are `(DS, ASCR, input) → (action, updated_ASCR)`
 3. **State Persistence**:
-   - Individual SCRs stored with each response
-   - ASCR maintained separately as "best summary"
+   - Individual SCRs stored in the project's DB with each response.
+   - The corresponding ASCR is with each response.
    - See example: `examples/schedulingTBD/data/projects/sur-craft-beer-4script.edn`
-
-## Usage Patterns
-
-### Pattern 1: AI-Driven Interview (Claude as Orchestrator)
-```
-User: "I need help scheduling my brewery"
-
-Claude: [calls start_interview]
-        [calls get_next_ds]
-        → recommends "process/warm-up-with-challenges"
-        [calls formulate_question]
-        "What products do you make and what are your scheduling challenges?"
-
-User: "We make craft beer..."
-
-Claude: [calls interpret_response]
-        [calls formulate_question]
-        "Do your products follow the same production process?"
-
-[Continue until DS complete]
-
-Claude: [calls complete_ds]
-        [calls get_next_ds]
-        → recommends "process/flow-shop"
-        [Process continues...]
-```
-
-### Pattern 2: Table-Based Collection
-```
-Claude: [calls formulate_table_question]
-        "Please fill in your resource capabilities:"
-        [presents HTML table]
-
-User: [edits table with resource data]
-
-Claude: [calls process_table_response]
-        [validates and stores data]
-        [continues with next question]
-```
-
-## Development Timeline
-
-### Completed
-- ✓ Phase 2.5: Core DS Flow (SCR → ASCR pipeline)
-- ✓ Tool naming with agent prefixes
-- ✓ Single surrogate session simplification
-- ✓ Generic interviewer prompt system (`base-iviewr-instructions.md`)
-
-### Week 1: Table Infrastructure
-- [ ] Create table-comm namespace
-- [ ] Implement HTML generation/parsing
-- [ ] Create table-specific MCP tools
-- [ ] Test with surrogate experts
-
-### Week 2: MCP-UI Integration
-- [ ] Research mcp-ui capabilities
-- [ ] Design integration architecture
-- [ ] Create proof-of-concept
-- [ ] Adapt existing React table component if feasible
-- [ ] Document UI integration patterns
-
-### Week 3: LangGraph4j Exploration
-- [ ] Create LangGraph4j proof-of-concept
-- [ ] Map current flow to graph nodes
-- [ ] Design conditional routing logic
-- [ ] Implement state checkpointing with ASCR as reducer
-- [ ] Test with complex scenarios
-
-### Week 4: Agent Instructions & LLM Orchestration
-- [ ] Create agent instruction documents
-- [ ] Replace hard-coded `orch_get_next_ds` logic with LLM reasoning
-- [ ] Implement orchestrator agent with proper instructions
-- [ ] Test decision-making quality
-- [ ] Document agent patterns
-
-### Week 5: Integration and Documentation
-- [ ] Integrate all components
-- [ ] Update system documentation
-- [ ] Create developer guides
-- [ ] Performance testing
-- [ ] Deploy updates
 
 ## Testing Strategy
 
@@ -413,18 +309,6 @@ Using the existing surrogate expert system:
 2. **Integration Tests**: Full interview flows with surrogate experts
 3. **Stress Tests**: All 1600 "How It's Made" manufacturing processes
 4. **Validation Tests**: Compare generated models against known solutions
-
-### Test Tools
-```clojure
-{:name "run_surrogate_interview"
- :description "Conducts automated interview with surrogate expert"
- :parameters {:surrogate_id :string
-              :ds_sequence [:string]
-              :max_questions :number}
- :returns {:completed_ds [:string]
-           :ascr :object
-           :transcript :object}}
-```
 
 ## Success Metrics
 
@@ -463,6 +347,5 @@ Using the existing surrogate expert system:
 ## Open Questions
 
 1. **Orchestration Complexity**: Should orchestration logic be in tools or in Claude's reasoning?
-2. **State Granularity**: How much state in DB vs. returned in tool responses?
-3. **DS Evolution**: How to handle DS version changes over time?
-4. **Agent Configuration**: How to properly integrate agent descriptions into MCP project structure?
+2. **DS Evolution**: How to handle DS version changes over time?
+3. **Agent Configuration**: How to properly integrate agent descriptions into MCP project structure?

@@ -22,6 +22,7 @@
    [sched-mcp.tools.orch.core :as orch]
    [sched-mcp.tools.surrogate :as surrogate]
    [sched-mcp.tool-system :as tool-system]
+   [sched-mcp.resources :as resources]
    [sched-mcp.util :as util :refer [alog! log!]])
   (:import [io.modelcontextprotocol.server.transport
             StdioServerTransportProvider]
@@ -63,6 +64,10 @@
   "for sharing state between tools (contains pid and cid)"
   (atom {}))
 
+(def ^:diag components-atm
+  "This is just for studying what gets made, but DON'T REMOVE IT."
+  (atom {}))
+
 (def ^:admin enabled-tool-category?
   "This is a configuration parameter." ; ToDo: Possible use clojure-mcp's config.clj etc.
   #{:schedmcp :cmcp-all}) ; Other possible values :cmpc-read-only :cmpc-eval :cmpc-editing :cmpc-agent
@@ -101,6 +106,7 @@
         all-tools (vec (concat sched-tool-specs surrogate/tool-specs clojure-mcp-tools))]
     (log! :info (str "Total tools registered: " (count all-tools) ":\n"
                      (with-out-str (pprint (mapv :name all-tools)))))
+    (swap! components-atm #(assoc % :tools all-tools))
     all-tools))
 
 ;;; ----------------------------- Based on clojure-mcp/core.clj
@@ -323,32 +329,6 @@
       (log! :error (str "Failed to initialize MCP server: " e))
       (throw e))))
 
-(defn load-and-validate-config
-  "Load config from project directory, validate it, and return processed config.
-   Simplified version that doesn't use dialects - just loads config.edn from project root."
-  [project-dir]
-  (try
-    (let [config-file (io/file project-dir "config.edn")
-          raw-config (if (.exists config-file)
-                       (edn/read-string (slurp config-file))
-                       {})
-          _ (when (seq raw-config)
-              (log! :info (str "Loaded config from: " (.getPath config-file))))
-          ;; Validate and process config
-          processed-config (if (seq raw-config)
-                             (config/load-config (.getPath config-file) project-dir)
-                             ;; No config file, use minimal defaults
-                             {:nrepl-user-dir project-dir
-                              :allowed-directories [project-dir]
-                              :write-file-guard false})]
-      (log! :info (str "Processed config: " (keys processed-config)))
-      processed-config)
-    (catch Exception e
-      (log! :warn (str "Failed to load config, using defaults: " (.getMessage e)))
-      ;; Return minimal defaults on error
-      {:nrepl-user-dir project-dir
-       :allowed-directories [project-dir]
-       :write-file-guard false})))
 
 ;;; (defn load-config-handling-validation-errors [config-file user-dir]
 ;;;   (try
@@ -624,30 +604,32 @@
   [nrepl-args component-factories]
   (let [_ (assert (:port nrepl-args) "Port must be provided for build-and-start-mcp-server-impl")
         nrepl-client-map (create-and-start-nrepl-connection nrepl-args)
-        working-dir (or (:project-dir nrepl-args) "/home/pdenno/Documents/git/schedMCP")
+        working-dir (or (:project-dir nrepl-args)
+                        (throw (ex-info "Could not find working-dir on nrepl-args." {})))
+        smcp-config-path (io/file working-dir "config.edn")
+        smcp-config-map (if (.exists smcp-config-path) (-> smcp-config-path slurp edn/read-string) {})
 
-        ;; Load and validate config from config.edn
-        loaded-config (load-and-validate-config working-dir)
+        ;; Load and validate config from ./config.edn and ${HOME}/.clojure-mcp/config.edn.
+        loaded-config (config/load-and-validate-configs working-dir) ; <============================ Get it from clojure-mcp!
 
         ;; Store nREPL process (if auto-started) in client map for cleanup
         nrepl-client-with-process (if-let [process (:nrepl-process nrepl-args)]
                                     (assoc nrepl-client-map :nrepl-process process)
-                                    nrepl-client-map)
-        _ (reset! nrepl-client-atom nrepl-client-with-process)
+                                    nrepl-client-map)]
+    (reset! nrepl-client-atom nrepl-client-with-process)
+    ;; Store the loaded config under the sched-mcp namespace key (not clojure-mcp)
+    (swap! nrepl-client-atom #(assoc % :clojure-mcp.config/config loaded-config))
+    (swap! nrepl-client-atom #(assoc % :sched-mcp.config/config smcp-config-map))
 
-        ;; Store the loaded config under the expected key
-        _ (swap! nrepl-client-atom
-                 #(assoc % :clojure-mcp.config/config loaded-config))
-
-        ;; Setup MCP server with stdio transport
-        server-result (setup-mcp-server nrepl-client-atom
-                                        working-dir
-                                        component-factories
-                                        ;; stdio server creation thunk returns map
-                                        (fn [] {:mcp-server (mcp-server)}))
-        mcp (:mcp-server server-result)]
-    (swap! nrepl-client-atom assoc :mcp-server mcp)
-    nil))
+    ;; Setup MCP server with stdio transport
+    (let [server-result (setup-mcp-server nrepl-client-atom
+                                          working-dir
+                                          component-factories
+                                          ;; stdio server creation thunk returns map
+                                          (fn [] {:mcp-server (mcp-server)}))
+          mcp (:mcp-server server-result)]
+      (swap! nrepl-client-atom assoc :mcp-server mcp)
+    nil)))
 
 (defn build-and-start-mcp-server
   "Builds and starts an MCP server with optional automatic nREPL startup.
@@ -691,26 +673,62 @@
 ;;; ------- Based on clojure-mcp/main.clj and sched-mcp/registry.clj --------------------------------
 ;; Delegate to prompts namespace
 ;; Note: working-dir param kept for compatibility with core API but unused
-;; Note: No sched-mcp prompts yet!
 (defn make-prompts [nrepl-client-atom _working-dir]
   (require '[clojure-mcp.prompts :as prompts])
   (let [prompts ((resolve 'prompts/make-prompts) nrepl-client-atom)]
     (log! :info (str "Total prompts registered: " (count prompts) ":\n"
                      (with-out-str (pprint (mapv :name prompts)))))
+    (swap! components-atm #(assoc % :prompts prompts))
     prompts))
 
 ;; Delegate to resources namespace
-;; Note: working-dir param kept for compatibility with core API but unused
-;; Note: No sched-mcp resources yet!
+;; Note: working-dir param kept for compatibility with core API but unused. (I think it should be in nrepl-client-atom ???)
 (defn make-resources
   "Create schedMCP-specific resources.
    Delegates to sched-mcp.resources namespace."
   [nrepl-client-atom _working-dir]
-  (require '[sched-mcp.resources :as smcp-resources])
-  (let [resources ((resolve 'smcp-resources/make-resources) nrepl-client-atom)]
+  (let [resources (resources/make-resources nrepl-client-atom)]
     (log! :info (str "Total resources registered: " (count resources) ":\n"
                      (with-out-str (pprint (mapv :name resources)))))
+    (swap! components-atm #(assoc % :resources resources))
     resources))
+
+;;; ------------------------------ Starting and stopping -------------------------
+
+;;; CD suggested this one.
+#_(defn ^:diag reload-components
+  "Reload configuration and re-register components without stopping the server.
+   For development use only."
+  []
+  (let [working-dir "/home/pdenno/Documents/git/schedMCP"
+        loaded-config (load-and-validate-config working-dir)
+        _ (swap! nrepl-client-atom assoc :sched-mcp.config/config loaded-config)
+        mcp-server (:mcp-server @nrepl-client-atom)
+        components (build-components nrepl-client-atom
+                                    working-dir
+                                    {:make-tools-fn make-cmcp-and-smcp-tools
+                                     :make-prompts-fn make-prompts
+                                     :make-resources-fn make-resources})]
+    (register-components mcp-server @nrepl-client-atom components)
+    :reloaded))
+
+;;; I'm thinking something like this might work. It doesn't touch the configs though (good thing? bad thing?).
+;;; Currently it generates errors: SLF4J/ERROR  : - Operator called default onErrorDropped
+(defn ^:diag reload-components!
+  "Reload configuration and re-register components without stopping the server.
+   Probably for development use only."
+  []
+  (let [working-dir (as-> "(System/getProperty \"user.dir\")" ?x
+                      ((resolve 'clojure-mcp.tools.eval.core/evaluate-code) @nrepl-client-atom {:code ?x})
+                      (get-in ?x [:outputs 0 1])
+                      (edn/read-string ?x))
+        components (build-components nrepl-client-atom
+                                     working-dir
+                                     {:make-tools-fn make-cmcp-and-smcp-tools
+                                      :make-prompts-fn make-prompts
+                                      :make-resources-fn make-resources})
+        mcp-server (:mcp-server @nrepl-client-atom)]
+    (register-components mcp-server @nrepl-client-atom components)))
 
 (def server-promise
   "This is used in main to keep the server from exiting immediately."

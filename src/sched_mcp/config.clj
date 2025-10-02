@@ -1,11 +1,12 @@
 (ns sched-mcp.config
+  "NOTE: This should probably not be maintained. With the next upgrade of clojure-mcp, use the one it defines.
+   Instead just add :sched-mcp/config to the clojure-mcp config."                                              ; <================
   (:require
    [clojure.java.io :as io]
-   [clojure.string :as str]
-   [sched-mcp.dialects :as dialects]
+   [clojure.pprint :refer [pprint]]
    [sched-mcp.config.schema :as schema]
-   [clojure.edn :as edn]
-   [clojure.tools.logging :as log]))
+   [sched-mcp.util :refer [log!]]
+   [clojure.edn :as edn]))
 
 (defn- relative-to [dir path]
   (try
@@ -14,10 +15,10 @@
         (.getCanonicalPath f)
         (.getCanonicalPath (io/file dir path))))
     (catch Exception e
-      (log/warn "Bad file paths " (pr-str [dir path]))
+      (log! :warn (str "Bad file paths " (pr-str [dir path]) " " e))
       nil)))
 
-(defn- load-config-file
+#_(defn- load-config-file
   "Loads a single config file from the given path. Returns empty map if file doesn't exist."
   [config-file-path]
   (let [config-file (io/file config-file-path)]
@@ -25,16 +26,16 @@
       (try
         (edn/read-string (slurp config-file))
         (catch Exception e
-          (log/warn e "Failed to read config file:" (.getPath config-file))
+          (log! :warn  (str "Failed to read config file:" (.getPath config-file) " " e))
           {}))
       {})))
 
-(defn- get-home-config-path
+(defn get-home-config-path
   "Returns the path to the user home config file."
   []
   (io/file (System/getProperty "user.home") ".clojure-mcp" "config.edn"))
 
-(defn- load-home-config
+#_(defn- load-home-config
   "Loads configuration from ~/.clojure-mcp/config.edn.
    Returns empty map if the file doesn't exist."
   []
@@ -46,10 +47,8 @@
    For non-map values, the second value wins."
   [m1 m2]
   (cond
-    (and (map? m1) (map? m2))
-    (merge-with deep-merge m1 m2)
-
-    :else m2))
+    (and (map? m1) (map? m2))   (merge-with deep-merge m1 m2)
+    :else                       m2))
 
 (defn- merge-configs
   "Merges user home config (defaults) with project config (overrides).
@@ -85,13 +84,15 @@
                            :config config
                            :file-path canonical-path})))))))
 
-(defn process-config [{:keys [allowed-directories emacs-notify write-file-guard cljfmt bash-over-nrepl nrepl-env-type] :as config} user-dir]
-  (let [ud (io/file user-dir)]
+(defn process-config
+  "Add some clojure-mcp properties to the merged config file."
+  [{:keys [allowed-directories _emacs-notify write-file-guard _cljfmt _bash-over-nrepl _nrepl-env-type] :as config}]
+  (let [user-dir (System/getProperty "user.home")
+        ud (io/file user-dir)]
     (assert (and (.isAbsolute ud) (.isDirectory ud)))
     (when (some? write-file-guard)
       (when-not (contains? #{:full-read :partial-read false} write-file-guard)
-        (log/warn "Invalid write-file-guard value:" write-file-guard
-                  "- using default :partial-read")
+        (log! :warn (str "Invalid write-file-guard value: " write-file-guard " - using default :partial-read"))
         (throw (ex-info (str "Invalid Config: write-file-guard value:  " write-file-guard
                              "- must be one of (:full-read, :partial-read, false)")
                         {:write-file-guard write-file-guard}))))
@@ -112,72 +113,50 @@
       (some? (:nrepl-env-type config))
       (assoc :nrepl-env-type (:nrepl-env-type config)))))
 
-(defn load-config
-  "Loads configuration from both user home (~/.clojure-mcp/config.edn) and project directory.
-   User home config provides defaults, project config provides overrides.
-   Validates both configs before merging."
-  [cli-config-file user-dir]
-  ;; Load user home config first (provides defaults)
-  (let [home-config (load-home-config)
-        home-config-path (get-home-config-path)
+(defn load-and-validate-configs
+  "Load config from project directory, validate it, and return processed config.
+   Simplified version that doesn't use dialects - just loads config.edn from project root.
 
-        ;; Load project config (provides overrides)
-        project-config-file (if cli-config-file
-                              (io/file cli-config-file)
-                              (io/file user-dir ".clojure-mcp" "config.edn"))
-        project-config (load-config-file (.getPath project-config-file))
-
-        ;; Validate configs BEFORE merging
-        ;; This ensures we know which file has the error
-        ;; Use canonical paths for consistent error reporting
-        _ (validate-configs
-           (cond-> []
-             ;; Only validate home config if it exists and has content
-             (seq home-config)
-             (conj {:config home-config
-                    :file-path (.getCanonicalPath home-config-path)})
-
-             ;; Only validate project config if it exists and has content
-             (seq project-config)
-             (conj {:config project-config
-                    :file-path (.getCanonicalPath project-config-file)})))
-
-        ;; Merge configs (project overrides home)
-        merged-config (merge-configs home-config project-config)
-
-        ;; Process the merged config
-        processed-config (process-config merged-config user-dir)]
-
+   There are possibly two config files used here: one at ~/.clojure-mcp/config.edn, and one at ./config.edn (project root).
+   Unlike how this is used with clojure-mcp. I think of the one at project root as being about SchedMCP, and
+   the one in the home dir as being about clojure-mcp. Nonetheless, they get merged, so I suppose you can override anything
+   in the home directory config with the one in schedMCP."
+  [project-dir]
+  (let [cmcp-config-path (get-home-config-path)
+        cmcp-config-map (if (.exists cmcp-config-path)
+                          (-> cmcp-config-path slurp edn/read-string)
+                          {:allowed-directories [project-dir]
+                           :write-file-guard false})]
+    ;; Use canonical paths for consistent error reporting
+    (validate-configs
+     (cond-> []
+       ;; Only validate home config if it exists and has content
+       (seq cmcp-config-map)                 (conj {:config cmcp-config-map
+                                                    :file-path (.getCanonicalPath cmcp-config-path)})))
+    (let [processed-config (process-config cmcp-config-map)]
     ;; Logging for debugging
-    (log/debug "Home config file:" (.getCanonicalPath home-config-path) "exists:" (.exists home-config-path))
-    (when (seq home-config)
-      (log/debug "Home config validated successfully"))
-    (log/debug "Project config file:" (.getCanonicalPath project-config-file) "exists:" (.exists project-config-file))
-    (when (seq project-config)
-      (log/debug "Project config validated successfully"))
-    (log/debug "Final processed config:" processed-config)
-
-    processed-config))
+      (log! :info (str "Final processed config: " (with-out-str (pprint processed-config))))
+      processed-config)))
 
 (defn get-config [nrepl-client-map k]
   (get-in nrepl-client-map [::config k]))
 
-(defn get-allowed-directories [nrepl-client-map]
+#_(defn get-allowed-directories [nrepl-client-map]
   (get-config nrepl-client-map :allowed-directories))
 
-(defn get-emacs-notify [nrepl-client-map]
+#_(defn get-emacs-notify [nrepl-client-map]
   (get-config nrepl-client-map :emacs-notify))
 
 (defn get-nrepl-user-dir [nrepl-client-map]
   (get-config nrepl-client-map :nrepl-user-dir))
 
-(defn get-cljfmt [nrepl-client-map]
+#_(defn get-cljfmt [nrepl-client-map]
   (let [value (get-config nrepl-client-map :cljfmt)]
     (if (nil? value)
       true ; Default to true when not specified
       value)))
 
-(defn get-write-file-guard [nrepl-client-map]
+#_(defn get-write-file-guard [nrepl-client-map]
   (let [value (get-config nrepl-client-map :write-file-guard)]
     ;; Validate the value and default to :partial-read if invalid
     (cond
@@ -187,10 +166,10 @@
       (contains? #{:full-read :partial-read false} value) value
       ;; Invalid values
       :else (do
-              (log/warn "Invalid write-file-guard value:" value "- using default :partial-read")
+              (log! :warn (str "Invalid write-file-guard value: " value " - using default :partial-read"))
               :partial-read))))
 
-(defn get-nrepl-env-type
+#_(defn get-nrepl-env-type
   "Returns the nREPL environment type.
    Defaults to :clj if not specified."
   [nrepl-client-map]
@@ -199,7 +178,7 @@
       :clj ; Default to :clj when not specified
       value)))
 
-(defn get-bash-over-nrepl
+#_(defn get-bash-over-nrepl
   "Returns whether bash commands should be executed over nREPL.
    Defaults to true for compatibility."
   [nrepl-client-map]
@@ -212,18 +191,18 @@
       ;; respect configured value
       (boolean value))))
 
-(defn clojure-env?
+#_(defn clojure-env?
   "Returns true if the nREPL environment is a Clojure environment."
   [nrepl-client-map]
   (= :clj (get-nrepl-env-type nrepl-client-map)))
 
-(defn write-guard?
+#_(defn write-guard?
   "Returns true if write-file-guard is enabled (not false).
    This means file timestamp checking is active."
   [nrepl-client-map]
   (not= false (get-write-file-guard nrepl-client-map)))
 
-(defn get-scratch-pad-load
+#_(defn get-scratch-pad-load
   "Returns whether scratch pad persistence is enabled.
    Defaults to false when not specified."
   [nrepl-client-map]
@@ -232,7 +211,7 @@
       false ; Default to false when not specified
       (boolean value))))
 
-(defn get-scratch-pad-file
+#_(defn get-scratch-pad-file
   "Returns the scratch pad filename.
    Defaults to 'scratch_pad.edn' when not specified."
   [nrepl-client-map]
@@ -241,7 +220,7 @@
       "scratch_pad.edn" ; Default filename
       value)))
 
-(defn get-models
+#_(defn get-models
   "Returns the models configuration map.
    Defaults to empty map when not specified."
   [nrepl-client-map]
@@ -250,7 +229,7 @@
       {} ; Default to empty map
       value)))
 
-(defn get-tools-config
+#_(defn get-tools-config
   "Returns the tools configuration map.
    Defaults to empty map when not specified."
   [nrepl-client-map]
@@ -259,7 +238,7 @@
       {} ; Default to empty map
       value)))
 
-(defn get-tool-config
+#_(defn get-tool-config
   "Returns configuration for a specific tool.
    Tool ID can be a keyword or string.
    Returns nil if no configuration exists for the tool."
@@ -269,7 +248,7 @@
         tool-key (keyword tool-id)]
     (get tools-config tool-key)))
 
-(defn get-agents-config
+#_(defn get-agents-config
   "Returns the agents configuration vector.
    Defaults to empty vector when not specified."
   [nrepl-client-map]
@@ -278,7 +257,7 @@
       []
       value)))
 
-(defn get-agent-config
+#_(defn get-agent-config
   "Returns configuration for a specific agent by ID.
    Agent ID can be a keyword or string.
    Returns nil if no agent with that ID exists."
@@ -288,10 +267,10 @@
         agent-key (keyword agent-id)]
     (first (filter #(= (:id %) agent-key) agents))))
 
-(defn get-mcp-client-hint [nrepl-client-map]
+#_(defn get-mcp-client-hint [nrepl-client-map]
   (get-config nrepl-client-map :mcp-client))
 
-(defn get-dispatch-agent-context
+#_(defn get-dispatch-agent-context
   "Returns dispatch agent context configuration.
    Can be:
    - true/false (boolean) - whether to use default code index
@@ -320,16 +299,16 @@
 
       :else
       (do
-        (log/warn "Invalid :dispatch-agent-context value, defaulting to true")
+        (log! :warn "Invalid :dispatch-agent-context value, defaulting to true")
         true))))
 
-(defn get-enable-tools [nrepl-client-map]
+#_(defn get-enable-tools [nrepl-client-map]
   (get-config nrepl-client-map :enable-tools))
 
-(defn get-disable-tools [nrepl-client-map]
+#_(defn get-disable-tools [nrepl-client-map]
   (get-config nrepl-client-map :disable-tools))
 
-(defn tool-id-enabled?
+#_(defn tool-id-enabled?
   "Check if a tool should be enabled based on :enable-tools and :disable-tools config.
 
    Logic:
@@ -357,13 +336,13 @@
       :else (and (contains? enable-set tool-id)
                  (not (contains? disable-set tool-id))))))
 
-(defn get-enable-prompts [nrepl-client-map]
+#_(defn get-enable-prompts [nrepl-client-map]
   (get-config nrepl-client-map :enable-prompts))
 
-(defn get-disable-prompts [nrepl-client-map]
+#_(defn get-disable-prompts [nrepl-client-map]
   (get-config nrepl-client-map :disable-prompts))
 
-(defn prompt-name-enabled?
+#_(defn prompt-name-enabled?
   "Check if a prompt should be enabled based on :enable-prompts and :disable-prompts config.
 
    Logic:
@@ -390,13 +369,13 @@
       :else (and (contains? enable-set prompt-name)
                  (not (contains? disable-set prompt-name))))))
 
-(defn get-enable-resources [nrepl-client-map]
+#_(defn get-enable-resources [nrepl-client-map]
   (get-config nrepl-client-map :enable-resources))
 
-(defn get-disable-resources [nrepl-client-map]
+#_(defn get-disable-resources [nrepl-client-map]
   (get-config nrepl-client-map :disable-resources))
 
-(defn resource-name-enabled?
+#_(defn resource-name-enabled?
   "Check if a resource should be enabled based on :enable-resources and :disable-resources config.
 
    Logic:
@@ -428,18 +407,18 @@
   [nrepl-client-map]
   (get-config nrepl-client-map :resources))
 
-(defn get-prompts
+#_(defn get-prompts
   "Get the prompts configuration map from config"
   [nrepl-client-map]
   (get-config nrepl-client-map :prompts))
 
-(defn set-config*
+#_(defn set-config*
   "Sets a config value in a map. Returns the updated map.
    This is the core function that set-config! uses."
   [nrepl-client-map k v]
   (assoc-in nrepl-client-map [::config k] v))
 
-(defn set-config!
+#_(defn set-config!
   "Sets a config value in an atom containing an nrepl-client map.
    Uses set-config* to perform the actual update."
   [nrepl-client-atom k v]

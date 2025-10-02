@@ -1,1 +1,17 @@
-{:scratch-pad-load true}
+{:scratch-pad-load true
+ :resources
+ {"PROJECT_SUMMARY.md"
+  {:description "SchedMCP project summary document providing LLM context about the manufacturing scheduling interview system and its MCP components"
+   :file-path "PROJECT_SUMMARY.md"}
+
+  "README.md"
+  {:description "README document for the schedMCP project explaining the manufacturing scheduling interview system architecture and usage"
+   :file-path "README.md"}
+
+  "CLAUDE.md"
+  {:description "AI coding copilot instructions for working on the schedMCP Clojure project, including coding rules and system design decisions"
+   :file-path "CLAUDE.md"}
+
+  "LLM_CODE_STYLE.md"
+  {:description "Clojure code style guidelines and best practices for LLM-generated code in the schedMCP project"
+   :file-path "LLM_CODE_STYLE.md"}}}

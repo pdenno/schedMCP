@@ -36,6 +36,7 @@ dutil/learn-schema!
    ;;'dsld   'sched-mcp.ds-loader
    ;;'dssch  'sched-mcp.ds-schema
 
+   'conf   'sched-mcp.config
    'mcore  'sched-mcp.mcp-core
    'sur    'sched-mcp.surrogate
    'sutil  'sched-mcp.sutil

@@ -105,7 +105,6 @@
 
 ;;; -------------- Starting and stopping ----------------------
 (defn init-util []
-  (add-tap (fn [x] (log! :info (str "From tap: " x))))
   (config-log!))
 
 (defstate util-state

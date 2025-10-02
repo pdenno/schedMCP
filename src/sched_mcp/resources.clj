@@ -4,7 +4,8 @@
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
             [sched-mcp.config :as config]
-            [sched-mcp.file-content :as file-content]))
+            [sched-mcp.file-content :as file-content]
+            [sched-mcp.util :refer [log!]]))
 
 (defn read-file
   "Read a file and return its contents as a string.
@@ -81,26 +82,6 @@
             full-path)))))
    resources-config))
 
-(def default-resources
-  "Map of default resources keyed by name.
-   Each resource has :url, :description, and :file-path.
-   The mime-type will be auto-detected when creating the actual resource."
-  {"PROJECT_SUMMARY.md" {:url "custom://project-summary"
-                         :description "SchedMCP project summary document providing LLM context about the manufacturing scheduling interview system and its MCP components"
-                         :file-path "PROJECT_SUMMARY.md"}
-
-   "README.md" {:url "custom://readme"
-                :description "README document for the schedMCP project explaining the manufacturing scheduling interview system architecture and usage"
-                :file-path "README.md"}
-
-   "CLAUDE.md" {:url "custom://claude"
-                :description "AI coding copilot instructions for working on the schedMCP Clojure project, including coding rules and system design decisions"
-                :file-path "CLAUDE.md"}
-
-   "LLM_CODE_STYLE.md" {:url "custom://llm-code-style"
-                        :description "Clojure code style guidelines and best practices for LLM-generated code in the schedMCP project"
-                        :file-path "LLM_CODE_STYLE.md"}})
-
 (defn create-dynamic-project-info
   "Creates a dynamic resource containing Clojure project information.
    Uses clojure_inspect_project tool if available via nREPL."
@@ -116,12 +97,14 @@
          "text/markdown"
          outputs)))
     (catch Exception e
-      ;; If project inspection fails, return nil (no resource)
+      (log! :error (str "create-dynamic-project-info " (.getMessage e)))
       nil)))
 
 (defn make-resources
-  "Creates all resources for the MCP server, combining defaults with configuration.
-   Config resources can override defaults by using the same name."
+  "Creates all resources for the MCP server from config.edn.
+
+   Resources are defined in config.edn under :resources key.
+   Additionally, adds a dynamic 'Clojure Project Info' resource."
   [nrepl-client-atom]
   (let [;; Get working directory - fallback to hardcoded if config not available
         working-dir (try
@@ -129,29 +112,19 @@
                       (catch Exception _
                         "/home/pdenno/Documents/git/schedMCP"))
 
-        ;; Create default resources
-        default-resources-list (create-resources-from-config
-                                default-resources
-                                working-dir)
-
-        ;; Get configured resources from config (if any)
+        ;; Get resources from config.edn
         config-resources (try
                            (config/get-resources @nrepl-client-atom)
-                           (catch Exception _ nil))
-        config-resources-list (when config-resources
-                                (create-resources-from-config
-                                 config-resources
-                                 working-dir))
+                           (catch Exception e
+                             (println "Warning: Failed to get resources from config:" (.getMessage e))
+                             nil))
 
-        ;; Merge resources, with config overriding defaults by name
-        all-resources (if config-resources-list
-                        (let [config-names (set (map :name config-resources-list))
-                              filtered-defaults (remove #(contains? config-names (:name %))
-                                                        default-resources-list)]
-                          (concat filtered-defaults config-resources-list))
-                        default-resources-list)
+        ;; Create resources from config
+        resource-list (if config-resources
+                        (create-resources-from-config config-resources working-dir)
+                        [])
 
         ;; Add dynamic project-info resource
         project-info-resource (create-dynamic-project-info nrepl-client-atom)]
 
-    (keep identity (conj (vec all-resources) project-info-resource))))
+    (keep identity (conj (vec resource-list) project-info-resource))))
