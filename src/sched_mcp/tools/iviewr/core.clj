@@ -7,6 +7,7 @@
    [sched-mcp.llm :as llm]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
+   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
    [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.util :refer [alog! log!]]))
@@ -411,7 +412,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
 
 ;;; Helper to create all interviewer tools
 
-(defn create-interviewer-tools
+(defn create-iviewr-tools
   "Create all interviewer tools with shared system atom"
   [system-atom]
   [(create-formulate-question-tool system-atom)

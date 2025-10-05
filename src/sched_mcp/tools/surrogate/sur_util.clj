@@ -1,10 +1,9 @@
-(ns sched-mcp.surrogate
+(ns sched-mcp.tools.surrogate.sur-util
   "Surrogate expert agent implementation for automated interview testing"
   (:require
    [clojure.string :as str]
-   [datahike.api :as d]
    [sched-mcp.llm :as llm]
-   [sched-mcp.sutil :as sutil :refer [connect-atm]]
+   [sched-mcp.sutil :as sutil]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.util :as util :refer [log!]]))
 

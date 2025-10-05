@@ -142,7 +142,12 @@ The system now correctly:
 
 #### Remaining "Phase 2.6" Tasks (October, 2025):
 
-- **This is the problem we are currently investigating.** :The client (Claude Desktop) is not able to see any of resources that should have been registered.
+- **This is the problem we are currently investigating.** All the MCP tools are prefixed `sched-mcp:`. The only ones that should have this prefix are:
+      `schedmcp:iviewr_formulate_question, schedmcp:iviewr_interpret_response schedmcp:sys_get_current_ds  schedmcp:orch_get_next_ds schedmcp:orch_start_ds_pursuit , schedmcp:orch_complete_ds, schedmcp:orch_get_progress,  schedmcp:sur_start_expert, schedmcp:sur_answer`. The others should have prefix `clojure-mcp:`.
+
+
+
+- **This is the second problem we'll pursue** :The client (Claude Desktop) is not able to see any of resources that should have been registered.
    (I believe `README.mc`, `CLAUDE.md`, `PROJECT_SUMMARY.md` and `LLM_CODING_STYLE.md` and `Clojure Project Info (dynamic)` are registered.)
    I wrote `sched_mcp.mcp_core/reload-components`, which should be helpful to debugging this problem and development generally, if it doesn't cause the MCP client to lose connection.
    Two immediate tasks WRT this are:

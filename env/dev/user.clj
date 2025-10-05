@@ -10,13 +10,13 @@
    [mount.core :as mount]
    [sched-mcp.tools.iviewr-tools :as itools]
    [sched-mcp.mcp-core] ; for mount
-   [sched-mcp.util :refer [log!]]
+   [sched-mcp.sutil :as sutil]
    [taoensso.telemere :as tel]))
 
 [ns-setup! undo-ns-setup!] ; for mount
 
 ;;; uncomment to enable hot loading for deps
-(watch-deps/start! {:aliases [:nrepl :dev :test]})
+(binding [*out* *err*] (watch-deps/start! {:aliases [:nrepl :dev :test]}))
 
 (alter-var-root #'s/*explain-out* (constantly expound/printer))
 (add-tap (bound-fn* clojure.pprint/pprint))

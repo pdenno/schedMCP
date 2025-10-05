@@ -315,7 +315,7 @@
 
 ;;; Helper to create all orchestrator tools
 
-(defn create-orchestrator-tools
+(defn create-orch-tools
   "Create all orchestrator tools with shared system atom"
   [system-atom]
   [(create-get-next-ds-tool system-atom)

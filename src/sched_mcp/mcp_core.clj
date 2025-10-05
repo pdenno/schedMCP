@@ -5,25 +5,22 @@
   (:require
    [clojure.data.json :as json]
    [clojure.edn :as edn]
-   [clojure.java.io :as io]
    [clojure.pprint :refer [pprint]]
-   [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
    [promesa.core :as p]
-   [sched-mcp.config :as config]
    [sched-mcp.file-content :as file-content]
-   [sched-mcp.llm] ; For mount
-   [sched-mcp.project-db] ; For mount
-   [sched-mcp.sutil :as sutil]
-   [sched-mcp.system-db] ; For mount
+   [sched-mcp.llm]                           ; For mount
+   [sched-mcp.nrepl]                         ; For mount
+   [sched-mcp.project-db]                    ; For mount
+   [sched-mcp.prompts :as prompts]
+   [sched-mcp.system-db]                     ; For mount
    [sched-mcp.tools.iviewr.core :as iviewr]
-   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
-   [sched-mcp.tools.iviewr-tools] ; For mount
+   [sched-mcp.tools.iviewr-tools]            ; For mount
    [sched-mcp.tools.orch.core :as orch]
-   [sched-mcp.tools.surrogate :as surrogate]
+   [sched-mcp.tools.surrogate.core :as sur]  ; For mount
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.resources :as resources]
-   [sched-mcp.util :as util :refer [alog! log!]])
+   [sched-mcp.util :as util :refer [log!]])
   (:import [io.modelcontextprotocol.server.transport
             StdioServerTransportProvider]
            [io.modelcontextprotocol.server McpServer
@@ -56,7 +53,9 @@
            [reactor.core.publisher Mono]
            [com.fasterxml.jackson.databind ObjectMapper]))
 
-(def nrepl-client-atom (atom nil))
+(def ^:diag mcp-server-atm
+  "Might just be for diagnostics."
+  (atom nil))
 
 ;;; ----------------------------- Based on deprecated sched-mcp/registry.clj and clojure-mcp/main.clj
 ;;; ToDo: I wonder whether this is necessary or useful?!?
@@ -68,49 +67,7 @@
   "This is just for studying what gets made, but DON'T REMOVE IT."
   (atom {}))
 
-(def ^:admin enabled-tool-category?
-  "This is a configuration parameter." ; ToDo: Possible use clojure-mcp's config.clj etc.
-  #{:schedmcp :cmcp-all}) ; Other possible values :cmpc-read-only :cmpc-eval :cmpc-editing :cmpc-agent
-
-;;; Get clojure-mcp tools by category
-(defn get-clojure-mcp-tools [category nrepl-client-atom]
-  (try
-    (require '[clojure-mcp.tools :as cmcp-tools])
-    (case category
-      :read-only ((resolve 'cmcp-tools/build-read-only-tools) nrepl-client-atom)
-      :eval ((resolve 'cmcp-tools/build-eval-tools) nrepl-client-atom)
-      :editing ((resolve 'cmcp-tools/build-editing-tools) nrepl-client-atom)
-      :agent ((resolve 'cmcp-tools/build-agent-tools) nrepl-client-atom)
-      :all ((resolve 'cmcp-tools/build-all-tools) nrepl-client-atom)
-      [])
-    (catch Exception e
-      (log! :error (str "Failed to get clojure-mcp tools:" (.getMessage e)))
-      [])))
-
-(defn make-cmcp-and-smcp-tools
-  "Build the complete set of tools for schedMCP"
-  [nrepl-client-atom _working-dir]
-  (alog! (str "Building tool registry with enabled-tool-categories: " enabled-tool-category?))
-  (let [;; Always include schedMCP tools
-        interviewer-tools (iviewr/create-interviewer-tools system-atom)
-        orchestrator-tools (orch/create-orchestrator-tools system-atom)
-        sched-tool-specs (mapv tool-system/registration-map
-                               (into interviewer-tools orchestrator-tools))
-        clojure-mcp-tools (if (enabled-tool-category? :cmcp-all)
-                            (get-clojure-mcp-tools :all nrepl-client-atom)
-                            (cond-> []
-                              (enabled-tool-category? :cmcp-read-only) (into (get-clojure-mcp-tools :read-only nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-eval) (into (get-clojure-mcp-tools :eval nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-editing) (into (get-clojure-mcp-tools :editing nrepl-client-atom))
-                              (enabled-tool-category? :cmcp-agent) (into (get-clojure-mcp-tools :agent nrepl-client-atom))))
-        all-tools (vec (concat sched-tool-specs surrogate/tool-specs clojure-mcp-tools))]
-    (log! :info (str "Total tools registered: " (count all-tools) ":\n"
-                     (with-out-str (pprint (mapv :name all-tools)))))
-    (swap! components-atm #(assoc % :tools all-tools))
-    all-tools))
-
 ;;; ----------------------------- Based on clojure-mcp/core.clj
-
 (defn create-mono-from-callback
   "Creates a function that takes the exchange and the arguments map and
   returns a Mono promise The callback function should take three
@@ -146,12 +103,10 @@
     :name         - The name of the tool
     :description  - A description of what the tool does
     :schema       - JSON schema for the tool's input parameters
-    :service-atom - The atom holding the nREPL client connection.
     :tool-fn      - Function that implements the tool's logic.
-                    Signature: (fn [exchange args-map nrepl-client clj-result-k] ... )
+                    Signature: (fn [exchange args-map clj-result-k] ... )
                       * exchange     - ignored (or used for advanced features)
                       * arg-map      - map with string keys representing the mcp tool call args
-                      * nrepl-client - the validated and dereferenced nREPL client
                       * clj-result-k - continuation fn taking vector of strings and boolean error flag."
   [{:keys [name description schema tool-fn]}]
   (let [schema-json (json/write-str schema)
@@ -216,13 +171,16 @@
        (apply [_this exchange request]
          (mono-fn exchange request))))))
 
+;;; Claude Code: When you have 26 tools + 8 prompts + 5 resources, that's 39 notifications trying to be sent during initialization, overwhelming the STDIO transport before it's fully ready.
+;;; The fix is to remove the .subscribe() calls - the MCP SDK handles subscriptions internally. Here's the fix:
+
 (defn add-tool
   "Helper function to create an async tool from a map and add it to the server."
   [mcp-server tool-map]
   (.removeTool mcp-server (:name tool-map))
   ;; Pass the service-atom along when creating the tool
   (-> (.addTool mcp-server (create-async-tool tool-map))
-      (.subscribe)))
+      (.subscribe))) ; Claude Code suggests overwhelmed by this. (See above.)
 
 (defn create-async-resource
   "Creates an AsyncResourceSpecification with the given parameters.
@@ -329,169 +287,29 @@
       (log! :error (str "Failed to initialize MCP server: " e))
       (throw e))))
 
-
-;;; (defn load-config-handling-validation-errors [config-file user-dir]
-;;;   (try
-;;;     (config/load-config config-file user-dir)
-;;;     (catch Exception e
-;;;       (if (= ::config/schema-error (-> e ex-data :type))
-;;;         (let [{:keys [errors file-path]} (ex-data e)]
-;;;           (binding [*out* *err*]
-;;;             (println (str "\n❌ Configuration validation failed!\n"))
-;;;             (when file-path
-;;;               (println (str "File: " file-path "\n")))
-;;;             (println "Errors found:")
-;;;             (doseq [[k v] errors]
-;;;               (let [msg (if (sequential? v) (first v) v)]
-;;;                 (println (str " 👉 " k " - " msg))))
-;;;             (println "\nPlease fix these issues and try again.")
-;;;             (println "See CONFIG.md for documentation.\n"))
-;;;           (throw e))
-;;;         ;; Other error - re-throw
-;;;         (throw e)))))
-;;;
-;;; (defn fetch-config [nrepl-client-map config-file cli-env-type env-type project-dir]
-;;;   (let [user-dir (dialects/fetch-project-directory nrepl-client-map env-type project-dir)]
-;;;     (when-not user-dir
-;;;       (log/warn "Could not determine working directory")
-;;;       (throw (ex-info "No project directory!!" {})))
-;;;     (log/info "Working directory set to:" user-dir)
-;;;
-;;;     (let [config (load-config-handling-validation-errors config-file user-dir)
-;;;           final-env-type (or cli-env-type
-;;;                              (if (contains? config :nrepl-env-type)
-;;;                                (:nrepl-env-type config)
-;;;                                env-type))]
-;;;        (assoc nrepl-client-map ::config/config (assoc config :nrepl-env-type final-env-type)))))
-
-(defn create-and-start-nrepl-connection
-  "Convenience higher-level API function to create and initialize an nREPL connection.
-
-   This function handles the complete setup process including:
-   - Creating the nREPL client connection
-   - Starting the polling mechanism
-   - Loading required namespaces and helpers (if Clojure environment)
-   - Setting up the working directory
-   - Loading configuration
-
-   Takes initial-config map with :port and optional :host, :project-dir, :nrepl-env-type, :config-file.
-   Returns the configured nrepl-client-map with ::config/config attached."
-  [{:keys [_project-dir _config-file] :as initial-config}]
-  (log! :info (str "Creating nREPL connection with config: " initial-config))
-  (try
-    (require '[clojure-mcp.nrepl :as nrepl])
-    (let [nrepl-client-map ((resolve 'nrepl/create) (dissoc initial-config :project-dir :nrepl-env-type))
-          #_#_cli-env-type (:nrepl-env-type initial-config)
-          _ (do
-              (log! :info "nREPL client map created")
-              ((resolve 'nrepl/start-polling) nrepl-client-map)
-              (log! :info "Started polling nREPL"))]
-          ;; Detect environment type early
-          ;; TODO this needs to be sorted out
-;;;          env-type (dialects/detect-nrepl-env-type nrepl-client-map)
-;;;          nrepl-client-map-with-config (fetch-config nrepl-client-map
-;;;                                                     config-file
-;;;                                                     cli-env-type
-;;;                                                     env-type
-;;;                                                     project-dir)
-;;;          nrepl-env-type' (config/get-config nrepl-client-map-with-config :nrepl-env-type)]
-      (log! :debug "Initializing Clojure environment")
-;;;      (dialects/initialize-environment nrepl-client-map-with-config nrepl-env-type')
-;;;      (dialects/load-repl-helpers nrepl-client-map-with-config nrepl-env-type')
-      (log! :debug "Environment initialized")
-      nrepl-client-map #_nrepl-client-map-with-config)
-    (catch Exception e
-      (log! :error (str "Failed to create nREPL connection: " e))
-      (throw e))))
-
-(defn close-servers
-  "Convenience higher-level API function to gracefully shut down MCP and nREPL servers.
+(defn close-mcp-server!
+  "Convenience higher-level API function to gracefully shut down the MCP server.
 
    This function handles the complete shutdown process including:
-   - Stopping nREPL polling if a client exists in nrepl-client-atom
    - Gracefully closing the MCP server
    - Proper error handling and logging"
-  [nrepl-client-atom]
+  []
   (log! :info "Shutting down servers")
   (try
-    (require '[clojure-mcp.nrepl :as nrepl])
-    (require '[clojure-mcp.nrepl-launcher :as nrepl-launcher])
-    (when-let [client @nrepl-client-atom]
-      (log! :info "Stopping nREPL polling")
-      ((resolve 'nrepl/stop-polling) client)
-      ;; Clean up auto-started nREPL process if present
-      (when-let [nrepl-process (:nrepl-process client)]
-        (log! :info "Cleaning up auto-started nREPL process")
-        ((resolve 'nrepl-launcher/destroy-nrepl-process) nrepl-process))
-      (when-let [mcp-server (:mcp-server client)]
-        (log! :info "Closing MCP server gracefully")
-        (.closeGracefully mcp-server)
-        (log! :info "Servers shut down successfully")))
-    (catch Exception e
-      (log! :error (str "Error during server shutdown: " e))
-      (throw e))))
+    (when-let [mcp-server @mcp-server-atm]
+      (log! :info "Closing MCP server gracefully")
+      (.closeGracefully mcp-server)
+      (log! :info "Servers shut down successfully")
+      (reset! mcp-server-atm nil))
+  (catch Exception e
+    (log! :error (str "Error during server shutdown: " e))
+    (throw (ex-info "error during shutdown" {:msg (.getMessae e)})))))
 
-(s/def ::port pos-int?)
-(s/def ::host string?)
-(s/def ::nrepl-env-type keyword?)
-(s/def ::project-dir (s/and string?
-                            #(try (let [f (io/file %)]
-                                    (and (.exists f) (.isDirectory f)))
-                                  (catch Exception _ false))))
-(s/def ::config-file (s/and string?
-                            #(try (let [f (io/file %)]
-                                    (and (.exists f) (.isFile f)))
-                                  (catch Exception _ false))))
-(s/def ::start-nrepl-cmd (s/coll-of string? :kind vector?))
-(s/def ::nrepl-args (s/keys :req-un []
-                            :opt-un [::port ::host ::config-file ::project-dir ::nrepl-env-type
-                                     ::start-nrepl-cmd]))
-
-(defn coerce-options [{:keys [project-dir config-file] :as opts}]
-  (cond-> opts
-    (symbol? project-dir)
-    (assoc :project-dir (str project-dir))
-    (symbol? config-file)
-    (assoc :config-file (str config-file))))
-
-(defn validate-options
-  "Validates the options map for build-and-start-mcp-server.
-   Throws an exception with spec explanation if validation fails."
-  [opts]
-  (let [opts (coerce-options opts)]
-    (if-not (s/valid? ::nrepl-args opts)
-      (let [explanation (s/explain-str ::nrepl-args opts)]
-        (println "Invalid options:" explanation)
-        (log! :error (str "Invalid options: " explanation))
-        (throw (ex-info "Invalid options for MCP server"
-                        {:explanation explanation
-                         :spec-data (s/explain-data ::nrepl-args opts)})))
-      opts)))
-
-(defn ensure-port
-  "Ensures the args map contains a :port key.
-   Throws an exception with helpful context if port is missing.
-
-   Args:
-   - args: Map that should contain :port
-
-   Returns: args unchanged if :port exists
-
-   Throws: ExceptionInfo if :port is missing"
-  [args]
-  (if (:port args)
-    args
-    (throw
-     (ex-info
-      "No nREPL port available - either provide :port or configure auto-start"
-      {:provided-args args}))))
-
-(defn register-components
+(defn register-components!
   "Registers tools, prompts, and resources with the MCP server, applying config-based filtering.
 
    Args:
    - mcp-server: The MCP server instance to add components to
-   - nrepl-client-map: The nREPL client map containing config
    - components: Map with :tools, :prompts, and :resources sequences
 
    Side effects:
@@ -499,49 +317,43 @@
    - Logs debug messages for enabled components
 
    Returns: nil"
-  [mcp-server _nrepl-client-map {:keys [tools prompts resources]}]
+  [mcp-server {:keys [tools prompts resources]}]
 
   ;; Register tools with filtering
   (doseq [tool tools]
-    (when true ; (config/tool-id-enabled? nrepl-client-map (:id tool))
-      (log! :debug (str "Enabling tool: " (:id tool)))
-      (add-tool mcp-server tool)))
+    (log! :debug (str "Adding tool: " (:id tool)))
+    (add-tool mcp-server tool))
 
   ;; Register resources with filtering
   (doseq [resource resources]
-    (when true ; (config/resource-name-enabled? nrepl-client-map (:name resource))
-      (log! :debug (str "Enabling resource: " (:name resource)))
-      (add-resource mcp-server resource)))
+    (log! :debug (str "Adding resource: " (:name resource)))
+    (add-resource mcp-server resource))
 
   ;; Register prompts with filtering
   (doseq [prompt prompts]
-    (when true ; (config/prompt-name-enabled? nrepl-client-map (:name prompt))
-      (log! :debug (str "Enabling prompt: " (:name prompt)))
-      (add-prompt mcp-server prompt)))
+    (log! :debug (str "Adding prompt: " (:name prompt)))
+    (add-prompt mcp-server prompt))
   nil)
 
 (defn build-components
   "Builds tools, prompts, and resources using the provided factory functions.
 
    Args:
-   - nrepl-client-atom: Atom containing the nREPL client
-   - working-dir: Working directory path
+   - config-map: Working directory path
    - component-factories: Map with factory functions
-     - :make-tools-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of tools
-     - :make-prompts-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of prompts
-     - :make-resources-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of resources
+     - :make-tools-fn - (fn [config-map] ...) returns seq of tools
+     - :make-prompts-fn - (fn [config-map] ...) returns seq of prompts
+     - :make-resources-fn - (fn [config-map] ...) returns seq of resources
 
    Returns: Map with :tools, :prompts, and :resources sequences"
-  [nrepl-client-atom working-dir {:keys [make-tools-fn
-                                         make-prompts-fn
-                                         make-resources-fn]
-                                  :as _component-factories}]
-  {:tools (when make-tools-fn
-            (doall (make-tools-fn nrepl-client-atom working-dir)))
-   :prompts (when make-prompts-fn
-              (doall (make-prompts-fn nrepl-client-atom working-dir)))
-   :resources (when make-resources-fn
-                (doall (make-resources-fn nrepl-client-atom working-dir)))})
+  [{:keys [make-tools-fn make-prompts-fn make-resources-fn] :as _component-factories}]
+  (let [config (or (not-empty (-> "config.edn" slurp edn/read-string)) {})]
+    {:tools (when make-tools-fn
+              (doall (make-tools-fn config)))
+     :prompts (when make-prompts-fn
+                (doall (make-prompts-fn config)))
+     :resources (when make-resources-fn
+                  (doall (make-resources-fn config)))}))
 
 (defn setup-mcp-server
   "Sets up an MCP server by building components, creating the server, and registering components.
@@ -552,8 +364,7 @@
    3. Register components with filtering
 
    Args:
-   - nrepl-client-atom: Atom containing the nREPL client map
-   - working-dir: Working directory path
+   - config-map: Working directory path
    - component-factories: Map with factory functions (:make-tools-fn, :make-prompts-fn, :make-resources-fn)
    - server-thunk: Zero-argument function that creates and returns a map with :mcp-server
 
@@ -561,156 +372,78 @@
    ensuring components are ready for immediate registration once the server starts.
 
    Returns: The result map from server-thunk (containing at least :mcp-server)"
-  [nrepl-client-atom working-dir component-factories server-thunk]
+  [component-factories server-thunk]
   ;; Build components first to minimize latency
-  (let [components (build-components nrepl-client-atom working-dir component-factories)
+  (let [components (build-components component-factories)
         ;; Create server after components are ready
         server-result (server-thunk)
         mcp-server (:mcp-server server-result)]
     ;; Register components with filtering
-    (register-components mcp-server @nrepl-client-atom components)
+    (reset! mcp-server-atm mcp-server)
+    (register-components! mcp-server components)
     server-result))
 
-(defn build-and-start-mcp-server-impl
+(defn build-and-start-mcp-server
   "Internal implementation of MCP server startup.
 
    Builds and starts an MCP server with the provided configuration.
 
    This is the main entry point for creating custom MCP servers. It handles:
    - Validating input options
-   - Creating and starting the nREPL connection
    - Setting up the working directory
    - Calling factory functions to create tools, prompts, and resources
    - Registering everything with the MCP server
 
    Args:
-   - nrepl-args: Map with connection settings
-     - :port (required) - nREPL server port
-     - :host (optional) - nREPL server host (defaults to localhost)
-     - :project-dir (optional) - Root directory for the project (must exist)
-
    - component-factories: Map with factory functions
-     - :make-tools-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of tools
-     - :make-prompts-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of prompts
-     - :make-resources-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of resources
+     - :make-tools-fn - (fn [config-map] ...) returns seq of tools
+     - :make-prompts-fn - (fn [config-map] ...) returns seq of prompts
+     - :make-resources-fn - (fn [config-map] ...) returns seq of resources
 
    All factory functions are optional. If not provided, that category won't be populated.
 
    Side effects:
-   - Stores the nREPL client in core/nrepl-client-atom
    - Starts the MCP server on stdio
 
-   Returns: nil"
-  [nrepl-args component-factories]
-  (let [_ (assert (:port nrepl-args) "Port must be provided for build-and-start-mcp-server-impl")
-        nrepl-client-map (create-and-start-nrepl-connection nrepl-args)
-        working-dir (or (:project-dir nrepl-args)
-                        (throw (ex-info "Could not find working-dir on nrepl-args." {})))
-        smcp-config-path (io/file working-dir "config.edn")
-        smcp-config-map (if (.exists smcp-config-path) (-> smcp-config-path slurp edn/read-string) {})
+   Returns: mcp server"
+  [component-factories]
+  (let [server-result (setup-mcp-server component-factories
+                                        ;; stdio server creation thunk returns map
+                                        (fn [] {:mcp-server (mcp-server)}))]
+    (:mcp-server server-result)))
 
-        ;; Load and validate config from ./config.edn and ${HOME}/.clojure-mcp/config.edn.
-        loaded-config (config/load-and-validate-configs working-dir) ; <============================ Get it from clojure-mcp!
+(defn make-tools!
+  "Build the complete set of tools for schedMCP"
+  [_config-map]
+  (let [iviewr-tools (iviewr/create-iviewr-tools system-atom)
+        orch-tools (orch/create-orch-tools system-atom)
+        all-tools (mapv tool-system/registration-map
+                        (into iviewr-tools orch-tools))]
+    (log! :info (str "Total tools registered: " (count all-tools) ":\n"
+                     (with-out-str (pprint (mapv :name all-tools)))))
+    (swap! components-atm #(assoc % :tools all-tools))
+    all-tools))
 
-        ;; Store nREPL process (if auto-started) in client map for cleanup
-        nrepl-client-with-process (if-let [process (:nrepl-process nrepl-args)]
-                                    (assoc nrepl-client-map :nrepl-process process)
-                                    nrepl-client-map)]
-    (reset! nrepl-client-atom nrepl-client-with-process)
-    ;; Store the loaded config under the sched-mcp namespace key (not clojure-mcp)
-    (swap! nrepl-client-atom #(assoc % :clojure-mcp.config/config loaded-config))
-    (swap! nrepl-client-atom #(assoc % :sched-mcp.config/config smcp-config-map))
-
-    ;; Setup MCP server with stdio transport
-    (let [server-result (setup-mcp-server nrepl-client-atom
-                                          working-dir
-                                          component-factories
-                                          ;; stdio server creation thunk returns map
-                                          (fn [] {:mcp-server (mcp-server)}))
-          mcp (:mcp-server server-result)]
-      (swap! nrepl-client-atom assoc :mcp-server mcp)
-    nil)))
-
-(defn build-and-start-mcp-server
-  "Builds and starts an MCP server with optional automatic nREPL startup.
-
-   This function wraps build-and-start-mcp-server-impl with nREPL auto-start capability.
-
-   If auto-start conditions are met (see nrepl-launcher/should-start-nrepl?), it will:
-   1. Start an nREPL server process using :start-nrepl-cmd
-   2. Parse the port from process output (if no :port provided)
-   3. Pass the discovered port to the main MCP server setup
-
-   Otherwise, it requires a :port parameter.
-
-   Args:
-   - nrepl-args: Map with connection settings and optional nREPL start
-     configuration
-     - :port (required if not auto-starting) - nREPL server port
-       When provided with :start-nrepl-cmd, uses fixed port instead of parsing
-     - :host (optional) - nREPL server host (defaults to localhost)
-     - :project-dir (optional) - Root directory for the project
-     - :start-nrepl-cmd (optional) - Command to start nREPL server
-
-   - component-factories: Map with factory functions
-     - :make-tools-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of tools
-     - :make-prompts-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of prompts
-     - :make-resources-fn - (fn [nrepl-client-atom working-dir] ...) returns seq of resources
-
-   Auto-start conditions (must satisfy ONE):
-   1. Both :start-nrepl-cmd AND :project-dir provided in nrepl-args
-   2. Current directory contains .clojure-mcp/config.edn with :start-nrepl-cmd
-
-   Returns: nil"
-  [nrepl-args component-factories]
-  (require '[clojure-mcp.nrepl-launcher :as nrepl-launcher])
-  (-> nrepl-args
-      validate-options
-      ((resolve 'nrepl-launcher/maybe-start-nrepl-process))
-      ensure-port
-      (build-and-start-mcp-server-impl component-factories)))
-
-;;; ------- Based on clojure-mcp/main.clj and sched-mcp/registry.clj --------------------------------
 ;; Delegate to prompts namespace
-;; Note: working-dir param kept for compatibility with core API but unused
-(defn make-prompts [nrepl-client-atom _working-dir]
-  (require '[clojure-mcp.prompts :as prompts])
-  (let [prompts ((resolve 'prompts/make-prompts) nrepl-client-atom)]
+(defn make-prompts! [config-map]
+  (let [prompts (prompts/make-prompts config-map)]
     (log! :info (str "Total prompts registered: " (count prompts) ":\n"
                      (with-out-str (pprint (mapv :name prompts)))))
     (swap! components-atm #(assoc % :prompts prompts))
     prompts))
 
 ;; Delegate to resources namespace
-;; Note: working-dir param kept for compatibility with core API but unused. (I think it should be in nrepl-client-atom ???)
-(defn make-resources
+(defn make-resources!
   "Create schedMCP-specific resources.
    Delegates to sched-mcp.resources namespace."
-  [nrepl-client-atom _working-dir]
-  (let [resources (resources/make-resources nrepl-client-atom)]
+  [config-map]
+  (let [resources (resources/make-resources! config-map)]
     (log! :info (str "Total resources registered: " (count resources) ":\n"
                      (with-out-str (pprint (mapv :name resources)))))
-    (swap! components-atm #(assoc % :resources resources))
+        (swap! components-atm #(assoc % :resources resources))
     resources))
 
 ;;; ------------------------------ Starting and stopping -------------------------
-
-;;; CD suggested this one.
-#_(defn ^:diag reload-components
-  "Reload configuration and re-register components without stopping the server.
-   For development use only."
-  []
-  (let [working-dir "/home/pdenno/Documents/git/schedMCP"
-        loaded-config (load-and-validate-config working-dir)
-        _ (swap! nrepl-client-atom assoc :sched-mcp.config/config loaded-config)
-        mcp-server (:mcp-server @nrepl-client-atom)
-        components (build-components nrepl-client-atom
-                                    working-dir
-                                    {:make-tools-fn make-cmcp-and-smcp-tools
-                                     :make-prompts-fn make-prompts
-                                     :make-resources-fn make-resources})]
-    (register-components mcp-server @nrepl-client-atom components)
-    :reloaded))
 
 ;;; I'm thinking something like this might work. It doesn't touch the configs though (good thing? bad thing?).
 ;;; Currently it generates errors: SLF4J/ERROR  : - Operator called default onErrorDropped
@@ -718,17 +451,10 @@
   "Reload configuration and re-register components without stopping the server.
    Probably for development use only."
   []
-  (let [working-dir (as-> "(System/getProperty \"user.dir\")" ?x
-                      ((resolve 'clojure-mcp.tools.eval.core/evaluate-code) @nrepl-client-atom {:code ?x})
-                      (get-in ?x [:outputs 0 1])
-                      (edn/read-string ?x))
-        components (build-components nrepl-client-atom
-                                     working-dir
-                                     {:make-tools-fn make-cmcp-and-smcp-tools
-                                      :make-prompts-fn make-prompts
-                                      :make-resources-fn make-resources})
-        mcp-server (:mcp-server @nrepl-client-atom)]
-    (register-components mcp-server @nrepl-client-atom components)))
+  (let [components (build-components {:make-tools-fn make-tools!
+                                      :make-prompts-fn make-prompts!
+                                      :make-resources-fn make-resources!})]
+    (register-components! mcp-server components)))
 
 (def server-promise
   "This is used in main to keep the server from exiting immediately."
@@ -736,13 +462,11 @@
 
 (defn start-mcp-server []
   (try
-    (when-not @sutil/nrepl-server (sutil/start-nrepl-server))
-    (build-and-start-mcp-server
-     {:port 7888
-      :project-dir "/home/pdenno/Documents/git/schedMCP"} ; See build-and-start-mcp-server above.
-     {:make-tools-fn make-cmcp-and-smcp-tools
-      :make-prompts-fn make-prompts
-      :make-resources-fn make-resources})
+    (reset! mcp-server-atm
+            (build-and-start-mcp-server
+             {:make-tools-fn make-tools!
+              :make-prompts-fn make-prompts!
+              :make-resources-fn make-resources!}))
     (catch Exception e
       (log! :error (str "Server exception: " e))
       (p/resolve! server-promise :failed-to-start))))
@@ -751,7 +475,7 @@
   "Stop the MCP server"
   []
   (log! :info "Stopping schedMCP server...")
-  (close-servers nrepl-client-atom)
+  (close-mcp-server!)
   (p/resolve! server-promise :exited))
 
 ;;; Starting and stopping

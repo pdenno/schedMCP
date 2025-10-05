@@ -7,25 +7,25 @@
         com.taoensso/timbre {:mvn/version "6.8.0"}
         com.taoensso/telemere {:mvn/version "1.1.0"}
         com.taoensso/telemere-slf4j {:mvn/version "1.1.0"} ; Just adding it here initializes it; try (tel/check-interop).
-        org.slf4j/slf4j-api {:mvn/version "2.0.17"}
         dk.ative/docjure {:mvn/version "1.21.0"} ; spreadsheets
-        io.github.paintparty/bling {:mvn/version "0.8.8"}
         funcool/promesa {:mvn/version "11.0.678"}
-        io.replikativ/datahike {:mvn/version "0.6.1594"} ; Not upgrading yet!
+        io.github.paintparty/bling {:mvn/version "0.8.8"}
+        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.12.1"} ; llm ecosystem java lib
+        io.replikativ/datahike {:mvn/version "0.6.1594"}        ; Not upgrading yet!
         metosin/jsonista {:mvn/version "0.3.13"}
-        metosin/malli {:mvn/version "0.19.1"}            ; for configuration validation
         mount/mount {:mvn/version "0.1.23"}
         org.clojure/data.json {:mvn/version "2.5.1"}
         org.apache.logging.log4j/log4j-core {:mvn/version "2.25.2"} ; Used by jetty
+        org.apache.tika/tika-core {:mvn/version "3.2.0"}  ; llm ecosystem java lib
         org.clj-commons/hickory {:mvn/version "0.7.7"}
         org.clojure/clojure {:mvn/version "1.12.2"}
         org.clojure/core.unify {:mvn/version "0.7.0"}
         org.clojure/data.xml {:mvn/version "0.0.8"}
         org.clojure/tools.logging {:mvn/version "1.3.0"}
         net.clojars.wkok/openai-clojure {:mvn/version "0.23.0"}
+        org.slf4j/slf4j-api {:mvn/version "2.0.17"}
+        pogonos/pogonos {:mvn/version "0.2.1"}}            ;; for prompt templating
 
-        ;; Java MCP SDK for proper MCP server implementation
-        io.modelcontextprotocol.sdk/mcp {:mvn/version "0.12.1"}}
 
  ;;; Starting for use with clojure-mcp:
  ;;;  1) clj -M:nrepl -m sched-mcp.main 2>> ./logs/nrepl-error.log (starts as shown in the :nrepl :alias below.)
@@ -34,23 +34,22 @@
  ;;;  4) claude-desktop
 
 ;; See .dir-locals.el for some defaults on CIDER C-c M-j
- :aliases {:dev ; This will start an nrepl server using sutil/start-server when registry.clj has clojure-mcp tools enabled.
-                ; How does the value of that compare to what's in the atom used by clojure-mcp?
+ :aliases {:dev
            {:extra-paths ["src" "test" "env/dev"] ; "src" may be necessary here, even though it is in :paths
             :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {cider/cider-nrepl {:mvn/version "0.57.0"}
-                         clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
+                         ;clojure-mcp/clojure-mcp {:local/root "examples/clojure-mcp"}
                          com.lambdaisland/classpath {:mvn/version "0.6.58"}
                          expound/expound {:mvn/version "0.9.0"} ; more readable spec messages
                          nrepl/nrepl {:mvn/version "1.3.0"}
                          org.clojure/java.classpath {:mvn/version "1.1.0"}
                          org.clojure/tools.namespace {:mvn/version "1.5.0"}}}
 
-           :small-app
+           :small-app ; For testing a minimal application with MCP clients.
            {:extra-paths ["examples/small-app/src"]
+            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :extra-deps {nrepl/nrepl {:mvn/version "1.3.0"}
                          cider/cider-nrepl {:mvn/version "0.57.0"}}
-            :jvm-opts ["-Djdk.attach.allowAttachSelf"]
             :main-opts ["-m" "nrepl.cmdline"
                         "--middleware" "[cider.nrepl/cider-middleware]"
                         "--port" "7888"]}

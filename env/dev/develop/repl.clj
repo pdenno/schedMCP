@@ -17,28 +17,24 @@ dutil/learn-schema!
        (catch Exception _e (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym)))))
 
 (def alias-map
-  {;'ches 'cheshire.core
-   'io 'clojure.java.io
-   's 'clojure.spec.alpha
-   ;'uni 'clojure.core.unify
-   'edn 'clojure.edn
-   'str 'clojure.string
-   'd 'datahike.api
-   'dp 'datahike.pull-api
+  {;'ches  'cheshire.core
+   'io     'clojure.java.io
+   's      'clojure.spec.alpha
+   ;'uni   'clojure.core.unify
+   'edn    'clojure.edn
+   'str    'clojure.string
+   'd      'datahike.api
+   'dp     'datahike.pull-api
    ;'dutil 'develop.dutil
-   ;'repl 'develop.repl
-   'mount 'mount.core
-   'p 'promesa.core
-   ;;'px 'promesa.exec
+   ;'repl  'develop.repl
+   'mount  'mount.core
+   'p      'promesa.core
+   ;;'px   'promesa.exec
    'iviewr 'sched-mcp.tools.iviewr.core
    ;;'main   'sched-mcp.main ; This isn't used in development
-   'pdb    'sched-mcp.project-db
-   ;;'dsld   'sched-mcp.ds-loader
-   ;;'dssch  'sched-mcp.ds-schema
-
-   'conf   'sched-mcp.config
    'mcore  'sched-mcp.mcp-core
-   'sur    'sched-mcp.surrogate
+   'pdb    'sched-mcp.project-db
+   'res    'sched-mcp.resources
    'sutil  'sched-mcp.sutil
    'schema 'sched-mcp.schema
    'sdb    'sched-mcp.system-db
@@ -47,8 +43,8 @@ dutil/learn-schema!
    'dsu    'sched-mcp.tools.orch.ds-util
    'itools 'sched-mcp.tools.iviewr-tools
    'orm    'sched-mcp.tools.iviewr.domain.data.orm
-   ;;'reg    'sched-mcp.tools.registry
-   'surt   'sched-mcp.tools.surrogate
+   'sur    'sched-mcp.tools.surrogate.core
+   'suru   'sched-mcp.tools.surrogate.sur-util
    'tool-system 'sched-mcp.tool-system
    'util   'sched-mcp.util
    ;'warm   'sched-mcp.warm-up

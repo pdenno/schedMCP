@@ -79,7 +79,7 @@
     (McpSchema$EmbeddedResource. nil nil blob)))
 
 (defn file-response->file-content [{:keys [::file-response]}]
-  (let [{:keys [nio-path mime-type] :as ser-file} (serialized-file file-response)]
+  (let [{:keys [mime-type] :as ser-file} (serialized-file file-response)]
     (cond
       (text-media-type? mime-type) (text-resource-content ser-file)
       (image-media-type? mime-type) (image-content ser-file)

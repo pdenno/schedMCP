@@ -2,13 +2,11 @@
   "Server utilities."
   (:require
    [cheshire.core :as ches]
-   [cider.nrepl :refer [cider-middleware]]
    [clojure.java.basis]
    [clojure.java.io :as io]
    [clojure.string :as str]
    [datahike.api :as d]
    [datahike.pull-api :as dp]
-   [nrepl.server :as server]
    [sched-mcp.util :refer [log! alog!]])
   (:import ; ToDo: Why does clj-kondo complain?
    java.net.URI
@@ -345,23 +343,3 @@
     (if success?
       (keyword normal-pid)
       pid)))
-
-;;;----------------------------------- nrepl server (for debugging) ----------------------
-(def cider-handler (apply server/default-handler cider-middleware))
-
-(defonce nrepl-server (atom nil))
-
-(defn start-nrepl-server []
-  (log! :info "About to start nREPL server...")
-  (alog! "About to start nREPL server...")
-  (try
-    (reset! nrepl-server (server/start-server :port 7888
-                                              :bind "127.0.0.1"
-                                              :handler cider-handler))
-    (swap! nrepl-server #(assoc % :clojure-mcp.config/config {:nrepl-user-dir (System/getProperty "user.dir")}))
-    (alog! (str "Started nREPL server on port 7888: " @nrepl-server))
-    (catch Exception e
-      (alog! (str "Failed to start nREPL: " (.getMessage e))))))
-
-(defn ^:admin stop-nrepl-server []
-  (server/stop-server @nrepl-server))

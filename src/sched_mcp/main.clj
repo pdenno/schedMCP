@@ -1,10 +1,10 @@
 (ns sched-mcp.main
   "Main entry point for schedMCP server"
   (:require
-   [mount.core :as mount]
-   [promesa.core :as p]
+   [mount.core         :as mount]
+   [promesa.core       :as p]
    [sched-mcp.mcp-core :as mcore]
-   [sched-mcp.util :refer [alog! log! now]]))
+   [sched-mcp.util     :refer [alog! log! now]]))
 
 (defonce server-port
   ;; Used to ensure Clojure Desktop only starts one instance.

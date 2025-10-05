@@ -1,5 +1,7 @@
-{:scratch-pad-load true
- :resources
+{:port 7888
+
+ ;;-------------- Resources
+ :resources ; ToDo: These aren't at all what I want. This was already performed by clojure-mcp.
  {"PROJECT_SUMMARY.md"
   {:description "SchedMCP project summary document providing LLM context about the manufacturing scheduling interview system and its MCP components"
    :file-path "PROJECT_SUMMARY.md"}
@@ -14,4 +16,10 @@
 
   "LLM_CODE_STYLE.md"
   {:description "Clojure code style guidelines and best practices for LLM-generated code in the schedMCP project"
-   :file-path "LLM_CODE_STYLE.md"}}}
+   :file-path "LLM_CODE_STYLE.md"}}
+
+ ;;-------------- Prompts
+ :prompts
+ {"TEST_PROMPT.md"
+  {:description "A prompt that will ask the LLM to say: \"What a wonderful test prompt!\""
+   :file-path "resources/sched-mcp/prompts/TEST_PROMPT.md"}}}

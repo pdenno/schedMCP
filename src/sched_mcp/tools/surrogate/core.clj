@@ -1,7 +1,7 @@
-(ns sched-mcp.tools.surrogate
+(ns sched-mcp.tools.surrogate.core
   "MCP tools for surrogate expert functionality"
   (:require
-   [sched-mcp.surrogate   :as sur]
+   [sched-mcp.tools.surrogate.sur-util   :as suru]
    [sched-mcp.tool-system :as tool-system]))
 
 ;;; Tool definitions for surrogate expert
@@ -25,7 +25,7 @@
    :tool-fn
    (fn [{:keys [domain company_name project_name]}]
      (try
-       (let [result (sur/start-surrogate-interview
+       (let [result (suru/start-surrogate-interview
                      {:domain (keyword domain)
                       :company-name company_name
                       :project-name project_name})]
@@ -55,7 +55,7 @@
    :tool-fn
    (fn [{:keys [project_id question]}]
      (try
-       (let [result (sur/surrogate-answer-question
+       (let [result (suru/surrogate-answer-question
                      {:project-id project_id
                       :question question})]
          (if (:error result)
