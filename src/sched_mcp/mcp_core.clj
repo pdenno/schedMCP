@@ -9,15 +9,15 @@
    [mount.core :as mount :refer [defstate]]
    [promesa.core :as p]
    [sched-mcp.file-content :as file-content]
-   [sched-mcp.llm]                           ; For mount
-   [sched-mcp.nrepl]                         ; For mount
-   [sched-mcp.project-db]                    ; For mount
+   [sched-mcp.llm] ; For mount
+   [sched-mcp.nrepl] ; For mount
+   [sched-mcp.project-db] ; For mount
    [sched-mcp.prompts :as prompts]
-   [sched-mcp.system-db]                     ; For mount
+   [sched-mcp.system-db] ; For mount
    [sched-mcp.tools.iviewr.core :as iviewr]
-   [sched-mcp.tools.iviewr-tools]            ; For mount
+   [sched-mcp.tools.iviewr-tools] ; For mount
    [sched-mcp.tools.orch.core :as orch]
-   [sched-mcp.tools.surrogate.core :as sur]  ; For mount
+   [sched-mcp.tools.surrogate.core :as sur] ; For mount
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.resources :as resources]
    [sched-mcp.util :as util :refer [log!]])
@@ -301,9 +301,9 @@
       (.closeGracefully mcp-server)
       (log! :info "Servers shut down successfully")
       (reset! mcp-server-atm nil))
-  (catch Exception e
-    (log! :error (str "Error during server shutdown: " e))
-    (throw (ex-info "error during shutdown" {:msg (.getMessae e)})))))
+    (catch Exception e
+      (log! :error (str "Error during server shutdown: " e))
+      (throw (ex-info "error during shutdown" {:msg (.getMessae e)})))))
 
 (defn register-components!
   "Registers tools, prompts, and resources with the MCP server, applying config-based filtering.
@@ -417,8 +417,9 @@
   [_config-map]
   (let [iviewr-tools (iviewr/create-iviewr-tools system-atom)
         orch-tools (orch/create-orch-tools system-atom)
+        sur-tools (sur/create-sur-tools system-atom)
         all-tools (mapv tool-system/registration-map
-                        (into iviewr-tools orch-tools))]
+                        (into (into iviewr-tools orch-tools) sur-tools))]
     (log! :info (str "Total tools registered: " (count all-tools) ":\n"
                      (with-out-str (pprint (mapv :name all-tools)))))
     (swap! components-atm #(assoc % :tools all-tools))
@@ -440,7 +441,7 @@
   (let [resources (resources/make-resources! config-map)]
     (log! :info (str "Total resources registered: " (count resources) ":\n"
                      (with-out-str (pprint (mapv :name resources)))))
-        (swap! components-atm #(assoc % :resources resources))
+    (swap! components-atm #(assoc % :resources resources))
     resources))
 
 ;;; ------------------------------ Starting and stopping -------------------------

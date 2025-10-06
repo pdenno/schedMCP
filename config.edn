@@ -16,7 +16,11 @@
 
   "LLM_CODE_STYLE.md"
   {:description "Clojure code style guidelines and best practices for LLM-generated code in the schedMCP project"
-   :file-path "LLM_CODE_STYLE.md"}}
+   :file-path "LLM_CODE_STYLE.md"}
+
+  "ORCHESTRATOR_GUIDE.md"
+  {:description "Practical step-by-step workflow guide for conducting interviews using the schedMCP system"
+   :file-path "resources/sched-mcp/resources/ORCHESTRATOR_GUIDE.md"}}
 
  ;;-------------- Prompts
  :prompts
