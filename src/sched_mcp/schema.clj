@@ -67,13 +67,13 @@
   {;; ---------------------- Aggregate Schema-Conforming Response (ASCR)
    :ascr/budget-left
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/double
-        :doc "the amount of budget left for questioning."}
+        :doc "the amount of budget left for questioning against this ASCR (against its discovery schema)."}
    :ascr/completed?
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean
         :doc "true if no more interviewing required on this ASCR."}
    :ascr/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
-        :doc "the DS-id uniquely identifying the summary data structure."}
+        :doc "the discovery schema ID (DS-id) uniquely identifying the summary data structure."}
    :ascr/str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "a string that can be edn/read-string to the data structure."}

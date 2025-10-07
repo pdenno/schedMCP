@@ -3,7 +3,8 @@
    Provides access to project documentation and dynamic project information."
   (:require [clojure.java.io :as io]
             [clojure.string :as str]
-            [sched-mcp.file-content :as file-content]))
+            [sched-mcp.file-content :as file-content]
+            [sched-mcp.schema :as schema]))
 
 (defn read-file
   "Read a file and return its contents as a string.
@@ -47,8 +48,8 @@
    Returns a seq of resource maps."
   [resource-name {:keys [description file-path url mime-type]}]
   (let [full-path (if (.isAbsolute (io/file file-path))
-                       file-path
-                       (.getCanonicalPath (io/file "." file-path)))
+                    file-path
+                    (.getCanonicalPath (io/file "." file-path)))
         actual-mime-type (or mime-type
                              (file-content/mime-type full-path)
                              "text/plain")
@@ -64,10 +65,84 @@
        actual-mime-type
        full-path))))
 
+(defn format-schema-attribute
+  "Format a single schema attribute as markdown"
+  [attr-name attr-def]
+  (let [{:db/keys [cardinality valueType unique doc]} attr-def]
+    (str "### `" attr-name "`\n\n"
+         (when doc (str doc "\n\n"))
+         "- **Type**: `" valueType "`\n"
+         "- **Cardinality**: `" cardinality "`\n"
+         (when unique (str "- **Unique**: `" unique "`\n"))
+         "\n")))
+
+(defn generate-db-schema-doc
+  "Generate markdown documentation for the database schema"
+  []
+  (str
+   "# SchedMCP Database Schema Reference\n\n"
+   "This document describes the Datahike database schema used by the schedMCP project.\n\n"
+
+   "## Datahike Schema Basics\n\n"
+   "Each attribute in the schema is defined with the following properties:\n\n"
+
+   "### `:db/valueType`\n"
+   "The data type of the attribute value. Common types:\n"
+   "- `:db.type/string` - String values\n"
+   "- `:db.type/keyword` - Keyword values\n"
+   "- `:db.type/long` - Long integer values\n"
+   "- `:db.type/boolean` - Boolean values (true/false)\n"
+   "- `:db.type/instant` - Date/time values\n"
+   "- `:db.type/ref` - Reference to another entity (creates relationships)\n\n"
+
+   "### `:db/cardinality`\n"
+   "How many values this attribute can have:\n"
+   "- `:db.cardinality/one` - Single value only\n"
+   "- `:db.cardinality/many` - Can have multiple values (stored as a set)\n\n"
+
+   "### `:db/unique`\n"
+   "Uniqueness constraint (optional):\n"
+   "- `:db.unique/identity` - Value must be unique; can be used to lookup entities\n"
+   "- `:db.unique/value` - Value must be unique globally\n\n"
+
+   "### `:db/doc`\n"
+   "Human-readable documentation string describing the attribute's purpose.\n\n"
+
+   "## Project Database Schema\n\n"
+   "The project database stores all data for an individual scheduling interview project.\n\n"
+   (str/join "\n"
+             (map (fn [[k v]] (format-schema-attribute k v))
+                  (sort-by first schema/db-schema-proj+)))
+
+   "\n## System Database Schema\n\n"
+   "The system database stores shared data across all projects, such as Discovery Schemas.\n\n"
+   (str/join "\n"
+             (map (fn [[k v]] (format-schema-attribute k v))
+                  (sort-by first schema/db-schema-sys+)))))
+
+(defn create-db-schema-resource
+  "Creates a dynamic resource for the database schema documentation"
+  []
+  {:url "custom://db-schema"
+   :name "DB_SCHEMA.md"
+   :description "Datahike database schema reference for project and system databases"
+   :mime-type "text/markdown"
+   :resource-fn
+   (fn [_ _ clj-result-k]
+     (try
+       (let [schema-doc (generate-db-schema-doc)]
+         (clj-result-k [schema-doc]))
+       (catch Exception e
+         (clj-result-k [(str "Error generating schema documentation: "
+                             (ex-message e))]))))})
+
 (defn make-resources!
   "Creates all resources for the MCP server from config.edn.
-   Resources are defined in config.edn under :resources key."
+   Resources are defined in config.edn under :resources key.
+   Also includes dynamically generated resources like the DB schema."
   [config-map]
-  (->> (:resources config-map)
-       (reduce-kv (fn [res name info] (conj res (create-resources-from-config name info))) [])
-       (filterv identity)))
+  (let [config-resources (->> (:resources config-map)
+                              (reduce-kv (fn [res name info] (conj res (create-resources-from-config name info))) [])
+                              (filterv identity))
+        dynamic-resources [(create-db-schema-resource)]]
+    (into config-resources dynamic-resources)))

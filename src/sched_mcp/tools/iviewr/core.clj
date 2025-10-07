@@ -50,13 +50,13 @@ This tool uses LLM reasoning to create natural questions that gather required in
    :required ["project_id" "conversation_id" "ds_id"]})
 
 (defmethod tool-system/validate-inputs :formulate-question [_ inputs]
-  (tool-system/validate-required-params inputs [:project-id :conversation-id :ds-id]))
+  (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
 
 (defmethod tool-system/execute-tool :formulate-question
-  [_ {:keys [project-id conversation-id ds-id]}]
-  (let [pid (keyword project-id)
-        cid (keyword conversation-id)
-        ds-id (keyword ds-id)
+  [_ {:keys [project_id conversation_id ds_id]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
+        ds-id (keyword ds_id)
         ds-json (sdb/get-discovery-schema-JSON ds-id)
         ds-full (sdb/get-DS-instructions ds-id)
         ;; Get current ASCR
@@ -105,7 +105,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
                                           :from :system
                                           :content question-text
                                           :pursuing-DS ds-id})]
-          (log! :info (str "Generated question for " ds-id " in " conversation-id " with mid " question-mid))
+          (log! :info (str "Generated question for " ds-id " in " conversation_id " with mid " question-mid))
           {:question {:id question-mid ; Use the actual message ID
                       :text question-text
                       :ds_id (name ds-id)
@@ -165,14 +165,14 @@ This tool uses LLM reasoning to create natural questions that gather required in
 
 (defmethod tool-system/validate-inputs :interpret-response [_ inputs]
   (tool-system/validate-required-params inputs
-                                        [:project-id :conversation-id :ds-id
-                                         :answer :question-asked]))
+                                        [:project_id :conversation_id :ds_id
+                                         :answer :question_asked]))
 
 (defmethod tool-system/execute-tool :interpret-response
-  [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id answer question-asked question-id]}]
-  (let [pid (keyword project-id)
-        cid (keyword conversation-id)
-        ds-id (keyword ds-id)
+  [{:keys [_system-atom]} {:keys [project_id conversation_id ds_id answer question_asked question_id]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
+        ds-id (keyword ds_id)
         ds-json (sdb/get-discovery-schema-JSON ds-id)
         ds-full (sdb/get-DS-instructions ds-id)]
 
@@ -212,7 +212,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
 
               ;; Use LLM to interpret the answer using base-iviewr-instructions format
               prompt (llm/ds-interpret-prompt {:ds ds-obj
-                                               :question question-asked
+                                               :question question_asked
                                                :answer answer
                                                :message-history message-history
                                                :ascr ascr
@@ -231,11 +231,11 @@ This tool uses LLM reasoning to create natural questions that gather required in
                   (throw (ex-info "Interviewer reported failure" {:reason (:iviewr-failure result)})))
 
               ;; Link answer to question if question-id provided
-              _ (when question-id
+              _ (when question_id
                   (pdb/update-msg! pid cid answer-mid
-                                   {:message/answers-question (if (string? question-id)
-                                                                (Long/parseLong question-id)
-                                                                question-id)}))
+                                   {:message/answers-question (if (string? question_id)
+                                                                (Long/parseLong question_id)
+                                                                question_id)}))
               ;; Store the SCR with the message
               _ (when scr
                   (pdb/put-msg-SCR! pid cid scr))
@@ -258,7 +258,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
 
           ;; Return comprehensive response
           {:scr (merge {:answered-at (java.util.Date.)
-                        :question question-asked
+                        :question question_asked
                         :raw-answer answer
                         :DS scr}
                        scr)
@@ -334,12 +334,12 @@ This tool uses LLM reasoning to create natural questions that gather required in
    :required ["project_id" "conversation_id"]})
 
 (defmethod tool-system/validate-inputs :get-current-ds [_ inputs]
-  (tool-system/validate-required-params inputs [:project-id :conversation-id]))
+  (tool-system/validate-required-params inputs [:project_id :conversation_id]))
 
 (defmethod tool-system/execute-tool :get-current-ds
-  [{:keys [_system-atom]} {:keys [project-id conversation-id]}]
-  (let [pid (keyword project-id)
-        cid (keyword conversation-id)
+  [{:keys [_system-atom]} {:keys [project_id conversation_id]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
         ds-id (pdb/get-current-DS pid cid)
         {:ascr/keys [completed? dstruct] :as ascr} (pdb/get-ASCR pid ds-id)]
     (alog! (str "sys_get_current_ds " pid " " cid " " ds-id))

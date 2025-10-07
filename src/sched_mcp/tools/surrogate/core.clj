@@ -84,24 +84,25 @@
    :required ["project_id" "question"]})
 
 (defmethod tool-system/validate-inputs :answer-question [_ inputs]
-  (tool-system/validate-required-params inputs [:project-id :question]))
+  (tool-system/validate-required-params inputs [:project_id :question]))
 
 (defmethod tool-system/execute-tool :answer-question
   [{:keys [_system-atom]} {:keys [project_id question]}]
-  (alog! (str "sur_answer project_id=" project_id))
-  (try
-    (let [result (suru/surrogate-answer-question
-                  {:project-id project_id
-                   :question question})]
-      (if (:error result)
+  (let [pid project_id]
+    (alog! (str "sur_answer project_id=" pid))
+    (try
+      (let [result (suru/surrogate-answer-question
+                    {:project-id pid
+                     :question question})]
+        (if (:error result)
+          {:status "error"
+           :message (:error result)}
+          {:status "success"
+           :expert_response (:response result)
+           :project_id pid}))
+      (catch Exception e
         {:status "error"
-         :message (:error result)}
-        {:status "success"
-         :expert_response (:response result)
-         :project_id project_id}))
-    (catch Exception e
-      {:status "error"
-       :message (.getMessage e)})))
+         :message (.getMessage e)}))))
 
 (defmethod tool-system/format-results :answer-question [_ result]
   (cond

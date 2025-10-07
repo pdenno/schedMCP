@@ -53,11 +53,14 @@
                 :conversation_id tool-system/conversation-id-schema}
    :required ["project_id" "conversation_id"]})
 
+(defmethod tool-system/validate-inputs :get-next-ds [_ inputs]
+  (tool-system/validate-required-params inputs [:project_id :conversation_id]))
+
 (defmethod tool-system/execute-tool :get-next-ds
-  [{:keys [_system-atom]} {:keys [project-id conversation-id]}]
+  [{:keys [_system-atom]} {:keys [project_id conversation_id]}]
   (try
-    (let [pid (keyword project-id)
-          cid (keyword conversation-id)
+    (let [pid (keyword project_id)
+          cid (keyword conversation_id)
 
           ;; Get all available DS from system DB
           all-ds (sdb/system-DS?)
@@ -132,34 +135,37 @@
                          :description "Question budget (optional, default 10)"}}
    :required ["project_id" "conversation_id" "ds_id"]})
 
+(defmethod tool-system/validate-inputs :start-ds-pursuit [_ inputs]
+  (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
+
 (defmethod tool-system/execute-tool :start-ds-pursuit
-  [{:keys [_system-atom]} {:keys [project-id conversation-id ds-id budget]}]
-  (let [pid (keyword project-id)
-        cid (keyword conversation-id)
-        ds-id-kw (keyword ds-id)
-        ds (sdb/get-DS-instructions ds-id-kw)
+  [{:keys [_system-atom]} {:keys [project_id conversation_id ds_id budget]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
+        ds-id (keyword ds_id)
+        ds (sdb/get-DS-instructions ds-id)
         budget (or budget 1.0)]
     (alog! (str "orch_start_ds_pursuit " pid " " cid " " ds-id))
     (if (= ds "") ; get-DS-instructions returns empty string when not found
-      {:error (str "Discovery Schema not found: " ds-id)}
+      {:error (str "Discovery Schema not found: " ds_id)}
       (try
         ;; Set the DS as active for this conversation
-        (pdb/put-active-DS-id pid cid ds-id-kw)
+        (pdb/put-active-DS-id pid cid ds-id)
 
         ;; Initialize ASCR if it doesn't exist
-        (when-not (pdb/ASCR-exists? pid ds-id-kw)
-          (pdb/init-ASCR! pid ds-id-kw)
+        (when-not (pdb/ASCR-exists? pid ds-id)
+          (pdb/init-ASCR! pid ds-id)
           ;; Set initial budget
           (let [conn (connect-atm pid)
                 ascr-eid (d/q '[:find ?e .
                                 :in $ ?ds-id
                                 :where [?e :ascr/id ?ds-id]]
-                              @conn ds-id-kw)]
+                              @conn ds-id)]
             (d/transact conn [{:db/id ascr-eid
                                :ascr/budget-left (double budget)}])))
 
         ;; Return info about the DS
-        {:ds_id (name ds-id-kw)
+        {:ds_id (name ds-id)
          :interview_objective (:interview-objective ds)
          :ds_template (:DS ds) ; The DS structure itself, not nested under EADS
          :budget budget
@@ -184,10 +190,13 @@
                               :description "Completion notes"}}
    :required ["project_id" "conversation_id"]})
 
+(defmethod tool-system/validate-inputs :complete-ds [_ inputs]
+  (tool-system/validate-required-params inputs [:project_id :conversation_id]))
+
 (defmethod tool-system/execute-tool :complete-ds
-  [{:keys [_system-atom]} {:keys [project-id conversation-id final-notes]}]
-  (let [pid (keyword project-id)
-        cid (keyword conversation-id)
+  [{:keys [_system-atom]} {:keys [project_id conversation_id final_notes]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
         conn (connect-atm pid)
         ;; Get the active DS from conversation
         active-ds (pdb/get-active-DS-id pid cid)]
@@ -205,8 +214,8 @@
         (d/transact conn [[:db/retract [:conversation/id cid]
                            :conversation/active-DS-id]])
         ;; Log final notes if provided
-        (when final-notes
-          (log! :info (str "DS completed with notes: " final-notes)))
+        (when final_notes
+          (log! :info (str "DS completed with notes: " final_notes)))
         {:success true
          :ds_id (str (namespace active-ds) "/" (name active-ds))
          :final_ascr ascr
@@ -225,10 +234,13 @@
    :properties {:project_id tool-system/project-id-schema}
    :required ["project_id"]})
 
+(defmethod tool-system/validate-inputs :get-progress [_ inputs]
+  (tool-system/validate-required-params inputs [:project_id]))
+
 (defmethod tool-system/execute-tool :get-progress
-  [{:keys [_system-atom]} {:keys [project-id]}]
+  [{:keys [_system-atom]} {:keys [project_id]}]
   (try
-    (let [pid (keyword project-id)
+    (let [pid (keyword project_id)
           progress (pdb/get-interview-progress pid)]
       (alog! (str "orch_get_progress " pid))
       progress)
