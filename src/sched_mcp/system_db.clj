@@ -171,6 +171,7 @@
   (let [conn-atm (connect-atm :system)
         eid (d/q '[:find ?eid . :where [?eid :system/name "SYSTEM"]] @conn-atm)]
     (d/transact conn-atm {:tx-data [{:db/id eid
+                                     :system/current-project id
                                      :system/projects {:project/id id
                                                        :project/name project-name
                                                        :project/dir dir

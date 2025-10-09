@@ -10,15 +10,13 @@
 
 (defn create-start-surrogate-tool
   "Creates the tool for starting a surrogate expert interview"
-  [system-atom]
-  {:tool-type :start-surrogate
-   :system-atom system-atom})
+  []
+  {:tool-type :start-surrogate})
 
 (defn create-answer-question-tool
   "Creates the tool for getting answers from surrogate expert"
-  [system-atom]
-  {:tool-type :answer-question
-   :system-atom system-atom})
+  []
+  {:tool-type :answer-question})
 
 ;;; Start Surrogate Tool
 
@@ -42,7 +40,7 @@
   (tool-system/validate-required-params inputs [:domain]))
 
 (defmethod tool-system/execute-tool :start-surrogate
-  [{:keys [_system-atom]} {:keys [domain company_name project_name]}]
+  [_ {:keys [domain company_name project_name]}]
   (alog! (str "sur_start_expert domain=" domain))
   (try
     (let [result (suru/start-surrogate-interview
@@ -87,7 +85,7 @@
   (tool-system/validate-required-params inputs [:project_id :question]))
 
 (defmethod tool-system/execute-tool :answer-question
-  [{:keys [_system-atom]} {:keys [project_id question]}]
+  [{:keys [project_id question]}]
   (let [pid project_id]
     (alog! (str "sur_answer project_id=" pid))
     (try
@@ -124,7 +122,7 @@
 ;;; Helper to create all surrogate tools
 
 (defn create-sur-tools
-  "Create all surrogate tools with shared system atom"
-  [system-atom]
-  [(create-start-surrogate-tool system-atom)
-   (create-answer-question-tool system-atom)])
+  "Create all surrogate tools"
+  []
+  [(create-start-surrogate-tool)
+   (create-answer-question-tool)])

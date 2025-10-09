@@ -42,6 +42,9 @@
    :system/agents
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
         :doc "an agent (OpenAI Assistant) that outputs a vector of clojure maps in response to queries."}
+   :system/current-project
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword,
+        :doc "the PID of the project that is now being worked, or was most recently worked."}
    :system/default-project-id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword,
         :doc "a keyword providing a project-id clients get when starting up."}

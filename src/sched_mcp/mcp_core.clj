@@ -59,9 +59,6 @@
 
 ;;; ----------------------------- Based on deprecated sched-mcp/registry.clj and clojure-mcp/main.clj
 ;;; ToDo: I wonder whether this is necessary or useful?!?
-(def system-atom
-  "for sharing state between tools (contains pid and cid)"
-  (atom {}))
 
 (def ^:diag components-atm
   "This is just for studying what gets made, but DON'T REMOVE IT."
@@ -415,9 +412,9 @@
 (defn make-tools!
   "Build the complete set of tools for schedMCP"
   [_config-map]
-  (let [iviewr-tools (iviewr/create-iviewr-tools system-atom)
-        orch-tools (orch/create-orch-tools system-atom)
-        sur-tools (sur/create-sur-tools system-atom)
+  (let [iviewr-tools (iviewr/create-iviewr-tools)
+        orch-tools (orch/create-orch-tools)
+        sur-tools (sur/create-sur-tools)
         all-tools (mapv tool-system/registration-map
                         (into (into iviewr-tools orch-tools) sur-tools))]
     (log! :info (str "Total tools registered: " (count all-tools) ":\n"

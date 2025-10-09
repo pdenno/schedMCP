@@ -13,27 +13,23 @@
 
 (defn create-get-next-ds-tool
   "Creates the tool for recommending next DS"
-  [system-atom]
-  {:tool-type :get-next-ds
-   :system-atom system-atom})
+  []
+  {:tool-type :get-next-ds})
 
 (defn create-start-ds-pursuit-tool
   "Creates the tool for starting DS pursuit"
-  [system-atom]
-  {:tool-type :start-ds-pursuit
-   :system-atom system-atom})
+  []
+  {:tool-type :start-ds-pursuit})
 
 (defn create-complete-ds-tool
   "Creates the tool for completing DS"
-  [system-atom]
-  {:tool-type :complete-ds
-   :system-atom system-atom})
+  []
+  {:tool-type :complete-ds})
 
 (defn create-get-progress-tool
-  "Creates the tool for getting overall interview progress"
-  [system-atom]
-  {:tool-type :get-progress
-   :system-atom system-atom})
+  "Creates the tool for getting interview progress"
+  []
+  {:tool-type :get-progress})
 
 ;;; Get Next DS Tool
 
@@ -57,7 +53,7 @@
   (tool-system/validate-required-params inputs [:project_id :conversation_id]))
 
 (defmethod tool-system/execute-tool :get-next-ds
-  [{:keys [_system-atom]} {:keys [project_id conversation_id]}]
+  [_ {:keys [project_id conversation_id]}]
   (try
     (let [pid (keyword project_id)
           cid (keyword conversation_id)
@@ -139,7 +135,7 @@
   (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
 
 (defmethod tool-system/execute-tool :start-ds-pursuit
-  [{:keys [_system-atom]} {:keys [project_id conversation_id ds_id budget]}]
+  [_ {:keys [project_id conversation_id ds_id budget]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
@@ -194,7 +190,7 @@
   (tool-system/validate-required-params inputs [:project_id :conversation_id]))
 
 (defmethod tool-system/execute-tool :complete-ds
-  [{:keys [_system-atom]} {:keys [project_id conversation_id final_notes]}]
+  [_ {:keys [project_id conversation_id final_notes]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         conn (connect-atm pid)
@@ -238,7 +234,7 @@
   (tool-system/validate-required-params inputs [:project_id]))
 
 (defmethod tool-system/execute-tool :get-progress
-  [{:keys [_system-atom]} {:keys [project_id]}]
+  [_ {:keys [project_id]}]
   (try
     (let [pid (keyword project_id)
           progress (pdb/get-interview-progress pid)]
@@ -325,12 +321,32 @@
                       result))]
      :error false}))
 
+;;; ========================================== DB Discovery tools
+(defmethod tool-system/tool-name :db_query [_]
+  "orch_db_query")
+
+(defmethod tool-system/tool-description :db-query [_]
+  "This should be rather long.")
+
+(defmethod tool-system/tool-schema :db-query [_]
+  {:type "object"
+   :properties {:db_type {:type "string"
+                          :description "either \"project\" or \"system\""}
+                :query_string {:type "string"
+                               :description "Datomic-style datalog query e.g. \"[:find ?pid :where [_ :system/current-project  ?pid]\"."}}
+   :required ["db_type" "query_string"]})
+
+(defmethod tool-system/validate-inputs :db-query [_ inputs]
+  (tool-system/validate-required-params inputs [:db_type :query_string]))
+
+(defmethod tool-system/execute-tool :db-query)
+
 ;;; Helper to create all orchestrator tools
 
 (defn create-orch-tools
-  "Create all orchestrator tools with shared system atom"
-  [system-atom]
-  [(create-get-next-ds-tool system-atom)
-   (create-start-ds-pursuit-tool system-atom)
-   (create-complete-ds-tool system-atom)
-   (create-get-progress-tool system-atom)])
+  "Create all orchestrator tools"
+  []
+  [(create-get-next-ds-tool)
+   (create-start-ds-pursuit-tool)
+   (create-complete-ds-tool)
+   (create-get-progress-tool)])

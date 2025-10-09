@@ -12,26 +12,21 @@
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.util :refer [alog! log!]]))
 
-;;; system-atom here is something that has :pid and :cid for conversation.
-
 ;;; Tool configurations
 (defn create-formulate-question-tool
   "Creates the tool for formulating interview questions"
-  [system-atom]
-  {:tool-type :formulate-question
-   :system-atom system-atom})
+  []
+  {:tool-type :formulate-question})
 
 (defn create-interpret-response-tool
-  "Creates the tool for interpreting responses into SCRs"
-  [system-atom]
-  {:tool-type :interpret-response
-   :system-atom system-atom})
+  "Creates the tool for interpreting responses"
+  []
+  {:tool-type :interpret-response})
 
 (defn create-get-current-ds-tool
-  "Creates the tool for getting current DS and ASCR"
-  [system-atom]
-  {:tool-type :get-current-ds
-   :system-atom system-atom})
+  "Creates the tool for getting current DS"
+  []
+  {:tool-type :get-current-ds})
 
 ;;; Formulate Question Tool
 
@@ -169,7 +164,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
                                          :answer :question_asked]))
 
 (defmethod tool-system/execute-tool :interpret-response
-  [{:keys [_system-atom]} {:keys [project_id conversation_id ds_id answer question_asked question_id]}]
+  [_ {:keys [project_id conversation_id ds_id answer question_asked question_id]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
@@ -337,7 +332,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
   (tool-system/validate-required-params inputs [:project_id :conversation_id]))
 
 (defmethod tool-system/execute-tool :get-current-ds
-  [{:keys [_system-atom]} {:keys [project_id conversation_id]}]
+  [_ {:keys [project_id conversation_id]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (pdb/get-current-DS pid cid)
@@ -413,8 +408,8 @@ This tool uses LLM reasoning to create natural questions that gather required in
 ;;; Helper to create all interviewer tools
 
 (defn create-iviewr-tools
-  "Create all interviewer tools with shared system atom"
-  [system-atom]
-  [(create-formulate-question-tool system-atom)
-   (create-interpret-response-tool system-atom)
-   (create-get-current-ds-tool system-atom)])
+  "Create all interviewer tools"
+  []
+  [(create-formulate-question-tool)
+   (create-interpret-response-tool)
+   (create-get-current-ds-tool)])
