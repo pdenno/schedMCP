@@ -34,7 +34,6 @@
                                     "then execute that plan.")}]
      :llm-provider :openai)))
 
-
 (defn llm-query
   [model-provider text]
   (llm/query-llm
@@ -42,6 +41,6 @@
     {:role "user"   :content text}]
    :llm-provider model-provider))
 
-  
-(llmt/llm-query :meta "How many 'r's are there in 'raspberry'?")
-(llmt/llm-query :meta "Describe a plan for counting the numer of 'r's in the word 'raspberry', then execute that plan.")
+;;; NIST Shutdown. Can't test these. ToDo: Write ^:admin function that tests for availability.
+;;;(llm-query :meta "How many 'r's are there in 'raspberry'?")
+;;;(llm-query :meta "Describe a plan for counting the numer of 'r's in the word 'raspberry', then execute that plan.")

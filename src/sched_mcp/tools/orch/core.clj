@@ -339,7 +339,8 @@
 (defmethod tool-system/validate-inputs :db-query [_ inputs]
   (tool-system/validate-required-params inputs [:db_type :query_string]))
 
-(defmethod tool-system/execute-tool :db-query)
+;;; Not yet implemented!
+#_(defmethod tool-system/execute-tool :db-query)
 
 ;;; Helper to create all orchestrator tools
 

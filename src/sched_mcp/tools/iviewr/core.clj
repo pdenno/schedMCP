@@ -10,6 +10,8 @@
    [sched-mcp.tools.iviewr.discovery-schema] ; For mount
    [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tool-system :as tool-system]
+   [sched-mcp.interviewing.interview-graph :as igraph]
+   [sched-mcp.interviewing.interview-state :as istate]
    [sched-mcp.util :refer [alog! log!]]))
 
 ;;; Tool configurations
@@ -27,6 +29,11 @@
   "Creates the tool for getting current DS"
   []
   {:tool-type :get-current-ds})
+
+(defn create-conduct-interview-tool
+  "Creates the tool for conducting a complete interview autonomously"
+  []
+  {:tool-type :conduct-interview})
 
 ;;; Formulate Question Tool
 
@@ -52,7 +59,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
-        ds-json (sdb/get-discovery-schema-JSON ds-id)
+        ds-json (sdb/get-DS-instructions-JSON ds-id)
         ds-full (sdb/get-DS-instructions ds-id)
         ;; Get current ASCR
         {:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
@@ -168,7 +175,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
-        ds-json (sdb/get-discovery-schema-JSON ds-id)
+        ds-json (sdb/get-DS-instructions-JSON ds-id)
         ds-full (sdb/get-DS-instructions ds-id)]
 
     (alog! (str "iviewr_interpret_response " pid " " cid " " ds-id))
@@ -346,6 +353,100 @@ This tool uses LLM reasoning to create natural questions that gather required in
        :current_ascr ascr
        :pursuit_status (if completed? :completed :incomplete)})))
 
+;;; Conduct Interview Tool
+
+(defmethod tool-system/tool-name :conduct-interview [_]
+  "iviewr_conduct_interview")
+
+(defmethod tool-system/tool-description :conduct-interview [_]
+  "Conduct a complete autonomous interview for a Discovery Schema using LangGraph.
+The interviewer will formulate questions, interact with the surrogate/expert, interpret responses,
+and build up the ASCR until the DS is complete or budget is exhausted. Returns the completed ASCR.")
+
+(defmethod tool-system/tool-schema :conduct-interview [_]
+  {:type "object"
+   :properties {:project_id tool-system/project-id-schema
+                :conversation_id tool-system/conversation-id-schema
+                :ds_id tool-system/ds-id-schema
+                :budget {:type "number"
+                         :description "Question budget for this interview (default: 10.0)"}}
+   :required ["project_id" "conversation_id" "ds_id"]})
+
+(defmethod tool-system/validate-inputs :conduct-interview [_ inputs]
+  (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
+
+(defmethod tool-system/execute-tool :conduct-interview
+  [_ {:keys [project_id conversation_id ds_id budget]}]
+  (let [pid (keyword project_id)
+        cid (keyword conversation_id)
+        ds-id (keyword ds_id)
+        budget (or budget 10.0)]
+
+    (alog! (str "iviewr_conduct_interview " pid " " cid " " ds-id " budget=" budget))
+
+    (try
+      ;; Initialize LLM if needed
+      (when-not (seq @llm/agent-prompts)
+        (llm/init-llm!))
+
+      ;; Verify DS exists
+      (let [ds-json (sdb/get-DS-instructions-JSON ds-id)]
+        (when-not ds-json
+          (throw (ex-info "Discovery Schema not found" {:ds-id ds-id}))))
+
+      ;; Create initial interview state
+      (let [initial-state (istate/make-interview-state
+                           {:ds-id ds-id
+                            :pid pid
+                            :cid cid
+                            :budget-left budget})
+
+            ;; Run the autonomous interview
+            final-state (igraph/run-interview initial-state)
+
+            ;; Extract results
+            {:keys [ascr messages complete? budget-left]} final-state
+
+            ;; Store ASCR in project DB
+            _ (when-not (pdb/ASCR-exists? pid ds-id)
+                (pdb/init-ASCR! pid ds-id))
+            _ (pdb/put-ASCR! pid ds-id ascr)
+            _ (when complete?
+                (pdb/mark-ASCR-complete! pid ds-id))
+
+            ;; Store messages in project DB
+            _ (doseq [msg messages]
+                (when-let [content (:content msg)]
+                  (when (and (string? content) (not (str/blank? content)))
+                    (pdb/add-msg! {:pid pid
+                                   :cid cid
+                                   :from (:from msg)
+                                   :content content
+                                   :pursuing-DS ds-id}))))]
+
+        (log! :info (str "Completed autonomous interview for " ds-id
+                         ". Complete: " complete?
+                         ", Messages: " (count messages)
+                         ", Budget remaining: " budget-left))
+
+        {:status "success"
+         :ds_id (name ds-id)
+         :ascr ascr
+         :complete complete?
+         :message_count (count messages)
+         :budget_remaining budget-left
+         :summary (str "Interview completed for " (name ds-id)
+                       " with " (count messages) " messages exchanged. "
+                       (if complete?
+                         "DS completion criteria met."
+                         (str "Budget exhausted with " budget-left " remaining.")))})
+
+      (catch Exception e
+        (log! :error (str "Error in conduct-interview: " (.getMessage e)))
+        {:status "error"
+         :error (.getMessage e)
+         :ds_id (name ds-id)}))))
+
 ;;; Format results methods for interviewer tools
 
 (defmethod tool-system/format-results :formulate-question [_ result]
@@ -405,6 +506,28 @@ This tool uses LLM reasoning to create natural questions that gather required in
     {:result [(json/write-str result)]
      :error false}))
 
+(defmethod tool-system/format-results :conduct-interview [_ result]
+  (cond
+    (= "error" (:status result))
+    {:result [(str "Error conducting interview: " (:error result))]
+     :error true}
+
+    (= "success" (:status result))
+    {:result [(json/write-str
+               {:message-type "interview-completed"
+                :status (:status result)
+                :ds_id (:ds_id result)
+                :ascr (:ascr result)
+                :complete (:complete result)
+                :message_count (:message_count result)
+                :budget_remaining (:budget_remaining result)
+                :summary (:summary result)})]
+     :error false}
+
+    :else
+    {:result [(json/write-str result)]
+     :error false}))
+
 ;;; Helper to create all interviewer tools
 
 (defn create-iviewr-tools
@@ -412,4 +535,5 @@ This tool uses LLM reasoning to create natural questions that gather required in
   []
   [(create-formulate-question-tool)
    (create-interpret-response-tool)
-   (create-get-current-ds-tool)])
+   (create-get-current-ds-tool)
+   (create-conduct-interview-tool)])

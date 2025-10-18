@@ -29,7 +29,7 @@ Simple tools like `orch_complete_ds` only mark status in the DB. While necessary
 - Difficult to document comprehensively
 - Limiting to the orchestrator's decision-making capabilities
 
-### Interviewing Delegation to LangGraph
+### Interviewing Delegation to LangGraph (This has been implemented!)
 
 A key architectural shift: The orchestrator will delegate the interviewing loop to a LangGraph tool that:
 - Takes a Discovery Schema and current ASCR as input
@@ -37,7 +37,7 @@ A key architectural shift: The orchestrator will delegate the interviewing loop 
 - Returns a completed or refined ASCR
 - Evaluates completeness according to the DS requirements
 
-This frees the orchestrator to focus on higher-level decisions rather than managing every question/answer interaction.
+This frees the orchestrator to focus on the higher-level decisions listed in the Overview above rather than managing every question/answer interaction.
 
 ### Database Access Requirements
 
@@ -270,7 +270,7 @@ A new tool that encapsulates the interview loop:
 4. Implement `resolve-db-id` wrapper tool
 5. Create comprehensive example queries for common orchestration decisions
 
-### Phase 2: LangGraph Integration
+### Phase 2: LangGraph Integration (already implemented)
 1. Design LangGraph interview tool specification
 2. Implement interview delegation mechanism
 3. Test with existing Discovery Schemas

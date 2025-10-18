@@ -278,8 +278,8 @@
             (subs response 0 pos))
           :else response)))
 
-;;; This became complicated once I couldn't use strict schema results.
-(defn ai-response2clj
+;;; OpenAI thing. This became complicated once I couldn't use strict schema results.
+#_(defn ai-response2clj
   "Translate content to a clj object. The content is a string that contains a JSON object, and may wrap the object in unhelpful language
    markup indicating the language in which the object should be interpreted. The function takes an optional second argument which defaults to true.
    If instead, false (not just nil, but false, the boolean)  is provided as second argument, the original string is returned, rather

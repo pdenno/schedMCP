@@ -31,6 +31,7 @@ dutil/learn-schema!
    'p      'promesa.core
    ;;'px   'promesa.exec
    'iviewr 'sched-mcp.tools.iviewr.core
+   'iviewrt 'sched-mcp.tools.iviewr.core-test
    ;;'main   'sched-mcp.main ; This isn't used in development
    'lgu    'sched-mcp.interviewing.lg-util
    'ig     'sched-mcp.interviewing.interview-graph

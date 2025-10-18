@@ -251,14 +251,16 @@
     (sutil/register-db pid cfg)
      ;; Add to project db
     (d/transact (connect-atm pid) schema/db-schema-proj)
-    (d/transact (connect-atm pid) {:tx-data [{:project/id pid
-                                              :project/name project-name
-                                              ;; REMOVED :project/status - it belongs in system DB
-                                              :project/execution-status :running
-                                              :project/active-conversation :process
-                                              :project/claims [{:claim/string (str `(~'project-id ~pid))}
-                                                               {:claim/string (str `(~'project-name ~pid ~project-name))}]
-                                              :project/conversations conversation-defaults}]})
+    (d/transact (connect-atm pid) {:tx-data (cond-> {:project/id pid
+                                                     :project/name project-name
+                                                     ;; REMOVED :project/status - it belongs in system DB
+                                                     :project/execution-status :running
+                                                     :project/active-conversation :process
+                                                     :project/claims [{:claim/string (str `(~'project-id ~pid))}
+                                                                      {:claim/string (str `(~'project-name ~pid ~project-name))}]
+                                                     :project/conversations conversation-defaults}
+                                              in-mem? (into {:project/in-memory? true})
+                                              true vector)})
     (when (not-empty additional-info)
       (d/transact (connect-atm pid) additional-info))
      ;; Add knowledge of this project to the system db.

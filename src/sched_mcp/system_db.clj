@@ -197,7 +197,7 @@
       {:pid pid
        :status :deleted})))
 
-(defn get-discovery-schema
+(defn get-DS-instructions
   "Return the discovery-schema identified by the argument ds-id."
   [ds-id]
   (assert (keyword? ds-id))
@@ -210,12 +210,18 @@
     (-> s edn/read-string (dissoc :message-type))
     (throw (ex-info "No such discovery-schema" {:ds-id ds-id}))))
 
+(defn ^:admin list-discovery-schema
+  "Administrative tool to list discovery schema."
+  []
+  (d/q '[:find [?id ...]
+         :where [_ :DS/id ?id]]
+       @(connect-atm :system)))
 
-(defn get-discovery-schema-JSON
-  "Return the JSON of the discovery schema from the system DB."
+(defn get-DS-instructions-JSON
+  "Return the JSON of the full DS-instructions message from the system DB.
+   This includes :message-type, :interview-objective, :budget-decrement, and :DS."
   [ds-id]
-  (-> ds-id get-discovery-schema sutil/clj2json-pretty))
-
+  (-> ds-id get-DS-instructions sutil/clj2json-pretty))
 
 (defn ^:admin delete-project!
   "Remove project from the system."

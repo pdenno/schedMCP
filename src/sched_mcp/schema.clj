@@ -168,7 +168,7 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/instant
         :doc "The time at which the message was sent."}
 
-   ;; ---------------------- project -- the top-level object in the db/file.
+   ;; ---------------------- project -- the top-level object; DB is a tree, not graph.
    :project/active-conversation
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
         :doc (str "The conversation most recently busy, #{:process...}. Note that several conversations can still need work, and there can "
@@ -195,6 +195,9 @@
    :project/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
         :doc "a lowercase kebab-case keyword naming a project; unique to the project."}
+   :project/in-memory?
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean
+        :doc "a boolean indicating whether the project DB is in-memory, such as when mocking."}
    :project/name
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "4 words or so describing the project; e.g. 'craft brewing production scheduling'"}

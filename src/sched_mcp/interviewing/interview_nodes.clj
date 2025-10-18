@@ -1,10 +1,14 @@
 (ns sched-mcp.interviewing.interview-nodes
-  "Node implementations for the interview graph.
-   Phase 2: Mock implementations for POC.
-   Phase 3: Real implementations with LLM integration."
+  "Node implementations for the interview graph."
   (:require
+   [clojure.data.json :as json]
+   [clojure.string :as str]
    [sched-mcp.interviewing.interview-state :as istate]
-   [sched-mcp.interviewing.lg-util :as lg]))
+   [sched-mcp.llm :as llm]
+   [sched-mcp.system-db :as sdb]
+   [sched-mcp.tools.orch.ds-util :as dsu]
+   [sched-mcp.tools.surrogate.sur-util :as suru]
+   [sched-mcp.util :refer [log!]]))
 
 ;;; ============================================================================
 ;;; Mock Nodes (Phase 2)
@@ -63,7 +67,7 @@
         messages (:messages istate)
         last-qa (take-last 2 messages)
         question (when (first last-qa) (:content (first last-qa)))
-        answer (when (second last-qa) (:content (second last-qa)))]
+        _answer (when (second last-qa) (:content (second last-qa)))]
     (cond
       (and question (re-find #"challenges" question))
       (istate/update-ascr {:challenges ["Seasonal demand variations" "Equipment capacity limits"]})
@@ -98,8 +102,149 @@
       {:complete? false})))
 
 (defn check-budget
-  "Decrement the question budget by 1.0."
+  "Decrement the question budget by the DS-specific budget-decrement (default 1.0)."
   [state]
   (let [istate (istate/agent-state->interview-state state)
-        current-budget (:budget-left istate)]
-    (istate/decrement-budget current-budget 1.0)))
+        {:keys [ds-id budget-left]} istate
+
+        ;; Get budget-decrement from DS-instructions, default to 1.0
+        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
+        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
+        budget-decrement (or (:budget-decrement ds-instructions) 1.0)]
+
+    (istate/decrement-budget budget-left budget-decrement)))
+
+;;; ============================================================================
+;;; Real Nodes (Phase 3)
+;;; ============================================================================
+
+(defn formulate-question
+  "Real question formulation using LLM.
+   Uses the DS template and current ASCR to create contextual questions."
+  [state]
+  (let [istate (istate/agent-state->interview-state state)
+        {:keys [ds-id ascr messages budget-left pid cid]} istate
+
+        ;; Get DS-instructions from system DB - includes :DS, :interview-objective, :budget-decrement
+        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
+        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
+
+        ;; Build message history in expected format
+        message-history (mapv (fn [msg]
+                                (cond
+                                  (= (:from msg) :system)
+                                  {:interviewer (:content msg)}
+                                  (#{:human :surrogate} (:from msg))
+                                  {:expert (:content msg)}
+                                  :else nil))
+                              messages)
+        message-history (remove nil? message-history)
+
+        ;; Initialize LLM if needed
+        _ (when-not (seq @llm/agent-prompts)
+            (llm/init-llm!))
+
+        ;; Generate question using LLM - ds-instructions contains interview-objective
+        prompt (llm/ds-question-prompt
+                {:ds ds-instructions
+                 :ascr ascr
+                 :message-history message-history
+                 :budget-remaining budget-left})
+        result (llm/complete-json prompt :model-class :chat)
+        question-text (get result :question-to-ask (:question result))]
+
+    (log! :info (str "LangGraph formulated question for " ds-id))
+    (istate/add-message :system question-text)))
+
+(defn get-answer
+  "Real answer retrieval from surrogate expert.
+   Calls the surrogate with the last question from messages."
+  [state]
+  (let [istate (istate/agent-state->interview-state state)
+        {:keys [messages pid]} istate
+        last-question (when (seq messages)
+                        (:content (last messages)))
+
+        ;; Call surrogate expert
+        result (suru/surrogate-answer-question
+                {:project-id pid
+                 :question last-question})
+
+        answer-text (if (:error result)
+                      (str "Error: " (:error result))
+                      (:response result))]
+
+    (log! :info (str "LangGraph got answer from surrogate for " pid))
+    (istate/add-message :surrogate answer-text)))
+
+(defn interpret-response
+  "Real response interpretation using LLM.
+   Extracts structured SCR from the conversational answer.
+   The LLM looks at the last entry in conversation-history to find the Q&A pair."
+  [state]
+  (let [istate (istate/agent-state->interview-state state)
+        {:keys [ds-id ascr messages budget-left pid cid]} istate
+
+        ;; Get DS-instructions from system DB - includes :DS, :interview-objective, :budget-decrement
+        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
+        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
+
+        ;; Build message history - LLM will look at the last entry for Q&A
+        message-history (mapv (fn [msg]
+                                (cond
+                                  (= (:from msg) :system)
+                                  {:interviewer (:content msg)}
+                                  (#{:human :surrogate} (:from msg))
+                                  {:expert (:content msg)}
+                                  :else nil))
+                              messages)
+        message-history (vec (remove nil? message-history))
+
+        ;; Initialize LLM if needed
+        _ (when-not (seq @llm/agent-prompts)
+            (llm/init-llm!))
+
+        ;; Use LLM to interpret the answer - LLM extracts Q&A from message-history
+        prompt (llm/ds-interpret-prompt
+                {:ds ds-instructions
+                 :message-history message-history
+                 :ascr ascr
+                 :budget-remaining budget-left})
+        result (llm/complete-json prompt :model-class :extract)
+
+        ;; Extract SCR (remove any metadata)
+        scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
+
+        ;; Check for failure
+        _ (when (:iviewr-failure result)
+            (log! :warn (str "Interviewer reported failure: " (:iviewr-failure result))))]
+
+    (log! :info (str "LangGraph interpreted response, extracted " (count (keys scr)) " fields"))
+    (istate/update-ascr scr)))
+
+(defn real-evaluate-completion
+  "Real completion evaluation using DS-specific completion criteria.
+   Uses the ds-util/ds-complete? multimethod for each DS type."
+  [state]
+  (let [istate (istate/agent-state->interview-state state)
+        {:keys [ds-id ascr budget-left]} istate
+
+        ;; Check if budget exhausted
+        budget-exhausted? (<= budget-left 0)
+
+        ;; Use the DS-specific completion check
+        ds-complete? (try
+                       (dsu/ds-complete? ds-id ascr)
+                       (catch Exception e
+                         (log! :warn (str "Error checking DS completion: " (.getMessage e)))
+                         false))
+
+        complete? (or ds-complete? budget-exhausted?)]
+
+    (when complete?
+      (log! :info (str "DS " ds-id " marked complete. Budget exhausted: " budget-exhausted?
+                       ", DS criteria met: " ds-complete?)))
+
+    (if complete?
+      (istate/mark-complete)
+      {:complete? false})))

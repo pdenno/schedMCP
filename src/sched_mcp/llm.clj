@@ -187,34 +187,39 @@
 ;;; Discovery Schema Prompt Templates
 
 (defn ds-question-prompt
-  "Create a prompt for generating questions from DS + ASCR according to base-iviewr-instructions"
-  [{:keys [ds ascr message-history budget-remaining interview-objective]}]
-  (build-prompt
-   :system (get-agent-prompt :generic-interviewer)
-   :user (str "Interview Objective:\n" interview-objective
-              "\n\nTask Input:\n"
-              (json/write-str
-               {:task-type "formulate-question"
-                :conversation-history message-history
-                :discovery-schema ds ; Pass the DS object as is ; ds is already a JSON string, need to parse it
-                :ASCR ascr
-                :budget budget-remaining}
-               :indent true))))
+  "Create a prompt for generating questions from DS + ASCR according to base-iviewr-instructions.
+   The DS object contains the interview-objective, so we extract it from there."
+  [{:keys [ds ascr message-history budget-remaining]}]
+  (let [interview-objective (:interview-objective ds)]
+    (build-prompt
+     :system (get-agent-prompt :generic-interviewer)
+     :user (str "Interview Objective:\n" interview-objective
+                "\n\nTask Input:\n"
+                (json/write-str
+                 {:task-type "formulate-question"
+                  :conversation-history message-history
+                  :discovery-schema ds
+                  :ASCR ascr
+                  :budget budget-remaining}
+                 :indent true)))))
 
 (defn ds-interpret-prompt
-  "Create a prompt for interpreting response into SCR according to base-iviewr-instructions"
-  [{:keys [ds question answer message-history ascr budget-remaining interview-objective]}]
-  (build-prompt
-   :system (get-agent-prompt :generic-interviewer)
-   :user (str "Interview Objective:\n" interview-objective
-              "\n\nTask Input:\n"
-              (json/write-str
-               {:task-type "interpret-response"
-                :conversation-history message-history
-                :discovery-schema ds ; ds is already a JSON string, need to parse it
-                :ASCR ascr
-                :budget budget-remaining}
-               :indent true))))
+  "Create a prompt for interpreting response into SCR according to base-iviewr-instructions.
+   The DS object contains the interview-objective, so we extract it from there.
+   The LLM should look at the last entry in conversation-history to find the question/answer pair."
+  [{:keys [ds message-history ascr budget-remaining]}]
+  (let [interview-objective (:interview-objective ds)]
+    (build-prompt
+     :system (get-agent-prompt :generic-interviewer)
+     :user (str "Interview Objective:\n" interview-objective
+                "\n\nTask Input:\n"
+                (json/write-str
+                 {:task-type "interpret-response"
+                  :conversation-history message-history
+                  :discovery-schema ds
+                  :ASCR ascr
+                  :budget budget-remaining}
+                 :indent true)))))
 
 ;;; Initialization
 
@@ -225,13 +230,13 @@
   (load-agent-prompt! :generic-interviewer
                       "resources/agents/base-iviewr-instructions.md")
   (load-agent-prompt! :process-interviewer
-                      "resources/agents/process-interviewer-agent.md")
+                      "resources/agents/base-iviewr-instructions.md")
   (load-agent-prompt! :data-interviewer
-                      "resources/agents/data-interviewer-agent.md")
-  (load-agent-prompt! :resources-interviewer
-                      "resources/agents/resources-interviewer-agent.md")
-  (load-agent-prompt! :optimality-interviewer
-                      "resources/agents/optimality-interviewer-agent.md")
+                      "resources/agents/base-iviewr-instructions.md")
+  #_(load-agent-prompt! :resources-interviewer
+                        "resources/agents/resources-interviewer-agent.md")
+  #_(load-agent-prompt! :optimality-interviewer
+                        "resources/agents/optimality-interviewer-agent.md")
   ;; Verify credentials
   (when-not (api-credentials @default-provider)
     (throw (ex-info "No API credentials available"

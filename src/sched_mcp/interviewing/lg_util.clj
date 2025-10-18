@@ -43,10 +43,13 @@
 (defn make-schema
   "Create a Java Map schema from a Clojure map.
    Converts keyword keys to strings for Java interop.
-   Values should be Channel instances."
+   Values should be Channel instances.
+   Returns a mutable HashMap required by StateGraph constructor."
   [clj-map]
-  (java.util.Map/copyOf
-   (into {} (map (fn [[k v]] [(name k) v]) clj-map))))
+  (let [hmap (java.util.HashMap.)]
+    (doseq [[k v] clj-map]
+      (.put hmap (name k) v))
+    hmap))
 
 (defn get-state-value
   "Get a value from agent state, returning a Clojure data structure.

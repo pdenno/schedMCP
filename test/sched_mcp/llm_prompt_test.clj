@@ -5,8 +5,7 @@
    [clojure.test :refer [deftest testing is]]
    [clojure.string :as str]
    [sched-mcp.llm :as llm]
-   [sched-mcp.ds-loader :as ds]
-   [sched-mcp.util :refer [alog!]]))
+   [sched-mcp.system-db :as sdb]))
 
 ;;; ======================== PROMPT QUALITY TESTS ========================
 
@@ -69,7 +68,7 @@
       (llm/init-llm!)
 
       (testing "Warm-up questions are conversational"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               result (llm/complete-json
                       (llm/ds-question-prompt
                        {:ds ds
@@ -84,7 +83,7 @@
           (is (re-find #"\?" (:question result)))))
 
       (testing "Follow-up questions build on context"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               ascr {:scheduling-challenges ["equipment-changeover" "demand-uncertainty"]}
               result (llm/complete-json
                       (llm/ds-question-prompt
@@ -104,7 +103,7 @@
       (llm/init-llm!)
 
       (testing "Extract scheduling challenges from natural text"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               answer "We struggle with machine breakdowns and unpredictable customer orders. Also, our skilled workers are often unavailable when we need them."
               result (llm/complete-json
                       (llm/ds-interpret-prompt
@@ -122,7 +121,7 @@
             (is (some #(re-find #"worker|skill" %) challenges)))))
 
       (testing "Extract product/service name"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               answer "We're a craft brewery making various types of beer including IPAs, stouts, and seasonal ales."
               result (llm/complete-json
                       (llm/ds-interpret-prompt
@@ -173,7 +172,7 @@
       (llm/init-llm!)
 
       (testing "Ambiguous answer detection"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               ambiguous-answer "Maybe sometimes we have issues, I'm not really sure"
               result (llm/complete-json
                       (llm/ds-interpret-prompt
@@ -186,7 +185,7 @@
                   (< (:confidence result) 0.5)))))
 
       (testing "Off-topic answer handling"
-        (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)
+        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
               off-topic "The weather has been nice lately"
               result (llm/complete-json
                       (llm/ds-interpret-prompt
@@ -231,7 +230,7 @@
   ;; Test a specific prompt manually
   (do
     (llm/init-llm!)
-    (let [ds (ds/get-cached-ds :process/warm-up-with-challenges)]
+    (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)]
       (llm/complete-json
        (llm/ds-question-prompt
         {:ds ds

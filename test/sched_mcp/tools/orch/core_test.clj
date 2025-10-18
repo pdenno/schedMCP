@@ -2,29 +2,18 @@
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [clojure.data.json :as json]
-   [sched-mcp.tools.orch.core :as sut]
+   [sched-mcp.tools.orch.core :as orch]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.sutil :as sutil]
    [datahike.api :as d]))
 
-;;; Test fixtures and mock data
-
-;; Mock the database connections
-(defn setup-mock-databases []
-  ;; Initialize the project database atom to prevent connection attempts
-  (swap! sutil/databases-atm assoc :proj-123 {:mock "project-db"})
-  (swap! sutil/databases-atm assoc :conv-456 {:mock "conversation-db"}))
-
-(defn teardown-mock-databases []
-  ;; Clean up the mock databases
-  (swap! sutil/databases-atm dissoc :proj-123 :conv-456))
-
-(use-fixtures :each (fn [f]
-                      (setup-mock-databases)
-                      (f)
-                      (teardown-mock-databases)))
+;;; Test fixtures for in-memory projects
+(use-fixtures :each
+  (fn [f]
+    (pdb/create-project-db! {:pid :orch-test :project-name "Orch testing" :in-mem? true :force-replace? true})
+    (f)))
 
 (def mock-ds-list
   [:process/warm-up-with-challenges
@@ -50,16 +39,13 @@
   {:description "We make craft beer"
    :challenges ["Supply chain" "Quality control"]})
 
-(def mock-system-atom (atom {}))
-
 ;;; Tests for get-next-ds tool
 
 (deftest get-next-ds-tool-tests
-  (let [tool-config (sut/create-get-next-ds-tool mock-system-atom)]
+  (let [tool-config (orch/create-get-next-ds-tool)]
 
     (testing "tool creation"
-      (is (= :get-next-ds (:tool-type tool-config)))
-      (is (= mock-system-atom (:system-atom tool-config))))
+      (is (= :get-next-ds (:tool-type tool-config))))
 
     (testing "tool-name"
       (is (= "orch_get_next_ds" (tool-system/tool-name tool-config))))
@@ -131,7 +117,7 @@
 ;;; Tests for start-ds-pursuit tool
 
 (deftest start-ds-pursuit-tool-tests
-  (let [tool-config (sut/create-start-ds-pursuit-tool mock-system-atom)]
+  (let [tool-config (orch/create-start-ds-pursuit-tool)]
 
     (testing "tool creation"
       (is (= :start-ds-pursuit (:tool-type tool-config))))
@@ -210,7 +196,7 @@
 ;;; Tests for complete-ds tool
 
 (deftest complete-ds-tool-tests
-  (let [tool-config (sut/create-complete-ds-tool mock-system-atom)]
+  (let [tool-config (orch/create-complete-ds-tool)]
 
     (testing "tool creation"
       (is (= :complete-ds (:tool-type tool-config))))
@@ -272,7 +258,7 @@
 ;;; Tests for get-progress tool
 
 (deftest get-progress-tool-tests
-  (let [tool-config (sut/create-get-progress-tool mock-system-atom)]
+  (let [tool-config (orch/create-get-progress-tool)]
 
     (testing "tool creation"
       (is (= :get-progress (:tool-type tool-config))))
@@ -330,8 +316,7 @@
 
 (deftest create-orchestrator-tools-test
   (testing "creates all four orchestrator tools"
-    (let [tools (sut/create-orchestrator-tools mock-system-atom)]
+    (let [tools (orch/create-orch-tools)]
       (is (= 4 (count tools)))
       (is (= #{:get-next-ds :start-ds-pursuit :complete-ds :get-progress}
-             (set (map :tool-type tools))))
-      (is (every? #(= mock-system-atom (:system-atom %)) tools)))))
+             (set (map :tool-type tools)))))))
