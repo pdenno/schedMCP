@@ -54,19 +54,19 @@
 ### Testing Best Practices
 - Always reload namespaces before running tests with `:reload` flag: `(require '[namespace] :reload)`
 - Test both normal execution paths and error conditions
+- Use `(clojure-test/run-tests <namespace>)` for focused testing; It is much faster than `clojure -X:test`.
 
 ### Using Shell Commands
 - Prefer the idiomatic `clojure.java.shell/sh` for executing shell commands
 - Always handle potential errors from shell command execution
 - Use explicit working directory for relative paths: `(shell/sh "cmd" :dir "/path")`
-- For testing builds and tasks, run `clojure -X:test` instead of running tests piecemeal
+- For testing builds, run `clojure -X:test` instead of running tests piecemeal
 - When capturing shell output, remember it may be truncated for very large outputs
 - Consider using shell commands for tasks that have mature CLI tools like diffing or git operations
 
 - **Context Maintenance**:
   - Use `clojure_eval` with `:reload` to ensure you're working with the latest code
-  - always switch into `(in-ns ...)` the namespace that you are working on
-  - Keep function and namespace references fully qualified when crossing namespace boundaries
+  - You can use (and add to) the namespace aliases defined in `env/dev/repl.clj` (See var `alias-map`; run function `ns-setup!`.)
 
 ### Clojure defn have the comment before the arguments
 - The comment comes before the arguments:

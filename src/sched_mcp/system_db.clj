@@ -79,20 +79,7 @@
     (d/transact conn {:tx-data [{:db/id eid :system/DS db-obj}]}))
   nil)
 
-(defn get-DS-instructions
-  "Return the full DS instructions object maintained in the system DB
-   (the EDN structure from edn/read-string of :DS/msg-str).
-   Returns the empty string when the DS ID is not known."
-  [ds-id]
-  (assert (keyword? ds-id))
-  (if-let [msg-str (d/q '[:find ?msg-str .
-                          :in $ ?ds-id
-                          :where
-                          [?e :DS/id ?ds-id]
-                          [?e :DS/msg-str ?msg-str]]
-                        @(connect-atm :system) ds-id)]
-    (edn/read-string msg-str)
-    ""))
+(declare get-DS-instructions)
 
 (defn same-DS-instructions?
   "Return true if the argument ds-instructions (an EDN object) is exactly what the system already maintains."
@@ -197,8 +184,15 @@
       {:pid pid
        :status :deleted})))
 
+(defn ^:admin list-discovery-schema
+  "Administrative tool to list discovery schema."
+  []
+  (d/q '[:find [?id ...]
+         :where [_ :DS/id ?id]]
+       @(connect-atm :system)))
+
 (defn get-DS-instructions
-  "Return the discovery-schema identified by the argument ds-id."
+  "Return the full discovery-schema instruction object identified by the argument ds-id."
   [ds-id]
   (assert (keyword? ds-id))
   (if-let [s (d/q '[:find ?str .
@@ -209,19 +203,6 @@
                   @(connect-atm :system) ds-id)]
     (-> s edn/read-string (dissoc :message-type))
     (throw (ex-info "No such discovery-schema" {:ds-id ds-id}))))
-
-(defn ^:admin list-discovery-schema
-  "Administrative tool to list discovery schema."
-  []
-  (d/q '[:find [?id ...]
-         :where [_ :DS/id ?id]]
-       @(connect-atm :system)))
-
-(defn get-DS-instructions-JSON
-  "Return the JSON of the full DS-instructions message from the system DB.
-   This includes :message-type, :interview-objective, :budget-decrement, and :DS."
-  [ds-id]
-  (-> ds-id get-DS-instructions sutil/clj2json-pretty))
 
 (defn ^:admin delete-project!
   "Remove project from the system."
@@ -242,3 +223,28 @@
               (sutil/delete-directory-recursive dir))))
         nil))
     (log! :warn (str "Delete-project: Project not found: " pid))))
+
+
+(defn store-agent-prompt!
+  "Add the argument agent prompt to :system/agent-prompts."
+  [agent-id pathname]
+  (assert (keyword? agent-id))
+  (if (.exists (io/file pathname))
+    (do (d/transact (connect-atm :system)
+                    {:tx-data [{:system/agent-prompts
+                                {:agent-prompt/id agent-id
+                                 :agent-prompt/str (slurp pathname)}}]})
+        true)
+    (throw (ex-info "No such agent-prompt." {:agent-id agent-id :pathname pathname}))))
+
+(defn get-agent-prompt
+  "Return the instruction string associated with the argument agent."
+  [agent-id]
+  (assert (keyword? agent-id))
+  (or (d/q '[:find ?str .
+             :in $ ?aid
+             :where
+             [?e :agent-prompt/id ?aid]
+             [?e :agent-prompt/str ?str]]
+           @(connect-atm :system) agent-id)
+      (throw (ex-info "No such agent-prompt." {:agent-id agent-id}))))

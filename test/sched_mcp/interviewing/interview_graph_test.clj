@@ -5,17 +5,15 @@
    [clojure.test :refer [deftest is testing]]
    [sched-mcp.interviewing.interview-state :as istate]
    [sched-mcp.interviewing.interview-graph :as igraph]
-   [sched-mcp.llm :as llm]
-   [sched-mcp.system-db :as sdb]
    [sched-mcp.tools.surrogate.sur-util :as suru]))
 
 (deftest full-interview-loop-test
   (testing "Complete interview loop with mock nodes"
     (let [initial-state (istate/make-interview-state
-                         {:ds-id :process/warm-up
+                         {:ds-id :process/warm-up-with-challenges
                           :pid :craft-beer-123
                           :cid :process
-                          :budget-left 10.0})
+                          :budget-left 1.0})
           final-state (igraph/run-mock-interview initial-state)]
 
       ;; Check completion status
@@ -54,18 +52,18 @@
             "Messages should alternate system/surrogate"))
 
       ;; Check budget was decremented
-      (is (< (:budget-left final-state) 10.0)
+      (is (< (:budget-left final-state) 1.0)
           "Budget should be less than initial")
-      (is (= 7.0 (:budget-left final-state))
+      (is (<= 0.69 (:budget-left final-state) 0.71)
           "Budget should be decremented 3 times (3 questions)"))))
 
 (deftest budget-exhaustion-test
   (testing "Interview stops when budget is exhausted"
     (let [initial-state (istate/make-interview-state
-                         {:ds-id :process/warm-up
+                         {:ds-id :process/warm-up-with-challenges
                           :pid :craft-beer-123
                           :cid :process
-                          :budget-left 1.5}) ; Only enough for 1 question
+                          :budget-left 0.1}) ; Only enough for 1 question
           final-state (igraph/run-mock-interview initial-state)]
 
       ;; Should complete due to budget exhaustion
@@ -77,18 +75,18 @@
           "Should have at least one Q&A pair")
 
       ;; Budget should be exhausted or near zero
-      (is (<= (:budget-left final-state) 0.5)
+      (is (<= (:budget-left final-state) 0.05)
           "Budget should be nearly exhausted"))))
 
 (deftest initial-state-preservation-test
   (testing "Initial state fields are preserved"
     (let [initial-state (istate/make-interview-state
-                         {:ds-id :process/warm-up
+                         {:ds-id :process/warm-up-with-challenges
                           :pid :craft-beer-123
                           :cid :process})
           final-state (igraph/run-mock-interview initial-state)]
 
-      (is (= :process/warm-up (:ds-id final-state))
+      (is (= :process/warm-up-with-challenges (:ds-id final-state))
           "DS ID should be preserved")
       (is (= :craft-beer-123 (:pid final-state))
           "Project ID should be preserved")
@@ -103,39 +101,20 @@
   (testing "Real interview loop with LLM and surrogate (Phase 3)"
     ;; Note: This test requires:
     ;; - LLM API credentials configured
-    ;; - System DB with Discovery Schemas loaded
     ;; - Can be run with: clj -M:test -n :integration
 
     (try
-      ;; Initialize LLM
-      (llm/init-llm!)
-
-      ;; Start a surrogate expert
       (let [sur-result (suru/start-surrogate-interview
                         {:domain :craft-beer
                          :company-name "Test Brewery"
                          :project-name "Phase 3 Integration Test"})
             pid (:project-id sur-result)
-
-            ;; Verify the DS exists in system DB
-            ds-exists? (try
-                         (sdb/get-DS-instructions-JSON :process/warm-up-with-challenges)
-                         true
-                         (catch Exception _ false))]
-
-        (when-not ds-exists?
-          (println "Warning: Discovery Schema :process/warm-up-with-challenges not found in system DB"))
-
-        (if ds-exists?
-          (let [;; Create initial state for the interview
-                initial-state (istate/make-interview-state
-                               {:ds-id :process/warm-up-with-challenges
-                                :pid pid
-                                :cid :process
-                                :budget-left 5.0}) ; Limit budget for faster test
-
-                ;; Run the real interview
-                final-state (igraph/run-interview initial-state)]
+            initial-state (istate/make-interview-state
+                           {:ds-id :process/warm-up-with-challenges
+                            :pid pid
+                            :cid :process
+                            :budget-left 1.0}) ; Limit budget for faster test
+            final-state (igraph/run-interview initial-state)]
 
             ;; Verify completion
             (is (= true (:complete? final-state))
@@ -172,8 +151,6 @@
             (clojure.pprint/pprint (:ascr final-state))
             (println "\nMessage count:" (count (:messages final-state)))
             (println "Budget remaining:" (:budget-left final-state)))
-
-          (println "Skipping real interview test - DS not found")))
 
       (catch Exception e
         (println "Real interview test failed - prerequisites not met:")

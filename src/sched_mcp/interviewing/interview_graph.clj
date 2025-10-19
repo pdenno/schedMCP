@@ -36,9 +36,9 @@
     ;; Add nodes
     (.addNode graph "check-budget" (lg/make-async-node nodes/check-budget))
     (.addNode graph "formulate" (lg/make-async-node nodes/formulate-question))
-    (.addNode graph "get-answer" (lg/make-async-node nodes/get-answer))
+    (.addNode graph "get-answer" (lg/make-async-node nodes/get-answer-from-expert))
     (.addNode graph "interpret" (lg/make-async-node nodes/interpret-response))
-    (.addNode graph "evaluate" (lg/make-async-node nodes/real-evaluate-completion))
+    (.addNode graph "evaluate" (lg/make-async-node nodes/evaluate-completion))
 
     ;; Add unconditional edges - budget check FIRST
     (.addEdge graph StateGraph/START "check-budget")

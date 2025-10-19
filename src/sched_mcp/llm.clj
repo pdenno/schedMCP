@@ -1,11 +1,10 @@
 (ns sched-mcp.llm
-  "LLM integration for Discovery Schema interviews
-   Simplified version based on schedulingTBD's llm.clj"
+  "Utilties for using LLMs. Don't put application specific (e.g. Discovery Schema) stuff here."
   (:require
    [clojure.data.json :as json]
    [clojure.java.io]
-   [clojure.string :as str]
    [mount.core :refer [defstate]]
+   [sched-mcp.system-db :as sdb]
    [sched-mcp.util :refer [log!]]
    [wkok.openai-clojure.api :as openai]))
 
@@ -139,6 +138,7 @@
   [content]
   {:role "assistant" :content content})
 
+;;; ToDo: Really? Can't do better than this???
 (defn build-prompt
   "Build a complete prompt from components
    Args can include:
@@ -160,83 +160,12 @@
                   (str user "\n\n" format)
                   user)))))
 
-;;; Agent Integration
-;;;  System prompts for different interviewer agents. ToDo: this could go in the system DB.
-(defonce agent-prompts (atom {}))
-
-(defn load-agent-prompt!
-  "Load an agent prompt from markdown file"
-  [agent-key file-path]
-  (if (.exists (clojure.java.io/file file-path))
-    (let [content (slurp file-path)
-          ;; Extract content after the frontmatter - it's the THIRD part, not the second
-          parts (str/split content #"---\n" 3)
-          prompt (if (>= (count parts) 3)
-                   (nth parts 2) ; Get the third part (index 2)
-                   content)] ; Fallback if no frontmatter
-      (swap! agent-prompts assoc agent-key prompt)
-      (log! :info (str "Loaded agent prompt for " agent-key)))
-    (log! :warn (str "Agent prompt file not found: " file-path))))
-
-(defn get-agent-prompt
-  "Get the system prompt for an agent"
-  [agent-key]
-  (or (get @agent-prompts agent-key)
-      (throw (ex-info "No prompt loaded for agent" {:agent agent-key}))))
-
-;;; Discovery Schema Prompt Templates
-
-(defn ds-question-prompt
-  "Create a prompt for generating questions from DS + ASCR according to base-iviewr-instructions.
-   The DS object contains the interview-objective, so we extract it from there."
-  [{:keys [ds ascr message-history budget-remaining]}]
-  (let [interview-objective (:interview-objective ds)]
-    (build-prompt
-     :system (get-agent-prompt :generic-interviewer)
-     :user (str "Interview Objective:\n" interview-objective
-                "\n\nTask Input:\n"
-                (json/write-str
-                 {:task-type "formulate-question"
-                  :conversation-history message-history
-                  :discovery-schema ds
-                  :ASCR ascr
-                  :budget budget-remaining}
-                 :indent true)))))
-
-(defn ds-interpret-prompt
-  "Create a prompt for interpreting response into SCR according to base-iviewr-instructions.
-   The DS object contains the interview-objective, so we extract it from there.
-   The LLM should look at the last entry in conversation-history to find the question/answer pair."
-  [{:keys [ds message-history ascr budget-remaining]}]
-  (let [interview-objective (:interview-objective ds)]
-    (build-prompt
-     :system (get-agent-prompt :generic-interviewer)
-     :user (str "Interview Objective:\n" interview-objective
-                "\n\nTask Input:\n"
-                (json/write-str
-                 {:task-type "interpret-response"
-                  :conversation-history message-history
-                  :discovery-schema ds
-                  :ASCR ascr
-                  :budget budget-remaining}
-                 :indent true)))))
-
-;;; Initialization
-
+;;; ------------------- start and stop ------------------------
 (defn init-llm!
   "Initialize LLM subsystem"
   []
   ;; Load agent prompts
-  (load-agent-prompt! :generic-interviewer
-                      "resources/agents/base-iviewr-instructions.md")
-  (load-agent-prompt! :process-interviewer
-                      "resources/agents/base-iviewr-instructions.md")
-  (load-agent-prompt! :data-interviewer
-                      "resources/agents/base-iviewr-instructions.md")
-  #_(load-agent-prompt! :resources-interviewer
-                        "resources/agents/resources-interviewer-agent.md")
-  #_(load-agent-prompt! :optimality-interviewer
-                        "resources/agents/optimality-interviewer-agent.md")
+  (sdb/store-agent-prompt! :interviewer  "resources/agents/base-iviewr-instructions.md")
   ;; Verify credentials
   (when-not (api-credentials @default-provider)
     (throw (ex-info "No API credentials available"

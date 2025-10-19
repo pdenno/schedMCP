@@ -1,11 +1,10 @@
-(ns sched-mcp.iviewr.domain.process.scheduling-problem-type
+(ns sched-mcp.interviewing.domain.process.scheduling-problem-type
   "Define a discovery schema to determine the scheduling problem type."
   (:require
-   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete?]]
-   [sched-mcp.project-db :as pdb]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [alog!]]))
 
@@ -46,6 +45,7 @@
 
 (def scheduling-problem-type
   {:message-type :DS-INSTRUCTIONS,
+   :budget-decrement 0.10
    :interview-objective
    (str
     "This is typically the DS to use directly after 'process/warm-up-with-challenges';\n"
@@ -90,7 +90,7 @@
 (when-not (s/valid? :scheduling-problem-type/DS-message scheduling-problem-type)
   (throw (ex-info "Invalid DS (scheduling problem type)" {})))
 
-(defmethod ds-valid? :process/scheduling-problem-type
+(defmethod dsu/ds-valid? :process/scheduling-problem-type
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))

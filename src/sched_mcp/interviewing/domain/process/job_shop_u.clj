@@ -1,11 +1,11 @@
-(ns sched-mcp.iviewr.domain.process.job-shop-u
+(ns sched-mcp.interviewing.domain.process.job-shop-u
   "(1) Define the a discovery schema for job-shop scheduling problems where each job potentially follows a unique process.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer."
   (:require
    [clojure.pprint                 :refer [cl-format pprint]]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? ds-valid?]]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [alog!]]))
@@ -74,6 +74,7 @@
 (def job-shop-u
   "A pprinted (JSON?) version of this is what we'll provide to the interviewer at the start of a job-shop-u problem."
   {:message-type :DS-INSTRUCTIONS
+   :budget-decrement 0.10
    :interviewer-agent :process
    :interview-objective (str "These DS-INSTRUCTIONS assumes the interviewees' production operates as a 'true' job shop -- an arrangement where possibly every job has a unique process plan.\n"
                              "The purpose of these DS-INSTRUCTIONS are to describe unit processes of jobs, their inputs, outputs, resources, and (sometimes) typical duration.\n"
@@ -120,13 +121,13 @@
 
 (defn completeness-test [_ds] true)
 
-(defmethod ds-valid? :process/job-shop--unique
+(defmethod dsu/ds-valid? :process/job-shop--unique
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 ;;; ------------------------------- checking for completeness ---------------
-(defmethod ds-complete? :process/job-shop--unique
+(defmethod dsu/ds-complete? :process/job-shop--unique
   [tag pid]
   (let [ds (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
         complete? (completeness-test ds)]

@@ -1,7 +1,6 @@
 (ns sched-mcp.tools.iviewr-tools
   "Interview management tools for scheduling domain"
   (:require
-   [sched-mcp.interview :as iview]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.util :refer [log!]]))
 
@@ -14,7 +13,7 @@
   [{:keys [project_name domain]}]
   (log! :info (str "MCP Tool: start-interview called with project_name=" project_name ", domain=" domain))
   (try
-    (let [result (iview/start-interview project_name domain)]
+    (let [result :deprecated #_(iview/start-interview project_name domain)]
       (log! :info (str "MCP Tool: start-interview result: " (pr-str result)))
       (if (:error result)
         {:error (:error result)}
@@ -49,7 +48,7 @@
     (if-not project_id
       {:error "No project_id provided"}
       (let [pid (keyword project_id)
-            context (iview/get-interview-context pid)]
+            context :deprecated #_(iview/get-interview-context pid)]
         (if (:error context)
           context
           {:conversation_id (name (:conversation-id context))
@@ -93,7 +92,7 @@
                     (pdb/most-recent-unanswered pid cid))
             _ (log! :info (str "MCP Tool: submit-response using question_id=" qid))
             result (if qid
-                     (iview/submit-response pid cid response qid)
+                     :deprecated #_(iview/submit-response pid cid response qid)
                      {:error "No current unanswered question found"})]
         (log! :info (str "MCP Tool: submit-response result: " (pr-str result)))
         (if (:error result)

@@ -9,7 +9,15 @@
      - The project's name and db directory
      - system-level agents
      - See also db-schema-agent+ which gets merged into this."
-  {;; ------------------------------- Discovery Schema
+  {
+   ;; ------------------------------- Agent prompts
+   :agent-prompt/id
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword, :unique :db.unique/identity
+        :doc "a keyword naming the agent using the prompt"}
+   :agent-prompt/str
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+        :doc "the prompt text"}
+   ;; ------------------------------- Discovery Schema
    :DS/budget-decrement
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/double
         :doc "The cost of each question, decrementing againt a budget for the entire conversation."}
@@ -39,6 +47,9 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
         :doc "a keyword, current #{:active :archived :deleted}."}
 ;;; ---------------------- system
+   :system/agent-prompts
+   #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
+        :doc "Prompts used by agents"}
    :system/agents
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref,
         :doc "an agent (OpenAI Assistant) that outputs a vector of clojure maps in response to queries."}

@@ -1,6 +1,7 @@
 (ns sched-mcp.interviewing.lg-util
   "Utility functions for working with LangGraph4j from Clojure.
    These functions hide Java interop and provide idiomatic Clojure interfaces."
+  (:require [sched-mcp.interviewing.domains]) ; For mount
   (:import [org.bsc.langgraph4j StateGraph]
            [org.bsc.langgraph4j.state AgentState Channels]
            [org.bsc.langgraph4j.action NodeAction AsyncNodeAction]

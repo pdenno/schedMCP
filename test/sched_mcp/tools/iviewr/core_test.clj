@@ -19,70 +19,45 @@
                                         :in-mem? true})]
     (:pid result)))
 
-(defn teardown-test-project [pid]
-  ;; Clean up in-memory DB
-  #_(swap! sutil/databases-atm dissoc pid))
-
 (use-fixtures :each
   (fn [f]
-    (let [pid (setup-test-project)]
-      (try
-        (f)
-        (finally
-          (teardown-test-project pid))))))
+    (setup-test-project)
+    (f)))
 
 ;;; Tests for conduct-interview tool (the main Phase 4 tool)
 
 (deftest ^:integration conduct-interview-tool-integration-test
   (testing "Full integration test with real components"
     ;; This test requires LLM and system DB to be initialized
-    ;; Skip if not available
     (try
-      (llm/init-llm!)
-      (let [;; Start a real surrogate expert with in-memory DB
+      (let [tool-config (iviewr/create-conduct-interview-tool)
             sur-result (suru/start-surrogate-interview
                         {:domain :craft-beer
                          :company-name "Test Brewery"
                          :project-name "Integration Test"})
             pid (:project-id sur-result)
+            result (tool-system/execute-tool
+                    tool-config
+                    {:project_id (name pid)
+                     :conversation_id "process"
+                     :ds_id "process/warm-up-with-challenges"
+                     :budget 5.0})]
+        (is (= "success" (:status result)) "Interview should succeed")
+        (is (= "warm-up-with-challenges" (:ds_id result)))
+        (is (map? (:ascr result)) "ASCR should be a map")
+        (is (pos? (count (:ascr result))) "ASCR should have data")
+        (is (boolean? (:complete result)))
+        (is (pos? (:message_count result)) "Should have messages")
+        (is (number? (:budget_remaining result)))
+        (is (string? (:summary result)))
 
-            ;; Verify DS exists in system DB
-            ds-exists? (try
-                         (sdb/get-DS-instructions-JSON :process/warm-up-with-challenges)
-                         true
-                         (catch Exception _ false))]
-
-        (if ds-exists?
-          (let [tool-config (iviewr/create-conduct-interview-tool)
-
-                ;; Execute the tool with real components
-                result (tool-system/execute-tool
-                        tool-config
-                        {:project_id (name pid)
-                         :conversation_id "process"
-                         :ds_id "process/warm-up-with-challenges"
-                         :budget 5.0})]
-
-            ;; Verify results
-            (is (= "success" (:status result)) "Interview should succeed")
-            (is (= "warm-up-with-challenges" (:ds_id result)))
-            (is (map? (:ascr result)) "ASCR should be a map")
-            (is (pos? (count (:ascr result))) "ASCR should have data")
-            (is (boolean? (:complete result)))
-            (is (pos? (:message_count result)) "Should have messages")
-            (is (number? (:budget_remaining result)))
-            (is (string? (:summary result)))
-
-            ;; Verify data was stored in project DB
-            (let [stored-ascr (pdb/get-ASCR pid :process/warm-up-with-challenges)
-                  conversation (pdb/get-conversation pid :process)]
-              (is (some? stored-ascr) "ASCR should be stored")
-              (is (map? (:ascr/dstruct stored-ascr)))
-              (is (pos? (count (:conversation/messages conversation)))
-                  "Messages should be stored")))
-
-          (is true "Skipped - DS not found in system DB")))
-
+        ;; Verify data was stored in project DB
+        (let [stored-ascr (pdb/get-ASCR pid :process/warm-up-with-challenges)
+              conversation (pdb/get-conversation pid :process)]
+          (is (some? stored-ascr) "ASCR should be stored")
+          (is (map? (:ascr/dstruct stored-ascr)))
+          (is (pos? (count (:conversation/messages conversation)))
+              "Messages should be stored")))
       (catch Exception e
         (println "Skipping integration test - prerequisites not met:")
         (println (.getMessage e))
@@ -122,21 +97,6 @@
                :conversation_id "process"
                :ds_id "process/warm-up-with-challenges"})))
 
-      (is (thrown? clojure.lang.ExceptionInfo
-                   (tool-system/validate-inputs tool-config {}))))
-
-    (testing "execute-tool with DS not found"
-      (with-redefs [sdb/get-DS-instructions-JSON (constantly nil)
-                    llm/init-llm! (constantly nil)
-                    llm/agent-prompts (atom {:some "value"})]
-        (let [result (tool-system/execute-tool
-                      tool-config
-                      {:project_id "proj-123"
-                       :conversation_id "process"
-                       :ds_id "nonexistent"})]
-          (is (= "error" (:status result)))
-          (is (contains? result :error)))))
-
     (testing "format-results with success"
       (let [success-result {:status "success"
                             :ds_id "warm-up"
@@ -158,7 +118,7 @@
                           :ds_id "test"}
             formatted (tool-system/format-results tool-config error-result)]
         (is (true? (:error formatted)))
-        (is (re-find #"Test error" (first (:result formatted))))))))
+        (is (re-find #"Test error" (first (:result formatted)))))))))
 
 ;;; Test for create-iviewr-tools
 

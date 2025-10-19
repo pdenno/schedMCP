@@ -1,4 +1,4 @@
-(ns sched-mcp.iviewr.domain.process.job-shop-c
+(ns sched-mcp.interviewing.domain.process.job-shop-c
   "(1) Define a discovery schema for a job-shop scheduling problem with classifable job types.
        As the case is with job-shop problems, this structure defines work to be performed in typical job.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer.
@@ -8,7 +8,7 @@
    [clojure.pprint                 :refer [cl-format pprint]]
    [clojure.spec.alpha             :as s]
    [mount.core                     :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util   :as dsu :refer [ds-complete? ds-valid?]]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.project-db           :as pdb]
    [sched-mcp.system-db            :as sdb]
    [sched-mcp.util                 :as util :refer [alog!]]))
@@ -86,6 +86,7 @@
 (def job-shop-c
   "A pprinted (JSON?) version of this is what we'll provide to the interviewer at the start of Phase 2 of a job-shop-c problem."
   {:message-type :DS-INSTRUCTIONS
+   :budget-decrement 0.10
    :interviewer-agent :process
    :interview-objective (str "These DS-INSTRUCTIONS assumes that\n"
                              "  (1) the interviewees' production processes are organized as a job shop, and\n"
@@ -220,14 +221,14 @@
 (when-not (s/valid? :job-shop-c/DS-message job-shop-c)
   (throw (ex-info "Invalid DS (flow-shop)" {})))
 
-(defmethod ds-valid? :process/job-shop--classifiable
+(defmethod dsu/ds-valid? :process/job-shop--classifiable
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 (defn completeness-test [_ds] true)
 
-(defmethod ds-complete? :process/job-shop--classifiable
+(defmethod dsu/ds-complete? :process/job-shop--classifiable
   [tag pid]
   (let [ds (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
         complete? (completeness-test ds)]

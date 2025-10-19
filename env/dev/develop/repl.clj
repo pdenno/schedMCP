@@ -14,7 +14,8 @@ dutil/learn-schema!
 (defn safe-alias
   [al ns-sym]
   (try (alias al ns-sym)
-       (catch Exception _e (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym)))))
+       (catch Exception _e
+         (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym)))))
 
 (def alias-map
   {;'ches  'cheshire.core
@@ -33,12 +34,15 @@ dutil/learn-schema!
    'iviewr 'sched-mcp.tools.iviewr.core
    'iviewrt 'sched-mcp.tools.iviewr.core-test
    ;;'main   'sched-mcp.main ; This isn't used in development
+   'dsu    'sched-mcp.interviewing.ds-util
+   'orm    'sched-mcp.interviewing.domain.data.orm
    'lgu    'sched-mcp.interviewing.lg-util
    'ig     'sched-mcp.interviewing.interview-graph
    'igt    'sched-mcp.interviewing.interview-graph-test
    'is     'sched-mcp.interviewing.interview-state
    'ist    'sched-mcp.interviewing.interview-state-test
    'lgut   'sched-mcp.interviewing.lg-util-test
+   'llm    'sched-mcp.llm
    'mcore  'sched-mcp.mcp-core
    'pdb    'sched-mcp.project-db
    'res    'sched-mcp.resources
@@ -47,9 +51,7 @@ dutil/learn-schema!
    'sdb    'sched-mcp.system-db
    ;;'iview  'sched-mcp.tools.interview
    'orch   'sched-mcp.tools.orch.core
-   'dsu    'sched-mcp.tools.orch.ds-util
    'itools 'sched-mcp.tools.iviewr-tools
-   'orm    'sched-mcp.tools.iviewr.domain.data.orm
    'sur    'sched-mcp.tools.surrogate.core
    'suru   'sched-mcp.tools.surrogate.sur-util
    'tool-system 'sched-mcp.tool-system

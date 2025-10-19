@@ -162,4 +162,7 @@
   "Get an answer from the surrogate expert"
   [{:keys [project-id question]}]
   ;; Ensure project-id is a keyword for comparison with session
-  (generate-expert-response (keyword project-id) question))
+  (log! :info (str "Surrogate asked: " question))
+  (let [response (generate-expert-response (keyword project-id) question)]
+    (log! :info (str "Surrogate responds: " response))
+    response))

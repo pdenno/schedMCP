@@ -1,4 +1,4 @@
-(ns sched-mcp.iviewr.domain.process.job-shop
+(ns sched-mcp.interviewing.domain.process.job-shop
   "(1) Define a discovery schema for a job-shop scheduling problem.
        As the case is with job-shop problems, this structure defines work to be performed in typical job.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer.
@@ -6,12 +6,10 @@
    Note: We don't load this code at system startup. When you compile it, it writes the EADS to resources/EADS/job-shop.txt"
   (:require
    [clojure.pprint :refer [cl-format pprint]]
-   [clojure.set :as set]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-complete? ds-valid?]]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.sutil :as sutil :refer [clj2json-pretty]]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [log! alog!]]))
 
@@ -33,6 +31,7 @@
 (def job-shop
   "A pprinted (JSON?) version of this is what we'll provide to the interviewer at the start of a job-shop problem."
   {:message-type :DS-INSTRUCTIONS
+   :budget-decrement 0.10
    :interviewer-agent :process
    :interview-objective (str "These DS-INSTRUCTIONS assumes the interviewees' production processes are organized as a job shop.\n"
                              "We have two separate approaches to model job shop scheduling problems: in one of these, the jobs are classified to match a small (less than a dozen or so)\n"
@@ -53,14 +52,14 @@
 (when-not (s/valid? :job-shop/DS-message job-shop)
   (throw (ex-info "Invalid DS (job-shop)" {})))
 
-(defmethod ds-valid? :process/job-shop
+(defmethod dsu/ds-valid? :process/job-shop
   [tag obj]
   (or (s/valid? ::DS obj)
-      (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
+      (log! :warn (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
 (defn completeness-test [_ds] true)
 
-(defmethod ds-complete? :process/job-shop
+(defmethod dsu/ds-complete? :process/job-shop
   [tag pid]
   (let [ds (-> (pdb/get-ASCR pid tag) dsu/strip-annotations)
         complete? (completeness-test ds)]

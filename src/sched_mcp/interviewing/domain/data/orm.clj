@@ -1,19 +1,17 @@
-(ns sched-mcp.tools.iviewr.domain.data.orm
+(ns sched-mcp.interviewing.domain.data.orm
   "This provides Discovery Schema for an interview about data interviewees use in performing their work, the fundamental characteristics of those data.
    The interview creates example data from ORM fact types it formulates rather than upload their spreadsheets and talking about them.
    We work this way because we know that many people prioritize visual appeal over logical organization when using tools like Excel.
    Therefore, our plan is to use data to demonstrate the operation of the scheduling systems first, and worry about mapping their
    (possibly messy and illogical) spreadsheets into the scheduling systems later."
   (:require
-   [clojure.pprint :refer [cl-format pprint]]
    [clojure.set :as set]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-combine ds-complete?]]
-   [sched-mcp.project-db :as pdb]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.sutil :as sutil :refer [clj2json-pretty]]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.util :as util :refer [log! alog!]]))
+   [sched-mcp.util :as util :refer [log!]]))
 
 (def ^:diag diag (atom nil))
 

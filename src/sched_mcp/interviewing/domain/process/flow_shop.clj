@@ -1,15 +1,13 @@
-(ns sched-mcp.iviewr.domain.process.flow-shop
+(ns sched-mcp.interviewing.domain.process.flow-shop
   "(1) Define a Discovery Schema for questioning about a flow-shop scheduling problem.
        As the case is with flow-shop problems, this structure defines the flow of work through resources.
    (2) Define well-formedness constraints for this structure. These can also be used to check the structures produced by the interviewer."
   (:require
-   [clojure.pprint :refer [cl-format pprint]]
-   [clojure.set :as set]
+   [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete? graph-semantics-ok?]]
-   [sched-mcp.project-db :as pdb]
-   [sched-mcp.sutil :as sutil]
+   [sched-mcp.interviewing.ds-util :as dsu :refer [ds-valid?]]
+   [sched-mcp.interviewing.ds-graph :refer [graph-semantics-ok?]]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [alog!]]))
 
@@ -220,7 +218,7 @@
 ;;; Interviewer has been instructed that it is okay to do :event-types separate from :timeslots, and in fact, it
 ;;; is currently giving things *very piecemeal*, suggesting that I use :ts-type-id and :event-type-id to stitch together the result.
 
-(defmethod ds-valid? :process/flow-shop
+(defmethod dsu/ds-valid? :process/flow-shop
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))

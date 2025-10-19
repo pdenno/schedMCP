@@ -1,12 +1,11 @@
-(ns sched-mcp.iviewr.domain.process.timetabling
+(ns sched-mcp.interviewing.domain.process.timetabling
   "Define a discovery schema and associated methods for timetabling problems."
   (:require
-   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.pprint :refer [pprint]]
    [clojure.set :as set]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete?]]
-   [sched-mcp.project-db :as pdb]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [log! alog!]]))
 
@@ -222,7 +221,7 @@
 (when-not (s/valid? :timetabling/DS-message timetabling)
   (throw (ex-info "Invalid DS (timetabling)" {})))
 
-(defmethod ds-valid? :process/timetabling
+(defmethod dsu/ds-valid? :process/timetabling
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))

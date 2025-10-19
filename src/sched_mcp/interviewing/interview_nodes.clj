@@ -1,12 +1,11 @@
 (ns sched-mcp.interviewing.interview-nodes
   "Node implementations for the interview graph."
   (:require
-   [clojure.data.json :as json]
-   [clojure.string :as str]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.interviewing.interview-state :as istate]
    [sched-mcp.llm :as llm]
+   [sched-mcp.sutil :as sutil]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tools.surrogate.sur-util :as suru]
    [sched-mcp.util :refer [log!]]))
 
@@ -20,7 +19,7 @@
   [state]
   (let [istate (istate/agent-state->interview-state state)
         ascr (:ascr istate)
-        message-count (count (:messages istate))]
+        _message-count (count (:messages istate))]
     (cond
       ;; First question - ask about challenges
       (empty? ascr)
@@ -106,12 +105,7 @@
   [state]
   (let [istate (istate/agent-state->interview-state state)
         {:keys [ds-id budget-left]} istate
-
-        ;; Get budget-decrement from DS-instructions, default to 1.0
-        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
-        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
-        budget-decrement (or (:budget-decrement ds-instructions) 1.0)]
-
+        budget-decrement (-> ds-id sdb/get-DS-instructions :budget-decrement)]
     (istate/decrement-budget budget-left budget-decrement)))
 
 ;;; ============================================================================
@@ -119,46 +113,30 @@
 ;;; ============================================================================
 
 (defn formulate-question
-  "Real question formulation using LLM.
-   Uses the DS template and current ASCR to create contextual questions."
+  "Uses the DS template and current ASCR to create contextual questions."
   [state]
   (let [istate (istate/agent-state->interview-state state)
-        {:keys [ds-id ascr messages budget-left pid cid]} istate
-
-        ;; Get DS-instructions from system DB - includes :DS, :interview-objective, :budget-decrement
-        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
-        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
-
-        ;; Build message history in expected format
-        message-history (mapv (fn [msg]
-                                (cond
-                                  (= (:from msg) :system)
-                                  {:interviewer (:content msg)}
-                                  (#{:human :surrogate} (:from msg))
-                                  {:expert (:content msg)}
-                                  :else nil))
-                              messages)
-        message-history (remove nil? message-history)
-
-        ;; Initialize LLM if needed
-        _ (when-not (seq @llm/agent-prompts)
-            (llm/init-llm!))
-
-        ;; Generate question using LLM - ds-instructions contains interview-objective
-        prompt (llm/ds-question-prompt
-                {:ds ds-instructions
+        {:keys [ds-id ascr messages budget-left]} istate
+        message-history (->> (mapv (fn [msg]
+                                     (cond
+                                       (= (:from msg) :system)              {:interviewer (:content msg)}
+                                       (#{:human :surrogate} (:from msg))   {:expert (:content msg)}
+                                       :else nil))
+                                   messages)
+                             (remove nil?))
+        prompt (dsu/formulate-question-prompt
+                {:ds-instructions  (sdb/get-DS-instructions ds-id)
                  :ascr ascr
                  :message-history message-history
                  :budget-remaining budget-left})
         result (llm/complete-json prompt :model-class :chat)
         question-text (get result :question-to-ask (:question result))]
 
-    (log! :info (str "LangGraph formulated question for " ds-id))
+    (log! :info (str "LangGraph formulated question for " ds-id " question-text: " question-text))
     (istate/add-message :system question-text)))
 
-(defn get-answer
-  "Real answer retrieval from surrogate expert.
-   Calls the surrogate with the last question from messages."
+(defn get-answer-from-expert
+  "Calls the surrogate with the last question from messages."
   [state]
   (let [istate (istate/agent-state->interview-state state)
         {:keys [messages pid]} istate
@@ -183,46 +161,33 @@
    The LLM looks at the last entry in conversation-history to find the Q&A pair."
   [state]
   (let [istate (istate/agent-state->interview-state state)
-        {:keys [ds-id ascr messages budget-left pid cid]} istate
-
-        ;; Get DS-instructions from system DB - includes :DS, :interview-objective, :budget-decrement
-        ds-instructions-json (sdb/get-DS-instructions-JSON ds-id)
-        ds-instructions (json/read-str ds-instructions-json :key-fn keyword)
-
+        {:keys [ds-id ascr messages budget-left]} istate
         ;; Build message history - LLM will look at the last entry for Q&A
         message-history (mapv (fn [msg]
                                 (cond
-                                  (= (:from msg) :system)
-                                  {:interviewer (:content msg)}
-                                  (#{:human :surrogate} (:from msg))
-                                  {:expert (:content msg)}
+                                  (= (:from msg) :system)              {:interviewer (:content msg)}
+                                  (#{:human :surrogate} (:from msg))   {:expert (:content msg)}
                                   :else nil))
                               messages)
         message-history (vec (remove nil? message-history))
 
-        ;; Initialize LLM if needed
-        _ (when-not (seq @llm/agent-prompts)
-            (llm/init-llm!))
-
         ;; Use LLM to interpret the answer - LLM extracts Q&A from message-history
-        prompt (llm/ds-interpret-prompt
-                {:ds ds-instructions
+        prompt (dsu/interpret-response-prompt
+                {:ds (-> ds-id sdb/get-DS-instructions :DS sutil/clj2json-pretty)
                  :message-history message-history
                  :ascr ascr
                  :budget-remaining budget-left})
         result (llm/complete-json prompt :model-class :extract)
 
         ;; Extract SCR (remove any metadata)
-        scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
+        scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)]
 
-        ;; Check for failure
-        _ (when (:iviewr-failure result)
-            (log! :warn (str "Interviewer reported failure: " (:iviewr-failure result))))]
-
-    (log! :info (str "LangGraph interpreted response, extracted " (count (keys scr)) " fields"))
+    (if (:iviewr-failure result)
+      (log! :warn (str "Interviewer reported failure: " (:iviewr-failure result)))
+      (log! :info (str "LangGraph interpreted response, extracted " (count (keys scr)) " fields")))
     (istate/update-ascr scr)))
 
-(defn real-evaluate-completion
+(defn evaluate-completion
   "Real completion evaluation using DS-specific completion criteria.
    Uses the ds-util/ds-complete? multimethod for each DS type."
   [state]

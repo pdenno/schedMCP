@@ -4,14 +4,14 @@
   (:require
    [clojure.string :as str]
    [clojure.data.json :as json]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.llm :as llm]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
-   [sched-mcp.tools.iviewr.discovery-schema] ; For mount
-   [sched-mcp.tools.orch.ds-util :as dsu]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.interviewing.interview-graph :as igraph]
    [sched-mcp.interviewing.interview-state :as istate]
+   [sched-mcp.sutil :as sutil]
    [sched-mcp.util :refer [alog! log!]]))
 
 ;;; Tool configurations
@@ -59,92 +59,74 @@ This tool uses LLM reasoning to create natural questions that gather required in
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
-        ds-json (sdb/get-DS-instructions-JSON ds-id)
-        ds-full (sdb/get-DS-instructions ds-id)
+        ds-instructions (sdb/get-DS-instructions ds-id)
         ;; Get current ASCR
         {:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
         ascr (or dstruct {})] ; dstruct is already a map, not a string
     (alog! (str "iviewr_formulate_question " pid " " cid " " ds-id))
 
-    (if (= ds-full "") ; get-DS-instructions returns empty string when not found
-      {:error (str "Discovery Schema not found: " ds-id)}
-      (try
-        ;; Initialize LLM if needed
-        (when-not (seq @llm/agent-prompts)
-          (llm/init-llm!))
-
-        ;; Build conversation history in the format expected by the prompt
-        (let [conversation (pdb/get-conversation pid cid)
-              message-history (mapv (fn [msg]
-                                      (cond
-                                        (= (:message/from msg) :system)
-                                        {:interviewer (:message/content msg)}
-                                        (#{:human :surrogate} (:message/from msg))
-                                        {:expert (:message/content msg)}
-                                        :else nil))
-                                    (:conversation/messages conversation))
-              message-history (remove nil? message-history)
-
-              ;; Parse the DS JSON to get the proper structure
-              ds-obj (json/read-str ds-json :key-fn keyword)
-
-              ;; Generate question using the base-iviewr-instructions format
-              prompt (llm/ds-question-prompt
-                      {:ds ds-obj ; Pass parsed DS object
-                       :ascr ascr
-                       :message-history message-history
-                       :budget-remaining budget-left
-                       :interview-objective (-> (:interview-objective ds-full)
-                                                (clojure.string/replace #"But remember.*\{\"message-type\".*\"OK\"\}\." "")
-                                                (clojure.string/replace #"The correct response.*\"OK\"\}\." "")
-                                                str/trim)})
-              result (llm/complete-json prompt :model-class :chat)
-              ;; Extract question from the expected format
-              question-text (get result :question-to-ask (:question result))
-              ;; Store the question as a message
-              question-mid (pdb/add-msg! {:pid pid
+    (try
+      ;; Build conversation history in the format expected by the prompt
+      (let [conversation (pdb/get-conversation pid cid)
+            message-history (mapv (fn [msg]
+                                    (cond
+                                      (= (:message/from msg) :system)
+                                      {:interviewer (:message/content msg)}
+                                      (#{:human :surrogate} (:message/from msg))
+                                      {:expert (:message/content msg)}
+                                      :else nil))
+                                  (:conversation/messages conversation))
+            message-history (remove nil? message-history)
+            prompt (dsu/formulate-question-prompt
+                    {:ds-instructions  ds-instructions
+                     :ascr ascr
+                     :message-history message-history
+                     :budget-remaining budget-left})
+            result (llm/complete-json prompt :model-class :chat)
+            ;; Extract question from the expected format
+            question-text (get result :question-to-ask (:question result))
+            ;; Store the question as a message
+            question-mid (pdb/add-msg! {:pid pid
+                                        :cid cid
+                                        :from :system
+                                        :content question-text
+                                        :pursuing-DS ds-id})]
+        (log! :info (str "Generated question for " ds-id " in " conversation_id " with mid " question-mid))
+        {:question {:id question-mid ; Use the actual message ID
+                    :text question-text
+                    :ds_id (name ds-id)
+                    :help (or (:help result)
+                              "Provide detailed information to help complete the schema")}
+         :context {:ds_objective (:interview-objective ds-instructions) ; Use Clojure data structure
+                   :fields_remaining (if ascr
+                                       (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
+                                         (- (count (keys ds-fields))
+                                            (count (keys ascr))))
+                                       (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
+                                         (count (keys ds-fields))))
+                   :ascr_summary (if (empty? ascr)
+                                   "No data collected yet"
+                                   (str (count ascr) " fields filled"))
+                   :budget_remaining budget-left
+                   :rationale (:rationale result)
+                   :targets (:targets result)}})
+      (catch Exception e
+        (log! :error (str "LLM error in formulate-question: " (.getMessage e)))
+        ;; Fallback to simple question
+        (let [fallback-text "Can you tell me more about your process?"
+              fallback-mid (pdb/add-msg! {:pid pid
                                           :cid cid
                                           :from :system
-                                          :content question-text
+                                          :content fallback-text
                                           :pursuing-DS ds-id})]
-          (log! :info (str "Generated question for " ds-id " in " conversation_id " with mid " question-mid))
-          {:question {:id question-mid ; Use the actual message ID
-                      :text question-text
+          {:question {:id fallback-mid
+                      :text fallback-text
                       :ds_id (name ds-id)
-                      :help (or (:help result)
-                                "Provide detailed information to help complete the schema")}
-           :context {:ds_objective (:interview-objective ds-full) ; Use Clojure data structure
-                     :fields_remaining (if ascr
-                                         (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
-                                           (- (count (keys ds-fields))
-                                              (count (keys ascr))))
-                                         (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
-                                           (count (keys ds-fields))))
-                     :ascr_summary (if (empty? ascr)
-                                     "No data collected yet"
-                                     (str (count ascr) " fields filled"))
-                     :budget_remaining budget-left
-                     :rationale (:rationale result)
-                     :targets (:targets result)}})
-        (catch Exception e
-          (log! :error (str "LLM error in formulate-question: " (.getMessage e)))
-          ;; Fallback to simple question
-          (let [fallback-text "Can you tell me more about your process?"
-                fallback-mid (pdb/add-msg! {:pid pid
-                                            :cid cid
-                                            :from :system
-                                            :content fallback-text
-                                            :pursuing-DS ds-id})]
-            {:question {:id fallback-mid
-                        :text fallback-text
-                        :ds_id (name ds-id)
-                        :help "Describe the steps involved in your production process"}
-             :context {:ds_objective (:interview-objective ds-full)
-                       :fields_remaining (let [ds-fields (dissoc (:DS ds-full) :DS-id)]
-                                           (count (keys ds-fields)))
-                       :error_fallback true}}))))))
-
-;;; Interpret Response Tool
+                      :help "Describe the steps involved in your production process"}
+           :context {:ds_objective (:interview-objective ds-instructions)
+                     :fields_remaining (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
+                                         (count (keys ds-fields)))
+                     :error_fallback true}})))))
 
 (defmethod tool-system/tool-name :interpret-response [_]
   "iviewr_interpret_response")
@@ -174,152 +156,88 @@ This tool uses LLM reasoning to create natural questions that gather required in
   [_ {:keys [project_id conversation_id ds_id answer question_asked question_id]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
-        ds-id (keyword ds_id)
-        ds-json (sdb/get-DS-instructions-JSON ds-id)
-        ds-full (sdb/get-DS-instructions ds-id)]
+        ds-id (keyword ds_id)]
 
-    (alog! (str "iviewr_interpret_response " pid " " cid " " ds-id))
-    (if-not ds-json
-      {:error (str "Discovery Schema not found: " ds-id)}
-      (try
-        ;; Initialize LLM if needed
-        (when-not (seq @llm/agent-prompts)
-          (llm/init-llm!))
+    (log! :info (str "iviewr_interpret_response " pid " " cid " " ds-id))
+    (try
+      ;; Get current ASCR
+      (let [{:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
+            ascr (or dstruct {})
+            ;; Add the answer message first
+            answer-mid (pdb/add-msg! {:pid pid
+                                      :cid cid
+                                      :from :human
+                                      :content answer
+                                      :pursuing-DS ds-id})
 
-        ;; Get current ASCR
-        (let [{:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
-              ascr (or dstruct {})
+            ;; Build conversation history including the new answer
+            conversation (pdb/get-conversation pid cid)
+            message-history (mapv (fn [msg]
+                                    (cond
+                                      (= (:message/from msg) :system)
+                                      {:interviewer (:message/content msg)}
+                                      (#{:human :surrogate} (:message/from msg))
+                                      {:expert (:message/content msg)}
+                                      :else nil))
+                                  (:conversation/messages conversation))
+            message-history (vec (remove nil? message-history))
+            ;; Use LLM to interpret the answer using base-iviewr-instructions format
+            prompt (dsu/interpret-response-prompt
+                    {:ds (-> ds-id sdb/get-DS-instructions sutil/clj2json-pretty)
+                     :question question_asked
+                     :answer answer
+                     :message-history message-history
+                     :ascr ascr
+                     :budget-remaining budget-left})
+            result (llm/complete-json prompt :model-class :extract)
+            ;; The SCR should be the entire result per the prompt instructions
+            ;; Remove any ASCR metadata that might have been included
+            scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
 
-              ;; Add the answer message first
-              answer-mid (pdb/add-msg! {:pid pid
-                                        :cid cid
-                                        :from :human
-                                        :content answer
-                                        :pursuing-DS ds-id})
+            ;; Check for failure response
+            _ (when (:iviewr-failure result)
+                (throw (ex-info "Interviewer reported failure" {:reason (:iviewr-failure result)})))
 
-              ;; Build conversation history including the new answer
-              conversation (pdb/get-conversation pid cid)
-              message-history (mapv (fn [msg]
-                                      (cond
-                                        (= (:message/from msg) :system)
-                                        {:interviewer (:message/content msg)}
-                                        (#{:human :surrogate} (:message/from msg))
-                                        {:expert (:message/content msg)}
-                                        :else nil))
-                                    (:conversation/messages conversation))
-              message-history (vec (remove nil? message-history))
+            ;; Link answer to question if question-id provided
+            _ (when question_id
+                (pdb/update-msg! pid cid answer-mid
+                                 {:message/answers-question (if (string? question_id)
+                                                              (Long/parseLong question_id)
+                                                              question_id)}))
+            ;; Store the SCR with the message
+            _ (when scr
+                (pdb/put-msg-SCR! pid cid scr))
+            ;; Initialize ASCR if needed
+            _ (when-not (pdb/ASCR-exists? pid ds-id)
+                (pdb/init-ASCR! pid ds-id))
+            ;; Update ASCR with new SCR using the pure function
+            current-ascr-data (pdb/get-ASCR pid ds-id)
+            current-ascr (or (:ascr/dstruct current-ascr-data) {})
+            updated-ascr (dsu/ds-combine ds-id scr current-ascr)
+            _ (pdb/put-ASCR! pid ds-id updated-ascr)
+            ;; Reduce budget
+            _ (pdb/reduce-questioning-budget! pid ds-id)
+            ;; Check if DS is complete using the pure function
+            complete? (dsu/ds-complete? ds-id updated-ascr)]
 
-              ;; Parse the DS JSON
-              ds-obj (json/read-str ds-json :key-fn keyword)
+        ;; Only mark complete if actually complete
+        (when complete?
+          (pdb/mark-ASCR-complete! pid ds-id))
 
-              ;; Use LLM to interpret the answer using base-iviewr-instructions format
-              prompt (llm/ds-interpret-prompt {:ds ds-obj
-                                               :question question_asked
-                                               :answer answer
-                                               :message-history message-history
-                                               :ascr ascr
-                                               :budget-remaining budget-left
-                                               :interview-objective (-> (:interview-objective ds-full)
-                                                                        (clojure.string/replace #"But remember.*\{\"message-type\".*\"OK\"\}\." "")
-                                                                        (clojure.string/replace #"The correct response.*\"OK\"\}\." "")
-                                                                        str/trim)})
-              result (llm/complete-json prompt :model-class :extract)
-              ;; The SCR should be the entire result per the prompt instructions
-              ;; Remove any ASCR metadata that might have been included
-              scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
+        ;; Return comprehensive response
+        {:scr (merge {:answered-at (java.util.Date.)
+                      :question question_asked
+                      :raw-answer answer
+                      :DS scr}
+                     scr)
+         :message_id answer-mid
+         :ascr_updated true
+         :ds_complete complete?
+         :budget_remaining (pdb/get-questioning-budget-left! pid ds-id)})
 
-              ;; Check for failure response
-              _ (when (:iviewr-failure result)
-                  (throw (ex-info "Interviewer reported failure" {:reason (:iviewr-failure result)})))
-
-              ;; Link answer to question if question-id provided
-              _ (when question_id
-                  (pdb/update-msg! pid cid answer-mid
-                                   {:message/answers-question (if (string? question_id)
-                                                                (Long/parseLong question_id)
-                                                                question_id)}))
-              ;; Store the SCR with the message
-              _ (when scr
-                  (pdb/put-msg-SCR! pid cid scr))
-              ;; Initialize ASCR if needed
-              _ (when-not (pdb/ASCR-exists? pid ds-id)
-                  (pdb/init-ASCR! pid ds-id))
-              ;; Update ASCR with new SCR using the pure function
-              current-ascr-data (pdb/get-ASCR pid ds-id)
-              current-ascr (or (:ascr/dstruct current-ascr-data) {})
-              updated-ascr (dsu/ds-combine ds-id scr current-ascr)
-              _ (pdb/put-ASCR! pid ds-id updated-ascr)
-              ;; Reduce budget
-              _ (pdb/reduce-questioning-budget! pid ds-id)
-              ;; Check if DS is complete using the pure function
-              complete? (dsu/ds-complete? ds-id updated-ascr)]
-
-          ;; Only mark complete if actually complete
-          (when complete?
-            (pdb/mark-ASCR-complete! pid ds-id))
-
-          ;; Return comprehensive response
-          {:scr (merge {:answered-at (java.util.Date.)
-                        :question question_asked
-                        :raw-answer answer
-                        :DS scr}
-                       scr)
-           :message_id answer-mid
-           :ascr_updated true
-           :ds_complete complete?
-           :budget_remaining (pdb/get-questioning-budget-left! pid ds-id)})
-
-        (catch Exception e
-          (log! :error (str "Error in interpret-response: " (.getMessage e)))
-          {:error (str "Failed to interpret response: " (.getMessage e))})))))
-
-#_(try
-     ;; Update pursuit status if complete
-    (when complete? ; <=================================
-      (d/transact conn [{:db/id pursuit-eid
-                         :pursuit/status :complete
-                         :pursuit/completed-at (java.util.Date.)}])
-      (log! :info (str "DS " ds-id " marked complete")))
-
-     ;; Return comprehensive result ; <================================= Whole completeness thing!
-    {:scr (merge {:answered-at (java.util.Date.)
-                  :question question-asked
-                  :raw-answer answer}
-                 SCR)
-     :confidence (or (:confidence result) 0.8)
-     :ambiguities (or (:ambiguities result) [])
-     :follow_up (:follow_up result)
-     :commit-notes (str "Extracted: " (keys SCR))
-     :updated_ascr updated-ascr
-     :ds_complete complete?
-     :completeness (if complete?
-                     1.0
-                     (/ (count (keys updated-ascr))
-                        (count (keys (:DS ds)))))}
-    (catch Exception e
-      (log! :error (str "Error in interpret-response: " (.getMessage e)))
-       ;; Still try to store raw answer
-      (try
-        (let [conn (connect-atm pid)
-              message-id (keyword (str "msg-" (System/currentTimeMillis)))
-              message-data {:message/id message-id
-                            :message/conversation cid
-                            :message/type :answer
-                            :message/from :user
-
-                            :message/content answer
-                            :message/timestamp (java.util.Date.)}]
-          (d/transact conn [message-data]))
-        (catch Exception e2
-          (log! :error (str "Failed to store fallback message: " (.getMessage e2)))))
-       ;; Return error response
-      {:scr {:answered-at (java.util.Date.)
-             :question question-asked
-             :raw-answer answer
-             :extraction-failed true}
-       :confidence 0.0
-       :ambiguities ["Could not extract structured data"]
-       :commit-notes "LLM extraction failed - storing raw answer only"}))
+      (catch Exception e
+        (log! :error (str "Error in interpret-response: " (.getMessage e)))
+        {:error (str "Failed to interpret response: " (.getMessage e))}))))
 
 ;;; Get Current DS Tool
 
@@ -348,7 +266,7 @@ This tool uses LLM reasoning to create natural questions that gather required in
     (if-not ds-id
       {:error "No active DS pursuit found"}
       {:ds_id (name ds-id)
-       :ds_template (:ds dstruct)
+       :ds_template (:ds dstruct) ; <===================================== what???
        :interview_objective (:interview-objective dstruct)
        :current_ascr ascr
        :pursuit_status (if completed? :completed :incomplete)})))
@@ -385,15 +303,6 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
     (alog! (str "iviewr_conduct_interview " pid " " cid " " ds-id " budget=" budget))
 
     (try
-      ;; Initialize LLM if needed
-      (when-not (seq @llm/agent-prompts)
-        (llm/init-llm!))
-
-      ;; Verify DS exists
-      (let [ds-json (sdb/get-DS-instructions-JSON ds-id)]
-        (when-not ds-json
-          (throw (ex-info "Discovery Schema not found" {:ds-id ds-id}))))
-
       ;; Create initial interview state
       (let [initial-state (istate/make-interview-state
                            {:ds-id ds-id

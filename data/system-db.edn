@@ -38,7 +38,7 @@
          [#:project{:dir
                     "/home/pdenno/Documents/git/schedMCP/test/dbs/projects/sur-craft-beer/db/",
                     :id :sur-craft-beer,
-                    :name "Integration Test",
+                    :name "Phase 3 Integration Test",
                     :status :active}
           #:project{:dir
                     "/home/pdenno/Documents/git/schedMCP/test/dbs/projects/sur-plate-glass/db/",

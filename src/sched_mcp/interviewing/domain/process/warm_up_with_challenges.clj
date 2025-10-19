@@ -1,11 +1,10 @@
-(ns sched-mcp.tools.iviewr.domain.process.warm-up-with-challenges
+(ns sched-mcp.interviewing.domain.process.warm-up-with-challenges
   "Define a discovery schema to elicit general information about the scheduling problem the interviewees are interested in solving."
   (:require
-   [clojure.pprint :refer [cl-format pprint]]
+   [clojure.pprint :refer [pprint]]
    [clojure.spec.alpha :as s]
    [mount.core :as mount :refer [defstate]]
-   [sched-mcp.project-db :as pdb]
-   [sched-mcp.tools.orch.ds-util :as dsu :refer [ds-valid? ds-combine ds-complete?]]
+   [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :as util :refer [alog!]]))
 
@@ -32,6 +31,7 @@
 
 (def warm-up-with-challenges
   {:message-type :DS-INSTRUCTIONS,
+   :budget-decrement 0.10
    :interview-objective
    (str
     "This is typically the DS the orchestrator will use first.\n"
@@ -106,12 +106,17 @@
 ;;; ------------------------------- checking for completeness ---------------
 ;;; Collect and combine :process/warm-up-with-challenges ds refinements, favoring recent over earlier versions.
 
-(defmethod ds-valid? :process/warm-up-with-challenges
+(defmethod dsu/ds-valid? :process/warm-up-with-challenges
   [tag obj]
   (or (s/valid? ::DS obj)
       (alog! (str "Invalid DS" tag " " (with-out-str (pprint obj))))))
 
-(defn completeness-test [_ds] true)
+(defn completeness-test
+  "Check if the ASCR contains all three required keys for warm-up-with-challenges DS."
+  [ascr]
+  (and (contains? ascr :scheduling-challenges)
+       (contains? ascr :one-more-thing)
+       (contains? ascr :product-or-service-name)))
 
 (defmethod dsu/ds-combine :process/warm-up-with-challenges
   [_tag scr ascr]
