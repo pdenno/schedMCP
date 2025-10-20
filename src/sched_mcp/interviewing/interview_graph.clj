@@ -89,7 +89,7 @@
     (.addNode graph "formulate" (lg/make-async-node nodes/mock-formulate-question))
     (.addNode graph "get-answer" (lg/make-async-node nodes/mock-get-answer))
     (.addNode graph "interpret" (lg/make-async-node nodes/mock-interpret-response))
-    (.addNode graph "evaluate" (lg/make-async-node nodes/evaluate-completion))
+    (.addNode graph "evaluate" (lg/make-async-node nodes/mock-evaluate-completion))
 
     ;; Add unconditional edges
     (.addEdge graph StateGraph/START "check-budget")

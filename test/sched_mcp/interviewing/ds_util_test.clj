@@ -1,4 +1,4 @@
-(ns sched-mcp.interviewing.ds_util-test
+(ns sched-mcp.interviewing.ds-util-test
   (:require
    [clojure.edn :as edn]
    [clojure.java.io :as io]
@@ -217,10 +217,14 @@
 
 (deftest test-ds-complete
   (testing "ds-complete? for warm-up DS"
-    ;; warm-up always returns true
-    (is (= true (dsu/ds-complete? :process/warm-up-with-challenges {})))
+    ;; warm-up requires all three fields
+    (is (= false (dsu/ds-complete? :process/warm-up-with-challenges {})))
+    (is (= false (dsu/ds-complete? :process/warm-up-with-challenges
+                                   {:scheduling-challenges ["test"]})))
     (is (= true (dsu/ds-complete? :process/warm-up-with-challenges
-                                  {:scheduling-challenges ["test"]})))))
+                                  {:scheduling-challenges ["test"]
+                                   :one-more-thing "something"
+                                   :product-or-service-name "product"})))))
 
 ;;; =================================
 ;;; Understanding DS behavior
@@ -313,7 +317,7 @@
         (let [ascr {:scheduling-challenges ["equipment-changeover" "demand-uncertainty"]}
               result (llm/complete-json
                       (dsu/formulate-question-prompt
-                       {:ds ds-instructions
+                       {:ds-instructions ds-instructions
                         :ascr ascr
                         :budget-remaining 5})
                       :model-class :mini)]
@@ -328,17 +332,19 @@
     (when-not (System/getenv "OPENAI_API_KEY")
       (throw (ex-info "This test requires an OpenAI key." {})))
     (testing "Extract scheduling challenges from natural text"
-      (let [ds-instructions (sdb/get-DS-instructions :process/warm-up-with-challenges )
+      (let [ds-instructions (sdb/get-DS-instructions :process/warm-up-with-challenges)
             answer "We struggle with machine breakdowns and unpredictable customer orders. Also, our skilled workers are often unavailable when we need them."
+            message-history [{:interviewer "What are your main scheduling challenges?"}
+                             {:expert answer}]
             result (llm/complete-json
                     (dsu/interpret-response-prompt
                      {:ds-instructions ds-instructions
-                      :question "What are your main scheduling challenges?"
-                      :answer answer})
+                      :message-history message-history
+                      :ascr {}
+                      :budget-remaining 5.0})
                     :model-class :extract)]
         (is (map? result))
-        (is (map? (:scr result)))
-        (let [challenges (get-in result [:scr :scheduling-challenges])]
+        (let [challenges (:scheduling-challenges result)]
           (is (vector? challenges))
           (is (>= (count challenges) 2))
           ;; Should identify key challenges
@@ -346,18 +352,20 @@
           (is (some #(re-find #"worker|skill" %) challenges)))))
 
     (testing "Extract product/service name"
-      (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
+      (let [ds-instructions (sdb/get-DS-instructions :process/warm-up-with-challenges)
             answer "We're a craft brewery making various types of beer including IPAs, stouts, and seasonal ales."
+            message-history [{:interviewer "What products do you make?"}
+                             {:expert answer}]
             result (llm/complete-json
                     (dsu/interpret-response-prompt
-                     {:ds ds
-                      :question "What products do you make?"
-                      :answer answer})
+                     {:ds-instructions ds-instructions
+                      :message-history message-history
+                      :ascr {}
+                      :budget-remaining 5.0})
                     :model-class :extract)]
-        (is (string? (get-in result [:scr :product-or-service-name])))
+        (is (string? (:product-or-service-name result)))
         (is (re-find #"beer|brew"
-                     (str/lower-case
-                      (get-in result [:scr :product-or-service-name]))))))))
+                     (str/lower-case (:product-or-service-name result))))))))
 
 ;;; ======================== PROMPT REFINEMENT TESTS ========================
 
@@ -397,26 +405,32 @@
       (llm/init-llm!)
 
       (testing "Ambiguous answer detection"
-        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
+        (let [ds-instructions (sdb/get-DS-instructions :process/warm-up-with-challenges)
               ambiguous-answer "Maybe sometimes we have issues, I'm not really sure"
+              message-history [{:interviewer "What are your scheduling challenges?"}
+                               {:expert ambiguous-answer}]
               result (llm/complete-json
                       (dsu/interpret-response-prompt
-                       {:ds (:DS ds)
-                        :question "What are your scheduling challenges?"
-                        :answer ambiguous-answer})
+                       {:ds-instructions ds-instructions
+                        :message-history message-history
+                        :ascr {}
+                        :budget-remaining 5.0})
                       :model-class :extract)]
           (is (map? result))
           (is (or (seq (:ambiguities result))
                   (< (:confidence result) 0.5)))))
 
       (testing "Off-topic answer handling"
-        (let [ds (sdb/get-DS-instructions :process/warm-up-with-challenges)
+        (let [ds-instructions (sdb/get-DS-instructions :process/warm-up-with-challenges)
               off-topic "The weather has been nice lately"
+              message-history [{:interviewer "What products do you make?"}
+                               {:expert off-topic}]
               result (llm/complete-json
                       (dsu/interpret-response-prompt
-                       {:ds ds
-                        :question "What products do you make?"
-                        :answer off-topic})
+                       {:ds-instructions ds-instructions
+                        :message-history message-history
+                        :ascr {}
+                        :budget-remaining 5.0})
                       :model-class :extract)]
-          (is (or (nil? (get-in result [:scr :product-or-service-name]))
+          (is (or (nil? (:product-or-service-name result))
                   (seq (:ambiguities result)))))))))

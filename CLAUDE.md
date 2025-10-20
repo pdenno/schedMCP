@@ -9,11 +9,11 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
   1. development-plan.md
 
 ## Starting up
-- The system, including its MCP loop, is probably running when you join. If you
+- The system, including its MCP loop, is probably running when you join.
   To check that things are as they should be:
   1. `clojure_eval` (an MCP tool) the sexp `(develop.repl/ns-setup!)`; That will allow you to use the same NS aliases that I typically use.
   2. `clojure_eval` the sexp `(sutil/connect-atm :system)`; it should return a connection object, such as `#<Connection@1840adbd: #datahike/DB {:max-tx 536870914 :max-eid 10}>`, and
-  3. `clojure_eval` the express `@mcore/components-atm apv :name))`, it should return a clojure map with three keys `:tools`, `:prompts` and `:resources` the values of each are vectors of maps describing the associated components.
+  3. `clojure_eval` the expression `@mcore/components-atm`; it should return a clojure map with three keys `:tools`, `:prompts` and `:resources` the values of each are vectors of maps describing the associated components.
 
 ## Coding Rules
 
@@ -42,13 +42,12 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
   (def ^:dynamic *mock-enabled* false)
   ```
 - **Isolate use of Datahike to a few files** There is pretty much nothing persistent that doesn't belong in code, the system DB, or a project DB.
-  Therefore, avoid writing Datahike queries and pulls in all files except `src/sched-mcp/system_db.clj`, `src/sched-mcp/project_db.clj`, and `src/sched-mcp/sutil.clj`.
-- Whenever you need state, look into those files and see if something there is appropriate, if not, add a function to whichever of the three above is appropriate.
+  Therefore, avoid writing Datahike queries and pulls in all files except `src/sched_mcp/system_db.clj`, `src/sched_mcp/project_db.clj`, and `src/sched_mcp/sutil.clj`.
+- Whenever you need state information, look into those files and see if something there is appropriate, if not, add a function to whichever of the three above is appropriate.
 
 ### Data Structures
 - Use maps, vectors, sets, and primitive data types to store data.
-- **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses `map?` and `vector?`.
-- **Do NOT use clojure.walk/stringify-keys** See sutil/stringify-keys.
+- **Do NOT use lists** (sequences) for data storage. We stipulate this because recursive navigation of structures uses just `map?` and `vector?`.
 
 ### Surgical Changes Only
 - Make **minimal, targeted edits** - don't reformat entire functions
@@ -69,9 +68,7 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
 
 ## schedMCP Design Decisions
 
-### Independence from clojure-mcp
-- We DO NOT `require` (the Clojure namespace form) clojure-mcp namespace in the `ns` form.
- Instead, we `require` and `resolve` in functions that are only called if the configuration intends to run clojure-mcp (the MCP-based programming assistant).
+These are described in Markdown files in the docs/ directory.
 
 ---
 *Keep this file under 120 lines for quick loading. Last updated: $(date)*

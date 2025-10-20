@@ -15,7 +15,8 @@ dutil/learn-schema!
   [al ns-sym]
   (try (alias al ns-sym)
        (catch Exception _e
-         (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym)))))
+         (log! :error (str "safe-alias failed on alias = " al " ns-sym = " ns-sym ". We'll try :reload. Run ns-setup! again."))
+         (require (vector ns-sym) :reload))))
 
 (def alias-map
   {;'ches  'cheshire.core

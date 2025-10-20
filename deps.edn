@@ -66,9 +66,8 @@
                         "--port" "7888"]}
 
            :test
-           {:extra-paths ["src" "test" "env/dev"]
-            :exec-fn kaocha.runner/exec-fn
-            :exec-args {}
+           {:extra-paths ["src" "test" "env/test"]
+            :main-opts ["-m" "kaocha.runner"]
             :extra-deps {cider/cider-nrepl           {:mvn/version "0.57.0"}
                          com.lambdaisland/classpath  {:mvn/version "0.6.58"}
                          nrepl/nrepl                 {:mvn/version "1.3.0"}

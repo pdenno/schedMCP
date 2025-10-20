@@ -80,9 +80,9 @@
       :else
       (istate/update-ascr {}))))
 
-(defn evaluate-completion
-  "Evaluate if DS completion criteria are met.
-   For :process/warm-up DS, checks for :challenges, :motivation, and :description."
+(defn mock-evaluate-completion
+  "Mock evaluation for testing - checks for :challenges, :motivation, and :description.
+   In Phase 3, this is replaced by the real evaluate-completion using ds-complete? multimethod."
   [state]
   (let [istate (istate/agent-state->interview-state state)
         ascr (:ascr istate)
@@ -119,13 +119,13 @@
         {:keys [ds-id ascr messages budget-left]} istate
         message-history (->> (mapv (fn [msg]
                                      (cond
-                                       (= (:from msg) :system)              {:interviewer (:content msg)}
-                                       (#{:human :surrogate} (:from msg))   {:expert (:content msg)}
+                                       (= (:from msg) :system) {:interviewer (:content msg)}
+                                       (#{:human :surrogate} (:from msg)) {:expert (:content msg)}
                                        :else nil))
                                    messages)
                              (remove nil?))
         prompt (dsu/formulate-question-prompt
-                {:ds-instructions  (sdb/get-DS-instructions ds-id)
+                {:ds-instructions (sdb/get-DS-instructions ds-id)
                  :ascr ascr
                  :message-history message-history
                  :budget-remaining budget-left})
@@ -165,15 +165,15 @@
         ;; Build message history - LLM will look at the last entry for Q&A
         message-history (mapv (fn [msg]
                                 (cond
-                                  (= (:from msg) :system)              {:interviewer (:content msg)}
-                                  (#{:human :surrogate} (:from msg))   {:expert (:content msg)}
+                                  (= (:from msg) :system) {:interviewer (:content msg)}
+                                  (#{:human :surrogate} (:from msg)) {:expert (:content msg)}
                                   :else nil))
                               messages)
         message-history (vec (remove nil? message-history))
 
         ;; Use LLM to interpret the answer - LLM extracts Q&A from message-history
         prompt (dsu/interpret-response-prompt
-                {:ds (-> ds-id sdb/get-DS-instructions :DS sutil/clj2json-pretty)
+                {:ds-instructions (sdb/get-DS-instructions ds-id)
                  :message-history message-history
                  :ascr ascr
                  :budget-remaining budget-left})

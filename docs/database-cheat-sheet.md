@@ -34,18 +34,25 @@ You can use the `clojure_eval` tool anywhere to inspect DBs as you like, however
 (require '[datahike.api :as d])
 (require '[sched-mcp.sutil :as sutil])
 
-;; Get connection
+;;; Get connection
 (def conn (sutil/connect-atm :post-restart-brewery))
 
-;; Query example - find all conversations
+;;; Query example - find all conversations
 (d/q '[:find ?cid ?status
        :where
        [?c :conversation/id ?cid]
        [?c :conversation/status ?status]]
      @conn)
 
-;; Pull example - get full conversation
-(d/pull @conn '[*] [:conversation/id :conv-1756144856221])
+;;; Pull example - Get all information about the project at entity ID 31.
+(dp/pull @(sutil/connect-atm :system) '[*] 31)
+
+{:db/id 31,
+ :project/dir "/home/pdenno/Documents/git/schedMCP/test/dbs/projects/sur-fountain-pens/db/",
+ :project/id :sur-fountain-pens,
+ :project/name "Surrogate fountain-pens Interview",
+ :project/status :active}
+
 ```
 ## Architecture Notes
 
@@ -53,13 +60,7 @@ You can use the `clojure_eval` tool anywhere to inspect DBs as you like, however
 - **Datahike**: Persistent storage for projects, conversations, answers
 - **Mount**: Component lifecycle management
 - **MCP**: Communication protocol with Claude Desktop
-
-### Proposed Enhancement
-- **LangGraph**: Ephemeral conversation state and flow control
-- **Benefits**:
-  - Cleaner separation of concerns
-  - Better conversation flow management
-  - Easier to implement complex interview logic
+- **LangGraph**: subsystem for interviewing
 
 ### Database Structure
 - System DB (`:system`): Projects registry, EADS definitions

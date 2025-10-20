@@ -204,7 +204,7 @@
     x))
 
 ;;; https://gist.github.com/lnostdal/cc956e2a80dc49d8097b7c950f7213bd
-(defn move-file
+(defn ^:admin move-file
   "Move file/directory from source to target. Both are full pathnames.
    This will also replace the target file if it exists since REPLACE_EXISTING is included in the options at the end."
   [source target]
@@ -215,35 +215,6 @@
                                           [(java.nio.file.StandardCopyOption/ATOMIC_MOVE)
                                            (java.nio.file.StandardCopyOption/REPLACE_EXISTING)]))))
 
-(defn chat-status
-  "Create a string to explain in the chat the error we experienced."
-  ([s] (chat-status s nil))
-  ([s err]
-   (if (instance? Throwable err)
-     (let [m (Throwable->map err)]
-       (if-let [msg (-> m :via first :message)]
-         (if-let [data (:data m)]
-           (str ": " msg "\ndata:" data)
-           (str s ": " msg))
-         s))
-     s)))
-
-(defn stringify-keys
-  "We don't use lists anywhere, right? So use this to stringify keys."
-  [obj]
-  (letfn [(sk [x]
-            (cond (map? x)     (reduce-kv (fn [m k v] (assoc m (str k) (sk v))) {} x)
-                  (vector? x)  (mapv sk x)
-                  (seq? x)     (throw (ex-info "stringify-keys: Called with a list." {:x x}))
-                  :else        x))]
-    (sk obj)))
-
-(defn yes-no-unknown
-  "Return :yes :no or :unknown based on lexical analysis of the argument answer text."
-  [s]
-  (cond (or (= s "yes") (= s "Yes") (= s "Yes.") (re-matches #"(?i)\s*yes\s*" s)) :yes
-        (or (= s "no") (= s "No") (= s "No.") (re-matches #"(?i)\s*no\s*" s)) :no
-        :else :unknown))
 
 (defn markdown2html
   "Do heuristic light modification to the argument text to make it more like HTML.

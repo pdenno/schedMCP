@@ -1,4 +1,3 @@
 #!/usr/bin/env sh
 
-# I don't think I'm using this; I'm using :exec-fn/:exec-args in deps.edn
-clojure -M:test "$@" >> bin/kaocha
+clojure -M:test "$@"

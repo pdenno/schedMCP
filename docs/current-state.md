@@ -1,10 +1,15 @@
 # schedMCP Current State Documentation
 
-*Last Updated: January 2025*
+*Last Updated: October 2025*
 
 ## Overview
 
-schedMCP implements the schedulingTBD Discovery Schema system using Model Context Protocol (MCP). The system uses an orchestrator-driven approach to dynamically conduct interviews based on current knowledge state.
+schedMCP implements a  Model Context Protocol (MCP) system for human/machine teaming (HMT) for the creation and maintenance of manufacturing production scheduling systems using the MiniZinc DSL.
+It is a research prototype for investigating
+1. methods of interviewing in HMT
+2. methods of mentoring in HMT
+3. use of DSLs in HTM
+Currently, we only have the interviewing aspect implemented.
 
 ## Core Architecture
 
@@ -30,6 +35,9 @@ The system operates through three main components:
 
 ## What's Working ✅
 
+### LangGraph based Interviewing
+- MCP tools for doing this, `iviewr_formulate_question` and `iviewr_interpret_response`, will be deprecated.
+
 ### Complete DS Flow Pipeline
 1. **SCR Storage**: Responses are extracted and stored with messages
 2. **ASCR Building**: SCRs are automatically aggregated after each response
@@ -47,10 +55,14 @@ The system operates through three main components:
 - Schema supports projects, conversations, messages, pursuits, and DS data
 - Clean project ID naming: `:craft-beer`, `:craft-beer-1`, `:sur-craft-beer`
 
-### Discovery Schema Templates
-Available DS templates (found in `src/tools/iviewr/domain` and available from the system DB by calling `sdb/get-discovery-schema-JSON`).
+### Discovery Schema (DS) Instructions
+DS Instructions are Clojure maps that contain (among other things) discovery schema (:DS) interview objectives (:interview-objective) and :budget-decrement, among other things.
+The :DS key contains the actual discovery schema, an annotated example used by the interviewer to formulate questions; the response to these questions is interpreted into a Schema-Conforming Reponse (SCR).
+DS Instructions can be found in `src/sched_mcp/interviewing/domain`
+
+Here are the DS currently implemented:
 - **Process Types**:
-  - `process/warm-up-with-challenges` - Initial exploration and pain points
+  - `process/warm-up-with-challenges` - Initial exploration and scheduling pain points
   - `process/flow-shop` - Sequential production flow
   - `process/job-shop` (3 variants) - Flexible routing workflows
   - `process/scheduling-problem-type` - Problem classification
@@ -78,26 +90,24 @@ Available DS templates (found in `src/tools/iviewr/domain` and available from th
 
 ### Near Term
 - Additional Discovery Schema templates
-- Table-based communication for complex data
 - MiniZinc model generation from ASCRs
-- Export/import of interview sessions
+- Integration of React-based UI from SchedulingTBD (an implementation of something similar to SchedMCP) for human expert use.
 
 ### Long Term
-- LangGraph integration for advanced orchestration
-- Multi-user collaborative interviews
-- Real-time visualization of gathered knowledge
-- Integration with external scheduling systems
+- Data collection over many interviews/scheduling systems
+
 
 ## Current Architecture
 
 ```
 src/
 ├── sched_mcp/
-│   ├── core.clj              # MCP server setup
+│   ├── mcp_core.clj           # MCP server setup
 │   ├── surrogate.clj         # Surrogate expert implementation
 │   ├── llm.clj               # LLM integration
 │   ├── tool_system.clj       # Multimethod tool framework
-│   └── tools/
+│   ├── interviewing/         # LangGraph-based subsystem for interviewing
+|   |── tools/
 │       ├── registry.clj      # Central tool registry
 │       ├── iviewr/
 │       │   ├── core.clj      # formulate_question, interpret_response
@@ -107,61 +117,6 @@ src/
 │       └── surrogate.clj     # Surrogate expert tools
 ```
 
-## Testing the System
-
-### Complete Interview Flow Test
-```clojure
-;; 1. Start surrogate expert
-(def project-id (:project_id (sur-start-expert {:domain "craft-beer"})))
-
-;; 2. Check available DS options
-(orch-get-next-ds {:project_id project-id :conversation_id "main"})
-
-;; 3. Start recommended DS
-(orch-start-ds-pursuit {:project_id project-id
-                        :conversation_id "main"
-                        :ds_id "process/warm-up-with-challenges"})
-
-;; 4. Run Q&A cycles
-(let [q (iviewr-formulate-question {:project_id project-id
-                                    :conversation_id "main"
-                                    :ds_id "process/warm-up-with-challenges"})
-      a (sur-answer {:project_id project-id :question (:question q)})]
-  (iviewr-interpret-response {:project_id project-id
-                              :conversation_id "main"
-                              :ds_id "process/warm-up-with-challenges"
-                              :answer (:answer a)
-                              :question_asked (:question q)}))
-
-;; 5. Check progress
-(orch-get-progress {:project_id project-id})
-
-;; 6. When DS completes, get next recommendation
-(orch-get-next-ds {:project_id project-id :conversation_id "main"})
-```
-
-### Debugging Commands
-```clojure
-;; Check current ASCR
-(get-ascr project-id :process/warm-up-with-challenges)
-
-;; View all pursuits
-(d/q '[:find ?ds-id ?state
-       :where
-       [?p :pursuit/ds-id ?ds-id]
-       [?p :pursuit/state ?state]]
-     @(connect-atm project-id))
-
-;; Check stored SCRs
-(d/q '[:find ?scr ?time
-       :where
-       [?m :message/scr ?scr]
-       [?m :message/timestamp ?time]]
-     @(connect-atm project-id))
-```
-
 ## Summary
 
-The schedMCP system successfully implements an orchestrator-driven interview system using Discovery Schemas. The orchestrator dynamically selects appropriate schemas based on current knowledge, while the interviewer uses LLMs to conduct natural conversations that build structured understanding of manufacturing scheduling domains.
-
-The system is ready for comprehensive testing across different manufacturing domains using the surrogate expert system.
+The system is ready for comprehensive testing of basic operation. There is, however, a significant level of legacy code and legacy tests to be removed or updated.

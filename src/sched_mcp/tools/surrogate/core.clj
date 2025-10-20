@@ -85,7 +85,7 @@
   (tool-system/validate-required-params inputs [:project_id :question]))
 
 (defmethod tool-system/execute-tool :answer-question
-  [{:keys [project_id question]}]
+  [_ {:keys [project_id question]}]
   (let [pid project_id]
     (alog! (str "sur_answer project_id=" pid))
     (try

@@ -35,16 +35,13 @@
   {:response "🟠 We use a 3-vessel brewing system with separate mash tun, lauter tun, and kettle. Our fermentation typically takes 10-14 days at controlled temperatures."
    :project-id "craft-beer-surrogate-123"})
 
-(def mock-system-atom (atom {}))
-
 ;;; Tests for start-surrogate tool
 
 (deftest start-surrogate-tool-tests
-  (let [tool-config (sut/create-start-surrogate-tool mock-system-atom)]
+  (let [tool-config (sut/create-start-surrogate-tool)]
 
     (testing "tool creation"
-      (is (= :start-surrogate (:tool-type tool-config)))
-      (is (= mock-system-atom (:system-atom tool-config))))
+      (is (= :start-surrogate (:tool-type tool-config))))
 
     (testing "tool-name"
       (is (= "sur_start_expert" (tool-system/tool-name tool-config))))
@@ -157,11 +154,10 @@
 ;;; Tests for answer-question tool
 
 (deftest answer-question-tool-tests
-  (let [tool-config (sut/create-answer-question-tool mock-system-atom)]
+  (let [tool-config (sut/create-answer-question-tool)]
 
     (testing "tool creation"
-      (is (= :answer-question (:tool-type tool-config)))
-      (is (= mock-system-atom (:system-atom tool-config))))
+      (is (= :answer-question (:tool-type tool-config))))
 
     (testing "tool-name"
       (is (= "sur_answer" (tool-system/tool-name tool-config))))
@@ -180,7 +176,7 @@
         (is (= ["project_id" "question"] (:required schema)))))
 
     (testing "validate-inputs with valid inputs"
-      (let [valid-inputs {:project-id "craft-beer-surrogate-123"
+      (let [valid-inputs {:project_id "craft-beer-surrogate-123"
                           :question "What are your main processes?"}]
         (is (= valid-inputs
                (tool-system/validate-inputs tool-config valid-inputs)))))
@@ -192,7 +188,7 @@
       (is (thrown? clojure.lang.ExceptionInfo
                    (tool-system/validate-inputs
                     tool-config
-                    {:project-id "test"})))
+                    {:project_id "test"})))
 
       (is (thrown? clojure.lang.ExceptionInfo
                    (tool-system/validate-inputs
@@ -267,14 +263,13 @@
 
 (deftest create-sur-tools-test
   (testing "creates both surrogate tools"
-    (let [tools (sut/create-sur-tools mock-system-atom)]
+    (let [tools (sut/create-sur-tools)]
       (is (= 2 (count tools)))
       (is (= #{:start-surrogate :answer-question}
-             (set (map :tool-type tools))))
-      (is (every? #(= mock-system-atom (:system-atom %)) tools))))
+             (set (map :tool-type tools))))))
 
   (testing "tools can be registered"
-    (let [tools (sut/create-sur-tools mock-system-atom)
+    (let [tools (sut/create-sur-tools)
           registered (mapv tool-system/registration-map tools)]
       (is (= 2 (count registered)))
       (is (= #{"sur_start_expert" "sur_answer"}
@@ -292,8 +287,8 @@
                   suru/surrogate-answer-question
                   (constantly mock-answer-result)]
 
-      (let [start-tool (sut/create-start-surrogate-tool mock-system-atom)
-            answer-tool (sut/create-answer-question-tool mock-system-atom)]
+      (let [start-tool (sut/create-start-surrogate-tool)
+            answer-tool (sut/create-answer-question-tool)]
 
         ;; Start the expert
         (let [start-result (tool-system/execute-tool
@@ -322,7 +317,7 @@
                   (fn [{:keys [domain]}]
                     (assoc mock-start-result :domain domain))]
 
-      (let [tool-config (sut/create-start-surrogate-tool mock-system-atom)]
+      (let [tool-config (sut/create-start-surrogate-tool)]
         (doseq [domain ["craft-beer" "plate-glass" "metal-fabrication"
                         "textiles" "semiconductor" "pharmaceuticals"]]
           (let [result (tool-system/execute-tool
@@ -336,7 +331,7 @@
                   (constantly {:response (apply str (repeat 1000 "test "))
                                :project-id "test-123"})]
 
-      (let [tool-config (sut/create-answer-question-tool mock-system-atom)
+      (let [tool-config (sut/create-answer-question-tool)
             result (tool-system/execute-tool
                     tool-config
                     {:project_id "test-123"
@@ -349,7 +344,7 @@
                   (constantly {:response "We use <html> tags, \"quotes\", and 'apostrophes'"
                                :project-id "test-123"})]
 
-      (let [tool-config (sut/create-answer-question-tool mock-system-atom)
+      (let [tool-config (sut/create-answer-question-tool)
             result (tool-system/execute-tool
                     tool-config
                     {:project_id "test-123"

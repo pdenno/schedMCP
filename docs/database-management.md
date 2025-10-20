@@ -76,14 +76,6 @@ $SCHEDULING_TBD_DB/
 :ds/budget-remaining ; Questions left in budget
 ```
 
-### Mount Lifecycle
-
-```clojure
-(defstate system-and-project-dbs
-  :start (init-all-dbs!)
-  :stop (alog! "Shutting down database connections..."))
-```
-
 On `mount/start`:
 1. System database initialized (created if needed)
 2. All project databases discovered and registered

@@ -165,6 +165,7 @@
   "Initialize LLM subsystem"
   []
   ;; Load agent prompts
+  (sdb/ensure-system-db!) ; ToDo: For some reason, on clj -M:test, the system-db won't have been registered.
   (sdb/store-agent-prompt! :interviewer  "resources/agents/base-iviewr-instructions.md")
   ;; Verify credentials
   (when-not (api-credentials @default-provider)
