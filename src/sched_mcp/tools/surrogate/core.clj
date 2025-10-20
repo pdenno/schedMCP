@@ -6,19 +6,7 @@
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.util :refer [alog!]]))
 
-;;; Factory functions for creating tool configurations
-
-(defn create-start-surrogate-tool
-  "Creates the tool for starting a surrogate expert interview"
-  []
-  {:tool-type :start-surrogate})
-
-(defn create-answer-question-tool
-  "Creates the tool for getting answers from surrogate expert"
-  []
-  {:tool-type :answer-question})
-
-;;; Start Surrogate Tool
+;;;----- Start Surrogate Tool-----
 
 (defmethod tool-system/tool-name :start-surrogate [_]
   "sur_start_expert")
@@ -65,8 +53,7 @@
                    "\nExpert ID: " (:expert_id result))]
      :error false}))
 
-;;; Answer Question Tool
-
+;;;------ :answer-question tool
 (defmethod tool-system/tool-name :answer-question [_]
   "sur_answer")
 
@@ -99,30 +86,21 @@
            :expert_response (:response result)
            :project_id pid}))
       (catch Exception e
-        {:status "error"
-         :message (.getMessage e)}))))
+        {:status "error"  :message (.getMessage e)}))))
 
 (defmethod tool-system/format-results :answer-question [_ result]
-  (cond
-    (= "error" (:status result))
-    {:result [(str "Error: " (:message result))]
-     :error true}
-
-    (:expert_response result)
-    {:result [(json/write-str
-               {:message-type "surrogate-response"
-                :expert_response (:expert_response result)
-                :project_id (:project_id result)})]
-     :error false}
-
-    :else
-    {:result [(json/write-str result)]
-     :error false}))
-
-;;; Helper to create all surrogate tools
+  (cond (= "error" (:status result))    {:result [(str "Error: " (:message result))]
+                                         :error true}
+        (:expert_response result)       {:result [(json/write-str
+                                                   {:message-type "surrogate-response"
+                                                    :expert_response (:expert_response result)
+                                                    :project_id (:project_id result)})]
+                                         :error false}
+        :else                           {:result [(json/write-str result)]
+                                         :error false}))
 
 (defn create-sur-tools
-  "Create all surrogate tools"
+  "Return the tool configuration for each tool in this file."
   []
-  [(create-start-surrogate-tool)
-   (create-answer-question-tool)])
+  [{:tool-type :start-surrogate}
+   {:tool-type :answer-question}])

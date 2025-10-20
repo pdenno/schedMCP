@@ -50,6 +50,12 @@
           (log! :error msg)
           (throw (ex-info msg {})))))))
 
+(defn system-exists?
+  "Returns the eid of the object in the system DB with :system/name 'SYSTEM'.
+   This should be the single 'top-level' entity it the DB, but just in case..."
+  []
+  (d/q '[:find ?e . :where [?e :system/name "SYSTEM"]] @(connect-atm :system)))
+
 (defn ensure-system-db!
   "Ensure system database exists and is connected"
   []
@@ -163,6 +169,28 @@
                                                        :project/name project-name
                                                        :project/dir dir
                                                        :project/status :active}}]})))
+
+(defn get-current-project
+  "Get the current project from the system DB."
+  []
+  (d/q '[:find ?pid .
+         :where [_ :system/current-project ?pid]]
+       @(connect-atm :system)))
+
+;;; This temporarily sets current project to something else, for use in testing.
+;;; Note the :in-mem? = true projects are not added to the system.
+(defmacro ^:debug with-current-project
+  [[pid] & body]
+  `(let [old-pid# (get-current-project)
+         eid# (system-exists?)]
+     (try
+       (d/transact (connect-atm :system)
+                   {:tx-data [{:db/id eid# :system/current-project ~pid}]})
+       ~@body
+       (finally
+         (d/transact (connect-atm :system)
+                     {:tx-data [{:db/id eid# :system/current-project old-pid#}]})))))
+
 (defn ^:admin archive-project!
   "Archive a project"
   [pid]

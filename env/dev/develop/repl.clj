@@ -52,6 +52,7 @@ dutil/learn-schema!
    'sdb    'sched-mcp.system-db
    ;;'iview  'sched-mcp.tools.interview
    'orch   'sched-mcp.tools.orch.core
+   'orcht  'sched-mcp.tools.orch.core-test
    'itools 'sched-mcp.tools.iviewr-tools
    'sur    'sched-mcp.tools.surrogate.core
    'suru   'sched-mcp.tools.surrogate.sur-util

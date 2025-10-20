@@ -42,7 +42,7 @@
 ;;; Tests for get-next-ds tool
 
 (deftest get-next-ds-tool-tests
-  (let [tool-config (orch/create-get-next-ds-tool)]
+  (let [tool-config {:tool-type :get-next-ds}]
 
     (testing "tool creation"
       (is (= :get-next-ds (:tool-type tool-config))))
@@ -73,8 +73,8 @@
 
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"})]
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"})]
           (is (map? result))
           (is (contains? result :available_ds))
           (is (= 4 (:total_available result)))
@@ -88,8 +88,8 @@
       (with-redefs [sdb/system-DS? (fn [] (throw (Exception. "DB error")))]
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"})]
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"})]
           (is (contains? result :error))
           (is (re-find #"DB error" (:error result))))))
 
@@ -117,7 +117,7 @@
 ;;; Tests for start-ds-pursuit tool
 
 (deftest start-ds-pursuit-tool-tests
-  (let [tool-config (orch/create-start-ds-pursuit-tool)]
+  (let [tool-config {:tool-type :start-ds-pursuit}]
 
     (testing "tool creation"
       (is (= :start-ds-pursuit (:tool-type tool-config))))
@@ -143,10 +143,10 @@
 
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"
-                       :ds-id "process/warm-up-with-challenges"
-                       :budget 10})]
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"
+                       :ds_id "process/warm-up-with-challenges"
+                       :budget 1.0})]
           (is (map? result))
           (is (= "warm-up-with-challenges" (:ds_id result)))
           (is (= "Learn about manufacturing process and challenges"
@@ -158,9 +158,9 @@
       (with-redefs [sdb/get-DS-instructions (constantly "")]
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"
-                       :ds-id "nonexistent"})]
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"
+                       :ds_id "nonexistent"})]
           (is (contains? result :error))
           (is (re-find #"not found" (:error result))))))
 
@@ -169,8 +169,8 @@
                     pdb/put-active-DS-id (fn [& _] (throw (Exception. "DB error")))]
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"
                        :ds-id "process/warm-up-with-challenges"})]
           (is (contains? result :error))
           (is (re-find #"DB error" (:error result))))))
@@ -196,7 +196,7 @@
 ;;; Tests for complete-ds tool
 
 (deftest complete-ds-tool-tests
-  (let [tool-config (orch/create-complete-ds-tool)]
+  (let [tool-config {:tool-type :complete-ds}]
 
     (testing "tool creation"
       (is (= :complete-ds (:tool-type tool-config))))
@@ -233,8 +233,8 @@
                     pdb/get-active-DS-id (constantly nil)]
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"
-                       :conversation-id "conv-456"})]
+                      {:project_id "proj-123"
+                       :conversation_id "conv-456"})]
           (is (contains? result :error))
           (is (re-find #"No active DS" (:error result))))))
 
@@ -255,10 +255,8 @@
           (is (true? (:error formatted)))
           (is (re-find #"Complete failed" (first (:result formatted)))))))))
 
-;;; Tests for get-progress tool
-
 (deftest get-progress-tool-tests
-  (let [tool-config (orch/create-get-progress-tool)]
+  (let [tool-config {:tool-type :get-progress}]
 
     (testing "tool creation"
       (is (= :get-progress (:tool-type tool-config))))
@@ -279,7 +277,7 @@
 
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"})]
+                      {:project_id "proj-123"})]
           (is (map? result))
           (is (= 2 (:completed_ds result)))
           (is (= 4 (:total_ds result)))
@@ -291,7 +289,7 @@
                     (fn [& _] (throw (Exception. "Progress error")))]
         (let [result (tool-system/execute-tool
                       tool-config
-                      {:project-id "proj-123"})]
+                      {:project_id "proj-123"})]
           (is (contains? result :error))
           (is (re-find #"Progress error" (:error result))))))
 
@@ -312,11 +310,23 @@
           (is (true? (:error formatted)))
           (is (re-find #"Progress failed" (first (:result formatted)))))))))
 
-;;; Test for create-orchestrator-tools
-
-(deftest create-orchestrator-tools-test
-  (testing "creates all four orchestrator tools"
-    (let [tools (orch/create-orch-tools)]
-      (is (= 4 (count tools)))
-      (is (= #{:get-next-ds :start-ds-pursuit :complete-ds :get-progress}
-             (set (map :tool-type tools)))))))
+(deftest db-query-tests []
+  (testing "both {:tool-type :db-query} and {:tool-type :db-resolve-entity}"
+  (let [{:keys [pid]} (pdb/create-project-db! {:pid :temp/orch-tool-test
+                                               :project-name "Orch DB tool test"
+                                               :in-mem? true :force-replace? true})]
+    (sdb/with-current-project [pid]
+      (let [{:keys [status query-result]}
+            (tool-system/execute-tool
+             {:tool-type :db-query}
+             {:db_type "project"
+              :query_string "[:find ?e . :where [?e :conversation/status :in-progress]]"})]
+        (is (= status "success"))
+        (is (pos-int? query-result))
+        (let [{:keys [status query-result]}
+              (tool-system/execute-tool
+               {:tool-type :db-resolve-entity}
+               {:db_type "project"
+                :entity_id query-result})]
+          (is (= status "success"))
+          (is (= query-result #:conversation{:active-DS-id :process/warm-up-with-challenges, :id :process, :status :in-progress}))))))))

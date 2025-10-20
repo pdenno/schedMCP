@@ -14,26 +14,6 @@
    [sched-mcp.sutil :as sutil]
    [sched-mcp.util :refer [alog! log!]]))
 
-;;; Tool configurations
-(defn create-formulate-question-tool
-  "Creates the tool for formulating interview questions"
-  []
-  {:tool-type :formulate-question})
-
-(defn create-interpret-response-tool
-  "Creates the tool for interpreting responses"
-  []
-  {:tool-type :interpret-response})
-
-(defn create-get-current-ds-tool
-  "Creates the tool for getting current DS"
-  []
-  {:tool-type :get-current-ds})
-
-(defn create-conduct-interview-tool
-  "Creates the tool for conducting a complete interview autonomously"
-  []
-  {:tool-type :conduct-interview})
 
 ;;; Formulate Question Tool
 
@@ -440,9 +420,9 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
 ;;; Helper to create all interviewer tools
 
 (defn create-iviewr-tools
-  "Create all interviewer tools"
+  "Return a vector of the tool configurations for each tool in this file."
   []
-  [(create-formulate-question-tool)
-   (create-interpret-response-tool)
-   (create-get-current-ds-tool)
-   (create-conduct-interview-tool)])
+  [{:tool-type :formulate-question}
+   {:tool-type :interpret-response}
+   {:tool-type :get-current-ds}
+   {:tool-type :conduct-interview}])

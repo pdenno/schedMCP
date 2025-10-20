@@ -2,34 +2,13 @@
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
    [clojure.data.json :as json]
+   [clojure.edn :as edn]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.util :refer [alog! log!]]
    [datahike.api :as d]
-   [sched-mcp.sutil :refer [connect-atm]])) ; <================================================= FIX THIS
-
-;;; Tool configurations
-
-(defn create-get-next-ds-tool
-  "Creates the tool for recommending next DS"
-  []
-  {:tool-type :get-next-ds})
-
-(defn create-start-ds-pursuit-tool
-  "Creates the tool for starting DS pursuit"
-  []
-  {:tool-type :start-ds-pursuit})
-
-(defn create-complete-ds-tool
-  "Creates the tool for completing DS"
-  []
-  {:tool-type :complete-ds})
-
-(defn create-get-progress-tool
-  "Creates the tool for getting interview progress"
-  []
-  {:tool-type :get-progress})
+   [sched-mcp.sutil :as sutil :refer [connect-atm]]))
 
 ;;; Get Next DS Tool
 
@@ -321,33 +300,121 @@
                       result))]
      :error false}))
 
-;;; ========================================== DB Discovery tools
-(defmethod tool-system/tool-name :db_query [_]
-  "orch_db_query")
+;;; ========================================== DB tools for orchestrator decision support. ===
+
+;;; --------------- db_query -----------------------------------
+(defmethod tool-system/tool-name :db-query [_]
+  "db_query")
 
 (defmethod tool-system/tool-description :db-query [_]
-  "This should be rather long.")
+  (str "Make a datalog-style query against either the current project DB, or the system DB."
+       "For example, with `db_type`= `project` (running aginst the current project) and `query_string` = `[:find ?ds-id . :where [_ :project/active-DS-id ?ds-id]]`\n"
+       "you would obtain the project's active discovery schema.\n"
+       "Detailed instructions for using this tool are found in the resource orchestrator-use-of-databases.md"
+       "The project and system database schemas are found in the resource ")) ; <==========================================================
 
 (defmethod tool-system/tool-schema :db-query [_]
   {:type "object"
    :properties {:db_type {:type "string"
                           :description "either \"project\" or \"system\""}
                 :query_string {:type "string"
-                               :description "Datomic-style datalog query e.g. \"[:find ?pid :where [_ :system/current-project  ?pid]\"."}}
+                               :description "Datomic-style datalog query e.g. \"[:find ?pid :where [_ :system/current-project  ?pid]\" for project orchestration decisions."}}
    :required ["db_type" "query_string"]})
 
+;;; ToDo: Can/should this chceck for :db_type #{"project" "system"}?
 (defmethod tool-system/validate-inputs :db-query [_ inputs]
   (tool-system/validate-required-params inputs [:db_type :query_string]))
 
-;;; Not yet implemented!
-#_(defmethod tool-system/execute-tool :db-query)
+(defmethod tool-system/execute-tool :db-query
+  [_ {:keys [db_type query_string]}]
+  (try
+    (let [db-type (keyword db_type)
+          query (edn/read-string query_string)
+          id (if (= :system db-type)
+               :system
+               (sdb/get-current-project))]
+      (when-not (= :system id)
+        (when-not (pdb/project-exists? id)
+          (throw (ex-info "No such project" {:id id}))))
+      {:status "success"
+       :query-result (d/q query @(connect-atm id))})
+    (catch Exception e
+      (log! :error (str "Error in db-query: " (.getMessage e)))
+      {:status "error"
+       :message (str "Error in db-query: " (.getMessage e))})))
 
-;;; Helper to create all orchestrator tools
+(defmethod tool-system/format-results :db-query [_ result]
+  (if (= "error" (:status result))
+    {:result [(str "Error: " (:message result))]
+     :error true}
+    {:result [(json/write-str
+               {:query_result (:query-result result)})]
+     :error false}))
+
+;;; --------------- db_resolve_entity -----------------------------------
+
+(defmethod tool-system/tool-name :db-resolve_entity [_]
+  "db_resolve_entity")
+
+(defmethod tool-system/tool-description :db-resolve-entity [_]
+  (str "Resolve a database entity ID into the tree (Clojure map) of the information at and below that entity in the given database, either \"project\" or \"system\"'./n"
+       "It is typically used once you find the entity ID of interest using the tool db_query./n"
+       "Detailed instructions for using this tool are found in the resource orchestrator-use-of-databases.md"))
+
+(defmethod tool-system/tool-schema :db-resolve-entity [_]
+  {:type "object"
+   :properties {:entity_id {:type "integer", :minimum 1 :description "a database entity id (positive integer) typically found using the db_query tool"}
+                :db_type   {:type "string"
+                            :description "either \"project\" or \"system\" meaning the current project DB and system DB respectively"}
+                :keep-set  {:type "string"
+                            :description (str "a stringified Clojure Set of DB schema attribute keywords, for example \"#{:system/DS :DS/id}\".\n"
+                                              "The resulting tree will have only those branches (if those attributes can be reached from any active node in the tree).")}
+                :drop-set  {:type "string"
+                            :description (str "a stringified Clojure Set of DB schema attribute keywords, for example \"#{:db/id, :project/claims}\".\n"
+                                              "The resulting tree will not contain these branches named by these attributes.")}}
+   :required ["entity_id" "db_type"]})
+
+;;; ToDo: Can/should this chceck for :db_type #{"project" "system"}?
+(defmethod tool-system/validate-inputs :db-resolve-entity [_ inputs]
+  (tool-system/validate-required-params inputs [:db_type :entity_id]))
+
+(defmethod tool-system/execute-tool :db-resolve-entity
+  [_ {:keys [db_type entity_id keep_set drop_set]}]
+  (try
+    (assert integer? entity_id)
+    (let [db-type (keyword db_type)
+          id (if (= :system db-type)
+               :system
+               (sdb/get-current-project))]
+      (when-not (= :system id)
+        (when-not (pdb/project-exists? id)
+          (throw (ex-info "No such project" {:id id}))))
+      {:status "success"
+       :query-result (sutil/resolve-db-id
+                      {:db/id entity_id}
+                      (connect-atm id)
+                      (cond-> {}
+                        keep_set (assoc :keep-set (edn/read-string keep_set))
+                        drop_set (assoc :drop-set (edn/read-string drop_set))))})
+    (catch Exception e
+      (log! :error (str "Error in db-resolve-entity MCP tool: " (.getMessage e)))
+      {:status "error"
+       :message (str "Error in db-resolve-entity: " (.getMessage e))})))
+
+(defmethod tool-system/format-results :db-resolve-entity [_ result]
+  (if (= "error" (:status result))
+    {:result [(str "Error: " (:message result))]
+     :error true}
+    {:result [(json/write-str
+               {:query_result (:query-result result)})]
+     :error false}))
 
 (defn create-orch-tools
-  "Create all orchestrator tools"
+  "Return the tool configurations for each tool."
   []
-  [(create-get-next-ds-tool)
-   (create-start-ds-pursuit-tool)
-   (create-complete-ds-tool)
-   (create-get-progress-tool)])
+  [#_{:tool-type :get-next-ds} ; deprecated
+   {:tool-type :start-ds-pursuit}
+   #_{:tool-type :complete-ds} ; deprecated
+   #_{:tool-type :get-progress} ; deprecated
+   {:tool-type :db-query}
+   {:tool-type :db-resolve-entity}])
