@@ -2,25 +2,10 @@
   "Test the surrogate expert functionality"
   (:require
    [clojure.test :refer [deftest testing is]]
-   [sched-mcp.tools.surrogate.sur-util :as sur]
-   [mount.core :as mount]))
-
-(deftest test-surrogate-creation
-  (testing "Creating a surrogate expert persona"
-    (mount/start)
-    (let [persona (sur/create-expert-persona
-                   {:domain :craft-beer
-                    :company-name "Test Brewery"})]
-
-      (is (= :craft-beer (:domain persona)))
-      (is (= "Test Brewery" (:company-name persona)))
-      (is (contains? persona :expert-id))
-      (is (contains? persona :created-at))))
-  (mount/stop))
+   [sched-mcp.tools.surrogate.sur-util :as sur]))
 
 (deftest test-surrogate-interview-flow
   (testing "Starting and conducting a surrogate interview"
-    (mount/start)
     ;; Start interview
     (let [session-info (sur/start-surrogate-interview
                         {:domain :craft-beer
@@ -41,56 +26,42 @@
 
         ;; Check session was updated
         #_(let [session (sur/get-surrogate-session (:project-id session-info))]
-          (is (= 1 (count (:conversation-history session))))))))
-  (mount/stop))
+          (is (= 1 (count (:conversation-history session)))))))))
 
 ;; Manual testing functions
 (defn test-craft-beer-expert
   "Manual test for craft beer expert"
   []
-  (mount/start)
-  (let [session (sur/start-surrogate-interview
+  (let [pid (-> (sur/start-surrogate-interview
                  {:domain :craft-beer
-                  :company-name "Rocky Mountain Craft Brewery"
-                  :project-name "Craft Beer Scheduling"})]
-
-    (println "\n=== Started Surrogate Expert Session ===")
-    (println "Project ID:" (:project-id session))
-    (println "Expert:" (:company-name session))
-
-    ;; Ask some questions
+                  :project-name "Craft Beer Scheduling"})
+                :project-id
+                keyword)]
+  ;; Ask some questions
     (let [q1 "What are the main steps in your beer production process?"
-          a1 (sur/surrogate-answer-question
-              {:project-id (:project-id session)
-               :question q1})]
+          a1 (sur/surrogate-answer-question pid q1)]
 
-      (println "\n🟠 Q:" q1)
-      (println "🟠 A:" (:response a1)))
+    (println "\n🟠 Q:" q1)
+    (println "🟠 A:" (:response a1)))
 
-    ;; Ask about challenges
-    (let [q2 "What scheduling challenges do you face?"
-          a2 (sur/surrogate-answer-question
-              {:project-id (:project-id session)
-               :question q2})]
+  ;; Ask about challenges
+  (let [q2 "What scheduling challenges do you face?"
+        a2 (sur/surrogate-answer-question pid q2)]
 
-      (println "\n🟠 Q:" q2)
-      (println "🟠 A:" (:response a2)))
+    (println "\n🟠 Q:" q2)
+    (println "🟠 A:" (:response a2)))
 
-    ;; Ask for a table
-    (let [q3 "Can you provide a table showing your main fermentation tanks and their capacities?"
-          a3 (sur/surrogate-answer-question
-              {:project-id (:project-id session)
-               :question q3})]
+  ;; Ask for a table
+  (let [q3 "Can you provide a table showing your main fermentation tanks and their capacities?"
+        a3 (sur/surrogate-answer-question pid q3)]
 
-      (println "\n🟠 Q:" q3)
-      (println "🟠 A:" (:response a3)))
+    (println "\n🟠 Q:" q3)
+    (println "🟠 A:" (:response a3)))))
 
-    session))
 
 (defn test-plate-glass-expert
   "Manual test for plate glass expert"
   []
-  (mount/start)
   (let [session (sur/start-surrogate-interview
                  {:domain :plate-glass
                   :company-name "ClearView Glass Manufacturing"

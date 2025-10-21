@@ -114,35 +114,24 @@
   (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
 
 (defmethod tool-system/execute-tool :start-ds-pursuit
-  [_ {:keys [project_id conversation_id ds_id budget]}]
+  [_ {:keys [project_id conversation_id ds_id budget] :or {budget 1.0}}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
-        ds (sdb/get-DS-instructions ds-id)
-        budget (or budget 1.0)]
-    (alog! (str "orch_start_ds_pursuit " pid " " cid " " ds-id))
+        ds (sdb/get-DS-instructions ds-id)]
+    (log! :info (str "orch_start_ds_pursuit " pid " " cid " " ds-id))
     (if (= ds "") ; get-DS-instructions returns empty string when not found
       {:error (str "Discovery Schema not found: " ds_id)}
       (try
         ;; Set the DS as active for this conversation
         (pdb/put-active-DS-id pid cid ds-id)
-
         ;; Initialize ASCR if it doesn't exist
         (when-not (pdb/ASCR-exists? pid ds-id)
-          (pdb/init-ASCR! pid ds-id)
-          ;; Set initial budget
-          (let [conn (connect-atm pid)
-                ascr-eid (d/q '[:find ?e .
-                                :in $ ?ds-id
-                                :where [?e :ascr/id ?ds-id]]
-                              @conn ds-id)]
-            (d/transact conn [{:db/id ascr-eid
-                               :ascr/budget-left (double budget)}])))
-
+          (pdb/init-ASCR! pid ds-id))
         ;; Return info about the DS
         {:ds_id (name ds-id)
          :interview_objective (:interview-objective ds)
-         :ds_template (:DS ds) ; The DS structure itself, not nested under EADS
+         :ds_template (:DS ds)
          :budget budget
          :status "Started DS pursuit"}
         (catch Exception e
@@ -411,7 +400,7 @@
   "Return the tool configurations for each tool."
   []
   [#_{:tool-type :get-next-ds} ; deprecated
-   {:tool-type :start-ds-pursuit}
+   #_{:tool-type :start-ds-pursuit} ; deprecated
    #_{:tool-type :complete-ds} ; deprecated
    #_{:tool-type :get-progress} ; deprecated
    {:tool-type :db-query}

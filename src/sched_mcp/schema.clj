@@ -178,7 +178,7 @@
    :message/table
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "An optional table that is the response, or part of the response of a user, or is produced by an interviewer.."}
-   :message/time
+   :message/timestamp
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/instant
         :doc "The time at which the message was sent."}
 
@@ -228,13 +228,16 @@
         :doc "Aggregated Schema-Conforming Responses indexed by their DS-id, :ascr/id."}
    :project/surrogate
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/ref
-        :doc "the project's surrogate object, if any."}
-   :project/surrogate? ; ToDo: Not used?
-   #:db{:cardinality :db.cardinality/one, :valueType :db.type/boolean
-        :doc "true if domain expertise is provided by an artificial agent."}
+        :doc "the project's surrogate expert object, if any."}
    :project/tables
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/ref
-        :doc "true if domain expertise is provided by an artificial agent."}})
+        :doc "true if domain expertise is provided by an artificial agent."}
+
+   ;; --------------- surrogate
+   :surrogate/system-instruction
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+        :doc "the system instruction to the expert surrogate."}})
+
 
 (def db-schema-sys
   "Complete system database schema as Datahike schema list"

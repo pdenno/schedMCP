@@ -140,18 +140,11 @@
   [state]
   (let [istate (istate/agent-state->interview-state state)
         {:keys [messages pid]} istate
-        last-question (when (seq messages)
-                        (:content (last messages)))
-
-        ;; Call surrogate expert
-        result (suru/surrogate-answer-question
-                {:project-id pid
-                 :question last-question})
-
+        last-question (when (seq messages) (:content (last messages)))
+        result (suru/surrogate-answer-question pid last-question)
         answer-text (if (:error result)
                       (str "Error: " (:error result))
                       (:response result))]
-
     (log! :info (str "LangGraph got answer from surrogate for " pid))
     (istate/add-message :surrogate answer-text)))
 

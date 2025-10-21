@@ -422,7 +422,7 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
 (defn create-iviewr-tools
   "Return a vector of the tool configurations for each tool in this file."
   []
-  [{:tool-type :formulate-question}
-   {:tool-type :interpret-response}
-   {:tool-type :get-current-ds}
+  [#_{:tool-type :formulate-question}
+   #_{:tool-type :interpret-response}
+   #_{:tool-type :get-current-ds}
    {:tool-type :conduct-interview}])

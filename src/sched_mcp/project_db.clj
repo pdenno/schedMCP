@@ -77,9 +77,8 @@
 ;;; If the property is cardinality many, it will add values, not overwrite them.
 (defn add-msg!
   "Create a message object and add it to current conversation of the database with :project/id = id.
-   Return the :message/id.
-   Note that this doesn't handle :message/answers-question. That is typically done with update-msg."
-  [{:keys [pid cid from content table code tags pursuing-DS]}]
+   Return the :message/id."
+  [{:keys [pid cid from content table code tags pursuing-DS answers-question]}]
   (assert (keyword? cid))
   (assert (#{:system :human :surrogate :developer-injected} from))
   (assert (string? content))
@@ -87,11 +86,12 @@
   (if-let [conn (connect-atm pid)]
     (let [msg-id (inc (max-msg-id pid))]
       (d/transact conn {:tx-data [{:db/id (conversation-exists? pid cid)
-                                   :conversation/messages (cond-> #:message{:id msg-id :from from :time (now) :content content}
-                                                            table (assoc :message/table (str table))
-                                                            (not-empty tags) (assoc :message/tags tags)
-                                                            pursuing-DS (assoc :message/pursuing-DS pursuing-DS)
-                                                            code (assoc :message/code code))}]})
+                                   :conversation/messages (cond-> #:message{:id msg-id :from from :timestamp (now) :content content}
+                                                            table             (assoc :message/table (str table))
+                                                            (not-empty tags)  (assoc :message/tags tags)
+                                                            pursuing-DS       (assoc :message/pursuing-DS pursuing-DS)
+                                                            code              (assoc :message/code code)
+                                                            answers-question  (assoc :message/answers-question))}]})
       msg-id)
     (throw (ex-info "Could not connect to DB." {:pid pid}))))
 
@@ -118,12 +118,11 @@
                               :where
                               [?m :message/id ?mid]
                               [?m :message/from :system]
-                              [?m :message/time ?time]
+                              [?m :message/timestamp ?time]
                               [?c :conversation/id ?cid]
                               [?c :conversation/messages ?m]
                              ;; Not answered yet - no message has this as answers-question
-                              (not-join [?mid]
-                                        [_ :message/answers-question ?mid])]
+                              (not-join [?mid] [_ :message/answers-question ?mid])]
                             @conn cid)]
       ;; Get the most recent unanswered question
       (when (seq unanswered-q)
@@ -212,6 +211,7 @@
       (log! :info (str "Deleting existing database for: " pid))
       (d/delete-database cfg))))
 
+;;; ToDo: Write clojure spec for whole projects!
 (def conversation-defaults
   [{:conversation/id :process
     :conversation/active-DS-id :process/warm-up-with-challenges ; We assume things start here.
@@ -227,9 +227,12 @@
   "Create a new project in the system database and initialize its database to start with DS = :process/warm-up-with-challenges.
    Options:
    - :force-replace? - if true, delete existing project with same ID
+   - :additional-info is a map with project-level info to be merged (taking precedence) with the original content created here,
+     for example {:project/surrogate {:surrogate/system-instruction 'blah, blah...'}}.
    Returns a unique PID (might not be same as the argument)."
   [{:keys [pid project-name _domain cid force-replace? in-mem? additional-info]
     :or {project-name "Unnamed project"
+         additional-inf {}
          cid :process}}]
   (log! :info (str "Creating project: " pid))
   (assert (#{:process :data :resources :optimality} cid))
@@ -259,11 +262,9 @@
                                                      :project/claims [{:claim/string (str `(~'project-id ~pid))}
                                                                       {:claim/string (str `(~'project-name ~pid ~project-name))}]
                                                      :project/conversations conversation-defaults}
-                                              in-mem? (into {:project/in-memory? true})
-                                              true vector)})
-    (when (not-empty additional-info)
-      (d/transact (connect-atm pid) additional-info))
-     ;; Add knowledge of this project to the system db.
+                                              (not-empty additional-info)  (merge additional-info)
+                                              in-mem?                      (into {:project/in-memory? true})
+                                              true                         vector)})
     (log! :info (str "Created project database for " pid))
     {:pid (reset! diag pid)
      :cid cid

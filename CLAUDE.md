@@ -33,7 +33,7 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
 - Whenever you do create such functions or data that is not intended to be part of the system but is used soley for demo, tell the user you are doing that.
 
 ### Data Management
-- **Prefer atoms** to dynamic variable for persistent state.
+- **Prefer atoms** to dynamic variable for persistent state. 
   ```clojure
   ;;; Good
   (def mock? (atom false))
@@ -41,6 +41,8 @@ Even when started from Claude, the developer can nREPL-connect to the running sy
   ;;; Avoid
   (def ^:dynamic *mock-enabled* false)
   ```
+- **Prefer the Project DB to atoms** Avoid creating atoms where project state is concerned. Use the functions in `src/sched_mcp/project_db.clj`. 
+   Write a new utility for `project_db.clj` if necessary.
 - **Isolate use of Datahike to a few files** There is pretty much nothing persistent that doesn't belong in code, the system DB, or a project DB.
   Therefore, avoid writing Datahike queries and pulls in all files except `src/sched_mcp/system_db.clj`, `src/sched_mcp/project_db.clj`, and `src/sched_mcp/sutil.clj`.
 - Whenever you need state information, look into those files and see if something there is appropriate, if not, add a function to whichever of the three above is appropriate.
