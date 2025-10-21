@@ -43,9 +43,7 @@
     "\n"
     " 'What are the products you make or the services you provide, and what is the scheduling challenge involving them? Please describe in a few sentences.' \n"
     "\n"
-    "But remember, you don't ask that question until you receive a SUPPLY-QUESTION message!\n"
-    "The correct response to an DS-INSTRUCTIONS message such as this one is always, {\"message-type\": \"STATUS\", \"status\": \"OK\"}.\n"
-    "Completing the DS (responding with a complete DATA-STRUCTURE-REFINEMENT message) may require more than just that one question, however.\n"
+    "Completing this DS may require more than just that one question.\n"
     "Examine the DS to determine what other questions you may wish to ask.\n")
    :DS {:DS-id :process/warm-up-with-challenges
         :scheduling-challenges
@@ -137,7 +135,6 @@
   []
   (if (s/valid? :warm-up-with-challenges/DS-message warm-up-with-challenges)
     (when-not (sdb/same-DS-instructions? warm-up-with-challenges)
-      ;(sutil/update-resources-DS-json! warm-up-with-challenges)
       (sdb/put-DS-instructions! warm-up-with-challenges))
     (throw (ex-info "Invalid DS message (warm-up-with-challenges)." {}))))
 

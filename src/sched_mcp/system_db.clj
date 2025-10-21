@@ -74,11 +74,12 @@
 (defn put-DS-instructions!
   "Update the system DB with a (presumably) new version of the argument DS instructions.
    Of course, this is a development-time activity."
-  [{:keys [DS budget-decrement] :as ds-instructions}]
+  [{:keys [DS budget-decrement interview-objective] :as ds-instructions}]
   (let [id (:DS-id DS)
         db-obj {:DS/id id
+                :DS/interview-objective interview-objective
                 :DS/budget-decrement (or budget-decrement 0.05)
-                :DS/msg-str (str ds-instructions)}
+                :DS/obj-str (str ds-instructions)}
         conn (connect-atm :system)
         eid (d/q '[:find ?e . :where [?e :system/name "SYSTEM"]] @conn)]
     (log! :info (str "Writing DS instructions to system DB: " id))
@@ -90,8 +91,10 @@
 (defn same-DS-instructions?
   "Return true if the argument ds-instructions (an EDN object) is exactly what the system already maintains."
   [ds-instructions]
-  (let [id (-> ds-instructions :DS :DS-id)]
-    (= ds-instructions (get-DS-instructions id))))
+  (let [id (-> ds-instructions :DS :DS-id)
+        db-ds (get-DS-instructions id)]
+    (= ds-instructions db-ds))
+  false) ;<================================== temporary
 
 (defn ^:admin update-all-DS-json!
   "Copy JSON versions of the system DB's DS instructions to the files in resources/agents/iviewrs/DS."
@@ -227,7 +230,7 @@
                     :in $ ?ds-id
                     :where
                     [?e :DS/id ?ds-id]
-                    [?e :DS/msg-str ?str]]
+                    [?e :DS/obj-str ?str]]
                   @(connect-atm :system) ds-id)]
     (-> s edn/read-string (dissoc :message-type))
     (throw (ex-info "No such discovery-schema" {:ds-id ds-id}))))

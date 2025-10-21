@@ -141,7 +141,6 @@
   []
   (if (s/valid? :job-shop-u/DS-message job-shop-u)
     (when-not (sdb/same-DS-instructions? job-shop-u)
-      ;(sutil/update-resources-DS-json! job-shop-u)
       (sdb/put-DS-instructions! job-shop-u))
     (throw (ex-info "Invalid DS message (job-shop-u)." {}))))
 

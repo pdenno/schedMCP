@@ -125,7 +125,6 @@
   []
   (if (s/valid? :scheduling-problem-type/DS-message scheduling-problem-type)
     (when-not (sdb/same-DS-instructions? scheduling-problem-type)
-      ;(sutil/update-resources-DS-json! scheduling-problem-type)
       (sdb/put-DS-instructions! scheduling-problem-type))
     (throw (ex-info "Invalid DS message (scheduling-problem-type)." {}))))
 

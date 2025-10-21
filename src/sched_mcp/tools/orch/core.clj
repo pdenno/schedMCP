@@ -347,13 +347,12 @@
   (if (= "error" (:status result))
     {:result [(str "Error: " (:message result))]
      :error true}
-    {:result [(json/write-str
-               {:query_result (:query-result result)})]
+    {:result [(json/write-str {:query_result (:query-result result)})]
      :error false}))
 
 ;;; --------------- db_resolve_entity -----------------------------------
 
-(defmethod tool-system/tool-name :db-resolve_entity [_]
+(defmethod tool-system/tool-name :db-resolve-entity [_]
   "db_resolve_entity")
 
 (defmethod tool-system/tool-description :db-resolve-entity [_]
@@ -393,7 +392,7 @@
        :query-result (sutil/resolve-db-id
                       {:db/id entity_id}
                       (connect-atm id)
-                      (cond-> {}
+                      (cond-> {:drop-set #{}}
                         keep_set (assoc :keep-set (edn/read-string keep_set))
                         drop_set (assoc :drop-set (edn/read-string drop_set))))})
     (catch Exception e
@@ -405,8 +404,7 @@
   (if (= "error" (:status result))
     {:result [(str "Error: " (:message result))]
      :error true}
-    {:result [(json/write-str
-               {:query_result (:query-result result)})]
+    {:result [(json/write-str {:query_result (:query-result result)})]
      :error false}))
 
 (defn create-orch-tools

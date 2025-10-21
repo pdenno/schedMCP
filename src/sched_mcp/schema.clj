@@ -24,9 +24,12 @@
    :DS/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
         :doc "A unique ID for each Discovery Schema. The namespace of the keyword is the cid, e.g. :process/flow-shop."}
-   :DS/msg-str
+   :DS/interview-objective
+      #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+        :doc "The objective of interviewing with this DS, (the string is also part of :DS/obj-str, but using this attribute, you can get just the objective, without all the detail."}
+   :DS/obj-str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
-        :doc "The stringified message object, it can be edn/read-string. It is the EDN version of the JSON in resources used by ork."}
+        :doc "The stringified clojure object, it can be edn/read-string. It is the EDN version of the JSON used by the orchestrator"}
    :DS/can-produce-visuals
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/keyword
         :doc "Indicates the purpose and instructions given."}
