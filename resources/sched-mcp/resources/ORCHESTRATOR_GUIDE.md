@@ -14,11 +14,11 @@ Interviews involve three personas:
 ### The Project's Project Database is Central to Your Work
 
 Your job is to orchestrate interactions between the interviewees and the system, collecting their requirements, building a solution, and explaining it.
-The decisions you make in your orchestration effort are founded on what you learn about the project from the project and system DBs.
+The decisions you make in your orchestration effort are founded on what you learn about the project's current state from the project and system DBs.
 The details of querying these DBs are described below in section `Querying the DBs`, but first let's finish discussing key concepts.
 
 ### Discovery Schema (DS)
-DS are structured templates that guide interview information collection on specific topics. They are found in the system DB.  Examples:
+DS are structured templates that guide interview information collection on specific topics. They are found in the `system DB`.  Examples:
 - `process/warm-up-with-challenges` - Initial exploration
 - `process/flow-shop` - Flow-shop scheduling details
 - `data/orm` - Object-Role Modeling
@@ -27,7 +27,7 @@ DS are structured templates that guide interview information collection on speci
 SCRs are structured data extracted from a single interview response that conforms to the DS template.
 
 ### Aggregated Schema-Conforming Response (ASCR)
-Combined SCRs representing the complete state of information collected for a DS.
+ASCRs merge content from SCRs, thus representing the complete state of information collected for a DS.
 
 ### Conversation ID
 Interviews are organized by topic. The `conversation_id` is one of:
@@ -114,7 +114,7 @@ You could get the interview object, `:DS/interview-objective`, or the whole stri
  ```
 Notes about the example above:
 - We bound `?e` in the first triple so that the query would only match the `:process/warm-up-with-challenges` entity in the system DB. Notice from the schema that `:DS/id` is `:unique :db.unique/identity`
-  That means that the DB can only contain one entity with the `:DS/id` and that writing to it updates this entity.
+  That means that the DB can only contain one entity with the `:DS/id` specified and that writing to it updates this entity.
 - Notice that we used `[:find ?objective .`, the `.` means just return the first match. Of course, here there is only one because of the uniqueness constraint.
 
 ### The `db_resolve-entity` tool
@@ -139,9 +139,9 @@ Notes about the example above:
 #### STEP 2: Use `db_resolve_entity` to retrieve the tree under entity-id 45.
 
 ```javascript
-   db_query({"db_type" : "project",
-			 "entity_id" : 45,
-			 "drop_set" "#{:project/conversations}"})
+   db_resolve_entity({"db_type" : "project",
+			          "entity_id" : 45,
+                      "drop_set" "#{:project/conversations}"})
 
 {
   "status" : "success",
@@ -173,8 +173,8 @@ Notes about the example above:
 }
 ```
 Notes about this example:
-- Entity-id 45 is the **one** project entity in the DB, so what is returned is more than you wanted.
-- The call included   `"drop_set"` =  `"#{:project/conversations}"` so that, at least the `:project/conversations` subtree was not included, the rest of the project was.
+- Entity-id 45 is the **one** project entity in the project DB. Everything related to the project, including the `:project/ASCRs` you were interested in, but also a lot more!
+- The call included   `"drop_set"` =  `"#{:project/conversations}"` so that at least the `:project/conversations` subtree was not included; the rest of the project was.
 - `db/id` are included in this result; they can be useful for subsequent calls, but if you don't want them, include `:db/id` in the `drop_set`.
 - There is also optional parameter `keep_set`. As you work with the `db_resolve_entity` tool or study the schema, you might learn ways to minimize verbosity.
   In this case,  `"drop_set` = `"#{:project/conversations :db/id}"`, `keep_set` =  `"#{:project/ASCRs :ascr/str}` produces the following concise result:
