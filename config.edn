@@ -1,7 +1,6 @@
 {:port 7888
 
- ;;-------------- Resources
- :resources ; ToDo: These aren't at all what I want. This was already performed by clojure-mcp.
+ ;;-------------- Resources (There is also dynamically created DB_SCHEMA.md.)
  {"PROJECT_SUMMARY.md"
   {:description "SchedMCP project summary document providing LLM context about the manufacturing scheduling interview system and its MCP components"
    :file-path "PROJECT_SUMMARY.md"}

@@ -87,11 +87,11 @@
     (let [msg-id (inc (max-msg-id pid))]
       (d/transact conn {:tx-data [{:db/id (conversation-exists? pid cid)
                                    :conversation/messages (cond-> #:message{:id msg-id :from from :timestamp (now) :content content}
-                                                            table             (assoc :message/table (str table))
-                                                            (not-empty tags)  (assoc :message/tags tags)
-                                                            pursuing-DS       (assoc :message/pursuing-DS pursuing-DS)
-                                                            code              (assoc :message/code code)
-                                                            answers-question  (assoc :message/answers-question))}]})
+                                                            table (assoc :message/table (str table))
+                                                            (not-empty tags) (assoc :message/tags tags)
+                                                            pursuing-DS (assoc :message/pursuing-DS pursuing-DS)
+                                                            code (assoc :message/code code)
+                                                            answers-question (assoc :message/answers-question answers-question))}]})
       msg-id)
     (throw (ex-info "Could not connect to DB." {:pid pid}))))
 
@@ -262,9 +262,9 @@
                                                      :project/claims [{:claim/string (str `(~'project-id ~pid))}
                                                                       {:claim/string (str `(~'project-name ~pid ~project-name))}]
                                                      :project/conversations conversation-defaults}
-                                              (not-empty additional-info)  (merge additional-info)
-                                              in-mem?                      (into {:project/in-memory? true})
-                                              true                         vector)})
+                                              (not-empty additional-info) (merge additional-info)
+                                              in-mem? (into {:project/in-memory? true})
+                                              true vector)})
     (log! :info (str "Created project database for " pid))
     {:pid (reset! diag pid)
      :cid cid

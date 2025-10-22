@@ -180,9 +180,9 @@
          :where [_ :system/current-project ?pid]]
        @(connect-atm :system)))
 
-;;; This temporarily sets current project to something else, for use in testing.
-;;; Note the :in-mem? = true projects are not added to the system.
 (defmacro ^:debug with-current-project
+  "Temporarily sets :system/current-project to something else, for use in testing.
+   (For use with :in-mem? = true projects; they are not added to the system DB.)"
   [[pid] & body]
   `(let [old-pid# (get-current-project)
          eid# (system-exists?)]

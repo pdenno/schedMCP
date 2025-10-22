@@ -68,8 +68,8 @@
   []
   (binding [*out* *err*]
     ;; Remove any default console handler that might exist
-    (tel/remove-handler! :default/console)
-    (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn}))
+    (tel/remove-handler! :default/console) ; ToDo: Guessing on :stacktraces true
+    (tel/add-handler! :default/console (tel/handler:console {:stream *err* :output-fn custom-console-output-fn :stacktraces true}))
     (tel/add-handler! :agent/log (tel/handler:file {:output-fn agents-log-output-fn
                                                     :path "./logs/agents-log.edn"
                                                     :interval :daily}))

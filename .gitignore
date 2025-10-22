@@ -31,9 +31,10 @@ resources/js
 public/js
 js
 clj
-
+LAST_SESSION.md
 node_modules/
 .shadow-cljs/
+.clojure-mcp/
 node_modules/
 resources/public/js/
 

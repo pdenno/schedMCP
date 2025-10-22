@@ -56,7 +56,7 @@
 ;;; This is called by the MCP tool, start_surrogate_expert.
 (defn start-surrogate-interview
   "Start an interview with a surrogate expert. Creates a new project too."
-  [{:keys [domain project-name] :or {project-name "Test Manufacturing"}}]
+  [{:keys [domain project-name in-mem?] :or {project-name "Test Manufacturing"}}]
   (log! :info (str "Starting surrogate interview for " domain))
   (let [pid (as-> domain ?s ;; Create project with sur- prefix and force replace
               (name ?s) ; Convert keyword to string
@@ -69,6 +69,7 @@
                        {:pid pid
                         :project-name (or project-name (str "Surrogate " (name domain) " Interview"))
                         :force-replace? true
+                        :in-mem? in-mem?
                         :additional-info {:project/surrogate
                                           {:surrogate/system-instruction (system-instruction domain)}}})]
     (pdb/add-claim! pid (list 'surrogate pid))
@@ -227,7 +228,7 @@
         q-table (separate-table question)
         a-table (separate-table response)]
     ;; ToDo: Does the response answer the question? LangGraph stuff should know???
-    (let [q-msg-id (pdb/add-msg! {:pid pid :cid cid :content question :table q-table})]
-      (pdb/add-msg! {:pid pid :cid cid :content response :table a-table :answers-question q-msg-id}))
+    (let [q-msg-id (pdb/add-msg! {:pid pid :cid cid :content question :table q-table :from :system})]
+      (pdb/add-msg! {:pid pid :cid cid :content response :table a-table :from :surrogate :answers-question q-msg-id}))
     (log! :info (str "Surrogate responds: " response))
     {:response response}))

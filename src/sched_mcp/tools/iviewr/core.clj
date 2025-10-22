@@ -2,259 +2,15 @@
   "Core interviewer tools for Discovery Schema based interviews
    These tools use LLMs to formulate questions and interpret responses"
   (:require
-   [clojure.string :as str]
    [clojure.data.json :as json]
-   [sched-mcp.interviewing.ds-util :as dsu]
-   [sched-mcp.llm :as llm]
    [sched-mcp.project-db :as pdb]
-   [sched-mcp.system-db :as sdb]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.interviewing.interview-graph :as igraph]
    [sched-mcp.interviewing.interview-state :as istate]
-   [sched-mcp.sutil :as sutil]
    [sched-mcp.util :refer [alog! log!]]))
 
-
-;;; Formulate Question Tool
-
-(defmethod tool-system/tool-name :formulate-question [_]
-  "iviewr_formulate_question")
-
-(defmethod tool-system/tool-description :formulate-question [_]
-  "Generate contextually appropriate interview questions based on Discovery Schema and current ASCR.
-This tool uses LLM reasoning to create natural questions that gather required information.")
-
-(defmethod tool-system/tool-schema :formulate-question [_]
-  {:type "object"
-   :properties {:project_id tool-system/project-id-schema
-                :conversation_id tool-system/conversation-id-schema
-                :ds_id tool-system/ds-id-schema}
-   :required ["project_id" "conversation_id" "ds_id"]})
-
-(defmethod tool-system/validate-inputs :formulate-question [_ inputs]
-  (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
-
-(defmethod tool-system/execute-tool :formulate-question
-  [_ {:keys [project_id conversation_id ds_id]}]
-  (let [pid (keyword project_id)
-        cid (keyword conversation_id)
-        ds-id (keyword ds_id)
-        ds-instructions (sdb/get-DS-instructions ds-id)
-        ;; Get current ASCR
-        {:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
-        ascr (or dstruct {})] ; dstruct is already a map, not a string
-    (alog! (str "iviewr_formulate_question " pid " " cid " " ds-id))
-
-    (try
-      ;; Build conversation history in the format expected by the prompt
-      (let [conversation (pdb/get-conversation pid cid)
-            message-history (mapv (fn [msg]
-                                    (cond
-                                      (= (:message/from msg) :system)
-                                      {:interviewer (:message/content msg)}
-                                      (#{:human :surrogate} (:message/from msg))
-                                      {:expert (:message/content msg)}
-                                      :else nil))
-                                  (:conversation/messages conversation))
-            message-history (remove nil? message-history)
-            prompt (dsu/formulate-question-prompt
-                    {:ds-instructions  ds-instructions
-                     :ascr ascr
-                     :message-history message-history
-                     :budget-remaining budget-left})
-            result (llm/complete-json prompt :model-class :chat)
-            ;; Extract question from the expected format
-            question-text (get result :question-to-ask (:question result))
-            ;; Store the question as a message
-            question-mid (pdb/add-msg! {:pid pid
-                                        :cid cid
-                                        :from :system
-                                        :content question-text
-                                        :pursuing-DS ds-id})]
-        (log! :info (str "Generated question for " ds-id " in " conversation_id " with mid " question-mid))
-        {:question {:id question-mid ; Use the actual message ID
-                    :text question-text
-                    :ds_id (name ds-id)
-                    :help (or (:help result)
-                              "Provide detailed information to help complete the schema")}
-         :context {:ds_objective (:interview-objective ds-instructions) ; Use Clojure data structure
-                   :fields_remaining (if ascr
-                                       (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
-                                         (- (count (keys ds-fields))
-                                            (count (keys ascr))))
-                                       (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
-                                         (count (keys ds-fields))))
-                   :ascr_summary (if (empty? ascr)
-                                   "No data collected yet"
-                                   (str (count ascr) " fields filled"))
-                   :budget_remaining budget-left
-                   :rationale (:rationale result)
-                   :targets (:targets result)}})
-      (catch Exception e
-        (log! :error (str "LLM error in formulate-question: " (.getMessage e)))
-        ;; Fallback to simple question
-        (let [fallback-text "Can you tell me more about your process?"
-              fallback-mid (pdb/add-msg! {:pid pid
-                                          :cid cid
-                                          :from :system
-                                          :content fallback-text
-                                          :pursuing-DS ds-id})]
-          {:question {:id fallback-mid
-                      :text fallback-text
-                      :ds_id (name ds-id)
-                      :help "Describe the steps involved in your production process"}
-           :context {:ds_objective (:interview-objective ds-instructions)
-                     :fields_remaining (let [ds-fields (dissoc (:DS ds-instructions) :DS-id)]
-                                         (count (keys ds-fields)))
-                     :error_fallback true}})))))
-
-(defmethod tool-system/tool-name :interpret-response [_]
-  "iviewr_interpret_response")
-
-(defmethod tool-system/tool-description :interpret-response [_]
-  "Interpret a natural language answer into a Schema-Conforming Response (SCR). This tool uses LLM reasoning to extract structured data from conversational responses.")
-
-(defmethod tool-system/tool-schema :interpret-response [_]
-  {:type "object"
-   :properties {:project_id tool-system/project-id-schema
-                :conversation_id tool-system/conversation-id-schema
-                :ds_id tool-system/ds-id-schema
-                :answer {:type "string"
-                         :description "The user's natural language answer"}
-                :question_asked {:type "string"
-                                 :description "The question that was asked"}
-                :question_id {:type "string"
-                              :description "The message ID of the question being answered (optional)"}}
-   :required ["project_id" "conversation_id" "ds_id" "answer" "question_asked"]})
-
-(defmethod tool-system/validate-inputs :interpret-response [_ inputs]
-  (tool-system/validate-required-params inputs
-                                        [:project_id :conversation_id :ds_id
-                                         :answer :question_asked]))
-
-(defmethod tool-system/execute-tool :interpret-response
-  [_ {:keys [project_id conversation_id ds_id answer question_asked question_id]}]
-  (let [pid (keyword project_id)
-        cid (keyword conversation_id)
-        ds-id (keyword ds_id)]
-
-    (log! :info (str "iviewr_interpret_response " pid " " cid " " ds-id))
-    (try
-      ;; Get current ASCR
-      (let [{:ascr/keys [dstruct budget-left]} (pdb/get-ASCR pid ds-id)
-            ascr (or dstruct {})
-            ;; Add the answer message first
-            answer-mid (pdb/add-msg! {:pid pid
-                                      :cid cid
-                                      :from :human
-                                      :content answer
-                                      :pursuing-DS ds-id})
-
-            ;; Build conversation history including the new answer
-            conversation (pdb/get-conversation pid cid)
-            message-history (mapv (fn [msg]
-                                    (cond
-                                      (= (:message/from msg) :system)
-                                      {:interviewer (:message/content msg)}
-                                      (#{:human :surrogate} (:message/from msg))
-                                      {:expert (:message/content msg)}
-                                      :else nil))
-                                  (:conversation/messages conversation))
-            message-history (vec (remove nil? message-history))
-            ;; Use LLM to interpret the answer using base-iviewr-instructions format
-            prompt (dsu/interpret-response-prompt
-                    {:ds (-> ds-id sdb/get-DS-instructions sutil/clj2json-pretty)
-                     :question question_asked
-                     :answer answer
-                     :message-history message-history
-                     :ascr ascr
-                     :budget-remaining budget-left})
-            result (llm/complete-json prompt :model-class :extract)
-            ;; The SCR should be the entire result per the prompt instructions
-            ;; Remove any ASCR metadata that might have been included
-            scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)
-
-            ;; Check for failure response
-            _ (when (:iviewr-failure result)
-                (throw (ex-info "Interviewer reported failure" {:reason (:iviewr-failure result)})))
-
-            ;; Link answer to question if question-id provided
-            _ (when question_id
-                (pdb/update-msg! pid cid answer-mid
-                                 {:message/answers-question (if (string? question_id)
-                                                              (Long/parseLong question_id)
-                                                              question_id)}))
-            ;; Store the SCR with the message
-            _ (when scr
-                (pdb/put-msg-SCR! pid cid scr))
-            ;; Initialize ASCR if needed
-            _ (when-not (pdb/ASCR-exists? pid ds-id)
-                (pdb/init-ASCR! pid ds-id))
-            ;; Update ASCR with new SCR using the pure function
-            current-ascr-data (pdb/get-ASCR pid ds-id)
-            current-ascr (or (:ascr/dstruct current-ascr-data) {})
-            updated-ascr (dsu/ds-combine ds-id scr current-ascr)
-            _ (pdb/put-ASCR! pid ds-id updated-ascr)
-            ;; Reduce budget
-            _ (pdb/reduce-questioning-budget! pid ds-id)
-            ;; Check if DS is complete using the pure function
-            complete? (dsu/ds-complete? ds-id updated-ascr)]
-
-        ;; Only mark complete if actually complete
-        (when complete?
-          (pdb/mark-ASCR-complete! pid ds-id))
-
-        ;; Return comprehensive response
-        {:scr (merge {:answered-at (java.util.Date.)
-                      :question question_asked
-                      :raw-answer answer
-                      :DS scr}
-                     scr)
-         :message_id answer-mid
-         :ascr_updated true
-         :ds_complete complete?
-         :budget_remaining (pdb/get-questioning-budget-left! pid ds-id)})
-
-      (catch Exception e
-        (log! :error (str "Error in interpret-response: " (.getMessage e)))
-        {:error (str "Failed to interpret response: " (.getMessage e))}))))
-
-;;; Get Current DS Tool
-
-(defmethod tool-system/tool-name :get-current-ds [_]
-  "sys_get_current_ds")
-
-(defmethod tool-system/tool-description :get-current-ds [_]
-  "Get the current Discovery Schema template and ASCR (Aggregated Schema-Conforming Response) for an active DS pursuit.")
-
-(defmethod tool-system/tool-schema :get-current-ds [_]
-  {:type "object"
-   :properties {:project_id tool-system/project-id-schema
-                :conversation_id tool-system/conversation-id-schema}
-   :required ["project_id" "conversation_id"]})
-
-(defmethod tool-system/validate-inputs :get-current-ds [_ inputs]
-  (tool-system/validate-required-params inputs [:project_id :conversation_id]))
-
-(defmethod tool-system/execute-tool :get-current-ds
-  [_ {:keys [project_id conversation_id]}]
-  (let [pid (keyword project_id)
-        cid (keyword conversation_id)
-        ds-id (pdb/get-current-DS pid cid)
-        {:ascr/keys [completed? dstruct] :as ascr} (pdb/get-ASCR pid ds-id)]
-    (alog! (str "sys_get_current_ds " pid " " cid " " ds-id))
-    (if-not ds-id
-      {:error "No active DS pursuit found"}
-      {:ds_id (name ds-id)
-       :ds_template (:ds dstruct) ; <===================================== what???
-       :interview_objective (:interview-objective dstruct)
-       :current_ascr ascr
-       :pursuit_status (if completed? :completed :incomplete)})))
-
-;;; Conduct Interview Tool
-
 (defmethod tool-system/tool-name :conduct-interview [_]
-  "iviewr_conduct_interview")
+  "conduct_interview")
 
 (defmethod tool-system/tool-description :conduct-interview [_]
   "Conduct a complete autonomous interview for a Discovery Schema using LangGraph.
@@ -274,13 +30,13 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
   (tool-system/validate-required-params inputs [:project_id :conversation_id :ds_id]))
 
 (defmethod tool-system/execute-tool :conduct-interview
-  [_ {:keys [project_id conversation_id ds_id budget]}]
+  [_tag {:keys [project_id conversation_id ds_id budget]}]
   (let [pid (keyword project_id)
         cid (keyword conversation_id)
         ds-id (keyword ds_id)
-        budget (or budget 10.0)]
+        budget (or budget 1.0)]
 
-    (alog! (str "iviewr_conduct_interview " pid " " cid " " ds-id " budget=" budget))
+    (alog! (str "conduct_interview " pid " " cid " " ds-id " budget=" budget))
 
     (try
       ;; Create initial interview state
@@ -289,30 +45,16 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
                             :pid pid
                             :cid cid
                             :budget-left budget})
-
-            ;; Run the autonomous interview
             final-state (igraph/run-interview initial-state)
+            {:keys [ascr messages complete? budget-left]} final-state]
 
-            ;; Extract results
-            {:keys [ascr messages complete? budget-left]} final-state
-
-            ;; Store ASCR in project DB
-            _ (when-not (pdb/ASCR-exists? pid ds-id)
-                (pdb/init-ASCR! pid ds-id))
-            _ (pdb/put-ASCR! pid ds-id ascr)
-            _ (when complete?
-                (pdb/mark-ASCR-complete! pid ds-id))
-
-            ;; Store messages in project DB
-            _ (doseq [msg messages]
-                (when-let [content (:content msg)]
-                  (when (and (string? content) (not (str/blank? content)))
-                    (pdb/add-msg! {:pid pid
-                                   :cid cid
-                                   :from (:from msg)
-                                   :content content
-                                   :pursuing-DS ds-id}))))]
-
+        ;; Store ASCR in project DB
+        (when-not (pdb/ASCR-exists? pid ds-id)
+          (pdb/init-ASCR! pid ds-id))
+        (pdb/put-ASCR! pid ds-id ascr)
+        (when complete?
+          (pdb/mark-ASCR-complete! pid ds-id))
+        ;; Store messages in project DB
         (log! :info (str "Completed autonomous interview for " ds-id
                          ". Complete: " complete?
                          ", Messages: " (count messages)
@@ -322,7 +64,6 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
          :ds_id (name ds-id)
          :ascr ascr
          :complete complete?
-         :message_count (count messages)
          :budget_remaining budget-left
          :summary (str "Interview completed for " (name ds-id)
                        " with " (count messages) " messages exchanged. "
@@ -335,65 +76,6 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
         {:status "error"
          :error (.getMessage e)
          :ds_id (name ds-id)}))))
-
-;;; Format results methods for interviewer tools
-
-(defmethod tool-system/format-results :formulate-question [_ result]
-  (cond
-    (:error result)
-    {:result [(str "Error formulating question: " (:error result))]
-     :error true}
-
-    (:question result)
-    {:result [(json/write-str
-               {:message-type "question-generated"
-                :question (:question result)
-                :context (:context result)})]
-     :error false}
-
-    :else
-    {:result [(json/write-str result)]
-     :error false}))
-
-(defmethod tool-system/format-results :interpret-response [_ result]
-  (cond
-    (:error result)
-    {:result [(str "Error interpreting response: " (:error result))]
-     :error true}
-
-    (:scr result)
-    {:result [(json/write-str
-               {:message-type "response-interpreted"
-                :scr (:scr result)
-                :message_id (:message_id result)
-                :ascr_updated (:ascr_updated result)
-                :ds_complete (:ds_complete result)
-                :budget_remaining (:budget_remaining result)})]
-     :error false}
-
-    :else
-    {:result [(json/write-str result)]
-     :error false}))
-
-(defmethod tool-system/format-results :get-current-ds [_ result]
-  (cond
-    (:error result)
-    {:result [(str "Error getting current DS: " (:error result))]
-     :error true}
-
-    (:ds_id result)
-    {:result [(json/write-str
-               {:message-type "current-ds-status"
-                :ds_id (:ds_id result)
-                :ds_template (:ds_template result)
-                :interview_objective (:interview_objective result)
-                :current_ascr (:current_ascr result)
-                :pursuit_status (:pursuit_status result)})]
-     :error false}
-
-    :else
-    {:result [(json/write-str result)]
-     :error false}))
 
 (defmethod tool-system/format-results :conduct-interview [_ result]
   (cond
@@ -408,7 +90,6 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
                 :ds_id (:ds_id result)
                 :ascr (:ascr result)
                 :complete (:complete result)
-                :message_count (:message_count result)
                 :budget_remaining (:budget_remaining result)
                 :summary (:summary result)})]
      :error false}

@@ -64,8 +64,6 @@
 ;;; ============================================================================
 ;;; Conversion Functions
 ;;; ============================================================================
-
-;;; ToDo: I'm wondering why this doesn't create a Java HashMap.
 (defn interview-state->map
   "Convert InterviewState record to a plain map with string keys for Java interop."
   [^InterviewState istate]

@@ -216,13 +216,79 @@ The project is initialized with an active DS. Since the next thing you'll do is 
 ```
 
 
-### STEP 3: Run the LangGraph-base interviewing tool
+### STEP 3: Run the LangGraph-based interviewing tool
 
+Now delegate the actual interviewing to the autonomous LangGraph tool. This tool will conduct the entire interview loop autonomously:
 
- 
+```javascript
+conduct_interview({
+  project_id: "sur-plate-glass",
+  conversation_id: "process",
+  ds_id: "process/warm-up-with-challenges",
+  budget: 1.0  // Optional: limits number of questions (default 1.0)
+})
+```
 
+The `conduct_interview` tool will:
+- Autonomously formulate questions based on the DS template and current ASCR
+- Interact with the surrogate expert (or human interviewee)
+- Interpret responses into Schema-Conforming Responses (SCRs)
+- Accumulate SCRs into the Aggregated SCR (ASCR)
+- Evaluate completion criteria defined in the DS
+- Return when DS is complete or budget is exhausted
 
-##### Typical sequencing of DS to delegate to the interviewer
+**Response:**
+```javascript
+{
+  "status": "success",
+  "ds_id": "warm-up-with-challenges",
+  "ascr": {
+    "product-or-service-name": "tempered glass panels",
+    "scheduling-challenges": ["annealing-time-variation", "equipment-availability", "order-size-variation"],
+    "one-more-thing": "Temperature control during annealing is critical and varies by glass thickness"
+  },
+  "complete": true,
+  "budget_remaining": 0.9,
+  "summary": "Interview completed for warm-up-with-challenges with 1 question exchanged. DS completion criteria met."
+}
+```
+
+### STEP 4: Check results and decide next DS
+
+Query the updated ASCR to verify what was learned:
+
+```javascript
+db_query({
+  "db_type": "project",
+  "query_string": "[:find ?ascr-str . :where [?e :ascr/id :process/warm-up-with-challenges] [?e :ascr/str ?ascr-str]]"
+})
+```
+
+**Response:**
+```javascript
+{
+  "status": "success",
+  "query-result": "{:product-or-service-name \"tempered glass panels\", :scheduling-challenges [\"annealing-time-variation\" \"equipment-availability\" \"order-size-variation\"], :one-more-thing \"Temperature control during annealing is critical and varies by glass thickness\"}"
+}
+```
+
+Based on what you learned, select the next appropriate DS. For example:
+- If they mentioned **sequential production steps**, consider `process/flow-shop`
+- If they mentioned **flexible routing** or **job priorities**, consider `process/job-shop`
+- If they mentioned **time-based scheduling** (shifts, appointments), consider `process/timetabling`
+
+Query for the next DS to determine problem classification:
+
+```javascript
+conduct_interview({
+  project_id: "sur-plate-glass",
+  conversation_id: "process",
+  ds_id: "process/scheduling-problem-type",
+  budget: 1.0
+})
+```
+
+### Typical sequencing of DS to delegate to the interviewer
 
 1. Start with `process/warm-up-with-challenges` (conversation: `:process`)
 2. Then `process/scheduling-problem-type` (conversation: `:process`)

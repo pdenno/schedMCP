@@ -91,6 +91,7 @@
    "- `:db.type/string` - String values\n"
    "- `:db.type/keyword` - Keyword values\n"
    "- `:db.type/long` - Long integer values\n"
+   "- `:db.type/double` - Double precision floating point values\n"
    "- `:db.type/boolean` - Boolean values (true/false)\n"
    "- `:db.type/instant` - Date/time values\n"
    "- `:db.type/ref` - Reference to another entity (creates relationships)\n\n"
@@ -108,14 +109,33 @@
    "### `:db/doc`\n"
    "Human-readable documentation string describing the attribute's purpose.\n\n"
 
-   "## Project Database Schema\n\n"
-   "The project database stores all data for an individual scheduling interview project.\n\n"
+   "---\n\n"
+
+   ;; Include tree structure diagrams
+   (try
+     (slurp "resources/sched-mcp/db-trees/project-db-tree.md")
+     (catch Exception e
+       (str "## Project Database Tree Structure\n\n"
+            "*Tree diagram not available: " (.getMessage e) "*\n\n")))
+
+   "\n---\n\n"
+
+   (try
+     (slurp "resources/sched-mcp/db-trees/system-db-tree.md")
+     (catch Exception e
+       (str "## System Database Tree Structure\n\n"
+            "*Tree diagram not available: " (.getMessage e) "*\n\n")))
+
+   "\n---\n\n"
+
+   "## Project Database Schema Details\n\n"
+   "Complete attribute-by-attribute reference for the project database.\n\n"
    (str/join "\n"
              (map (fn [[k v]] (format-schema-attribute k v))
                   (sort-by first schema/db-schema-proj+)))
 
-   "\n## System Database Schema\n\n"
-   "The system database stores shared data across all projects, such as Discovery Schemas.\n\n"
+   "\n## System Database Schema Details\n\n"
+   "Complete attribute-by-attribute reference for the system database.\n\n"
    (str/join "\n"
              (map (fn [[k v]] (format-schema-attribute k v))
                   (sort-by first schema/db-schema-sys+)))))

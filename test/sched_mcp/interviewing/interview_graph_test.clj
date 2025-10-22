@@ -10,6 +10,8 @@
    [sched-mcp.tools.surrogate.sur-util :as suru])
   (:import [org.bsc.langgraph4j StateGraph]))
 
+(declare run-mock-interview)
+
 (deftest full-interview-loop-test
   (testing "Complete interview loop with mock nodes"
     (let [initial-state (istate/make-interview-state
@@ -17,7 +19,7 @@
                           :pid :craft-beer-123
                           :cid :process
                           :budget-left 1.0})
-          final-state (igraph/run-mock-interview initial-state)]
+          final-state (run-mock-interview initial-state)]
 
       ;; Check completion status
       (is (= true (:complete? final-state))
@@ -67,7 +69,7 @@
                           :pid :craft-beer-123
                           :cid :process
                           :budget-left 0.1}) ; Only enough for 1 question
-          final-state (igraph/run-mock-interview initial-state)]
+          final-state (run-mock-interview initial-state)]
 
       ;; Should complete due to budget exhaustion
       (is (= true (:complete? final-state))
@@ -87,7 +89,7 @@
                          {:ds-id :process/warm-up-with-challenges
                           :pid :craft-beer-123
                           :cid :process})
-          final-state (igraph/run-mock-interview initial-state)]
+          final-state (run-mock-interview initial-state)]
 
       (is (= :process/warm-up-with-challenges (:ds-id final-state))
           "DS ID should be preserved")
@@ -100,7 +102,7 @@
 ;;; Mock Graph for Testing (Phase 2)
 ;;; ============================================================================
 
-(defn build-mock-interview-graph
+#_(defn build-mock-interview-graph
   "Build the interview loop graph with MOCK nodes for fast testing without LLM calls.
 
    Flow:
@@ -156,12 +158,11 @@
         final-agent-state (-> results last .state)]
     (istate/agent-state->interview-state final-agent-state)))
 
-
 ;;; ============================================================================
 ;;; Phase 3 Real Implementation Tests
 ;;; ============================================================================
 
-(deftest ^:integration real-interview-with-surrogate-test
+#_(deftest ^:integration real-interview-with-surrogate-test
   (testing "Real interview loop with LLM and surrogate (Phase 3)"
     ;; Note: This test requires:
     ;; - LLM API credentials configured
@@ -178,7 +179,7 @@
                             :pid pid
                             :cid :process
                             :budget-left 1.0}) ; Limit budget for faster test
-            final-state (igraph/run-interview initial-state)]
+            final-state (run-interview initial-state)]
 
             ;; Verify completion
             (is (= true (:complete? final-state))
