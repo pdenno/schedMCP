@@ -22,8 +22,11 @@ pom.xml.asc
 .clj-kondo/cnuernber
 .clj-kondo/com.wsscode
 .clj-kondo/funcool
+.clj-kondo/imports
 .clj-kondo/lilactown
 .clj-kondo/metosin
+.clj-kondo/mount
+.clj-kondo/prismatic
 .clj-kondo/rewrite-clj
 .clj-kondo/taoensso
 .lsp/.cache

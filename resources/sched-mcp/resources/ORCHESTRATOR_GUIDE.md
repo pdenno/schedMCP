@@ -74,12 +74,12 @@ Notes about the example above:
 - `?ds-id` is a variable.
 - `[?ds-id ...]` means create a vector of all the bindings to `?ds-id`.
 - The `_` in `[_ :DS/id ?ds-id]` mean we aren't binding the entity to anything.
-- How did you know to use the attribute `:DS/id`? Answer: There is an MCP resource you can consult that contains the DB schema for project and system DBs.
+- How did you know to use the attribute `:DS/id`? Answer: There is an MCP resource, DB_SCHEMA.md, that you can consult that contains the DB schema for project and system DBs.
 
 ### DB Schema
 
 Let's suppose you just made the query above and you wanted to further investigate the `process/warm-up-with-challenges` discovery schema.
-Consulting the schema MCP resource, you see that the system DB contains the complete information about discovery schema:
+Consulting the DB_SCHEMA.md MCP resource, you see that the system DB contains the complete information about discovery schema:
 
 ```clojure
 {,,,
@@ -299,43 +299,6 @@ conduct_interview({
 4. Transition to data: `data/orm` (conversation: `:data`)
 5. Eventually: resources and optimality topics (no DS for these yet).
 
-
-
-### Step 2: Get the Next Discovery Schema
-
-```
-orch_get_next_ds({
-  project_id: <pid>,
-  conversation_id: <cid>
-})
-```
-
-This returns:
-- Available Discovery Schemas with their status
-- Current ASCRs (what's been learned)
-- Recommendations for what to pursue next
-
-**Decision Making:** See  "MCP Orchestrator Guide for Directing the Course of Interviews" resource for detailed guidance on selecting which DS to pursue.
-
-### Step 3: Start DS Pursuit
-
-```
-orch_start_ds_pursuit({
-  project_id: <pid>,
-  conversation_id: <cid>,
-  ds_id: "<selected-ds-id>",
-  budget: 10  // optional: max questions for this DS
-})
-```
-
-The interviewer extracts structured data (SCR) from the natural language response.
-
-### Resuming Existing Work
-
-1. Call `orch_get_progress({project_id: <pid>})` to see overall status
-2. Review completed DS and current ASCRs
-3. Select next appropriate DS based on what's missing
-
 ## Parameter Quick Reference
 
 | Parameter | Type | Values/Examples |
@@ -343,28 +306,13 @@ The interviewer extracts structured data (SCR) from the natural language respons
 | `project_id` | keyword | `:project-123`, returned from `sur_start_expert` |
 | `conversation_id` | keyword | `:process`, `:data`, `:resources`, `:optimality` |
 | `ds_id` | string | `"process/warm-up-with-challenges"`, `"data/orm"` |
-| `budget` | integer | `10` (optional, default varies) |
+| `budget` | integer | `1.0` (optional, default varies) |
 | `domain` | string | `"craft beer brewing"`, `"automotive parts"` |
-
-## State Management
-
-All interview state is persisted in the project database:
-- Individual messages with their SCRs
-- Current ASCR for each DS
-- DS pursuit status (not-started, active, in-progress, completed)
-- Conversation history
-
-State is maintained across:
-- Multiple question/answer cycles
-- DS transitions
-- System restarts
-- Different conversation topics
-
 
 ## Additional Resources
 
-- **MCP Orchestrator Guide** - Detailed guidance on DS selection strategy
-- **PROJECT_SUMMARY.md** - System architecture and component descriptions  
+- **PROJECT_SUMMARY.md** - System architecture and component descriptions
+- **DB_SCHEMA.md** - Schema (DB entity attribute descriptions) and tree diagrams describing project DBs and the system DB.
 - **README.md** - Installation and configuration
 
 
