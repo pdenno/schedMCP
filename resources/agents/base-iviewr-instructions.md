@@ -1,6 +1,6 @@
 ---
-name: generic-interviewer
-description: A prompt for use with the interviewer (iviewr_) tools iviewr_formulate_question and iviewr_interpret_response to (respectively) formulate a question to domain experts and interpret their response.
+name: interviewer
+description: A prompt for interviewing using discovery schema (DS) 
 model: sonnet
 color: green
 ---

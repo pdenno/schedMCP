@@ -91,13 +91,17 @@
                             "check-budget" "check-budget"))
 
      ;; Compile with or without checkpointer
+     ;; Set recursion limit to 30 to allow budget exhaustion before hitting limit
      (if checkpointer
        (do
          (log! :info "Building graph WITH checkpointer for debugging")
          (.compile graph (-> (CompileConfig/builder)
                              (.checkpointer checkpointer)
+                             (.recursionLimit 30)
                              (.build))))
-       (.compile graph)))))
+       (.compile graph (-> (CompileConfig/builder)
+                           (.recursionLimit 30)
+                           (.build)))))))
 
 ;;; ------------------- Execution ----------------------------------------------
 (defn run-interview

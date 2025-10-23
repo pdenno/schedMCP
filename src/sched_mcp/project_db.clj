@@ -234,7 +234,7 @@
     :or {project-name "Unnamed project"
          additional-inf {}
          cid :process}}]
-  (log! :info (str "Creating project: " pid))
+  (log! :info (str "===================== Creating project: " pid " ============================="))
   (assert (#{:process :data :resources :optimality} cid))
   (let [pid (if force-replace? pid (unique-pid pid))
         cfg (sutil/db-cfg-map {:type :project :id pid :in-mem? in-mem?})

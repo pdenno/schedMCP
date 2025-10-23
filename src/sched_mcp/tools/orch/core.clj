@@ -299,8 +299,8 @@
   (str "Make a datalog-style query against either the current project DB, or the system DB."
        "For example, with `db_type`= `project` (running aginst the current project) and `query_string` = `[:find ?ds-id . :where [_ :project/active-DS-id ?ds-id]]`\n"
        "you would obtain the project's active discovery schema.\n"
-       "Detailed instructions for using this tool are found in the resource orchestrator-use-of-databases.md"
-       "The project and system database schemas are found in the resource ")) ; <==========================================================
+       "Detailed instructions for using this tool are found in the resource ORCHESTRATOR_GUIDE.md"
+       "Descriptions of the project and system database schemas are found in the MCP resource DB_SCHEMA.md."))
 
 (defmethod tool-system/tool-schema :db-query [_]
   {:type "object"
@@ -347,7 +347,8 @@
 (defmethod tool-system/tool-description :db-resolve-entity [_]
   (str "Resolve a database entity ID into the tree (Clojure map) of the information at and below that entity in the given database, either \"project\" or \"system\"'./n"
        "It is typically used once you find the entity ID of interest using the tool db_query./n"
-       "Detailed instructions for using this tool are found in the resource orchestrator-use-of-databases.md"))
+       "Detailed instructions for using this tool are found in the resource ORCHESTRATOR_GUIDE.md"
+       "See also the MCP resource DB_SCHEMA.md"))
 
 (defmethod tool-system/tool-schema :db-resolve-entity [_]
   {:type "object"

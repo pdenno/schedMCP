@@ -14,12 +14,11 @@
 
 (def model-config
   "Model configurations by provider and class"
-  {:openai {:chat "gpt-4o"
-            :mini "gpt-4o-mini"
-            :extract "gpt-4o" ; For SCR extraction
-            :reason "o1-preview"} ; For complex reasoning
-   :azure {:chat "mygpt-4"}
-   :meta {:chat "Llama-4-Maverick-17B-128E-Instruct-FP8"
+  {:openai {:reason "gpt-5"
+            :mini "gpt-5-mini"
+            :interpret "gpt-5"} ; e.g. interpret text to SCRs.
+   :azure {:reason "mygpt-4"}
+   :meta {:reason "Llama-4-Maverick-17B-128E-Instruct-FP8"
           :mini "Llama-4-Maverick-17B-128E-Instruct-FP8"}})
 
 ;;; Credentials (from sutil)
@@ -51,7 +50,7 @@
    or Clojure map (:raw-text? = false) that is read from the string created by the LLM.
    This is the main function from schedulingTBD that the tests expect."
   [messages & {:keys [model-class raw-text? llm-provider response-format]
-               :or {model-class :chat
+               :or {model-class :reason
                     raw-text? true
                     llm-provider @default-provider}}]
   (log! :debug (str "llm-provider = " llm-provider))
@@ -73,7 +72,7 @@
   "Core LLM completion function
    messages - vector of {:role :content} maps
    Options:
-   - :model-class - :chat (default), :mini, :extract, :reason
+   - :model-class - :reason (default), :mini, :extract, :reason
    - :provider - :openai (default) or :azure
    - :temperature - 0-2, default 0.7
    - :response-format - nil or {:type 'json_object'}
@@ -81,7 +80,7 @@
 
    Returns the content string from the LLM"
   [messages & {:keys [model-class provider temperature response-format max-tokens]
-               :or {model-class :chat
+               :or {model-class :reason
                     provider @default-provider
                     temperature 0.7}}]
   (let [creds (api-credentials provider)
@@ -159,6 +158,15 @@
                 (if format
                   (str user "\n\n" format)
                   user)))))
+
+(defn ^:admin list-openai-models
+  "List id and create date of all available models."
+  []
+  (->> (openai/list-models (api-credentials :openai))
+       :data
+       (sort-by :created)
+       reverse
+       (mapv (fn [x] (update x :created #(-> % (* 1000) java.time.Instant/ofEpochMilli str))))))
 
 ;;; ------------------- start and stop ------------------------
 (defn init-llm!

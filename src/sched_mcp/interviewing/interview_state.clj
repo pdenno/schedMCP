@@ -27,7 +27,7 @@
 (defn make-interview-state
   "Create a new InterviewState with sensible defaults."
   [{:keys [ds-id pid cid budget-left]
-    :or {budget-left 10.0}}]
+    :or {budget-left 1.0}}]
   (map->InterviewState
    {:ds-id ds-id
     :ascr {}

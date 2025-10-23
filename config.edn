@@ -1,6 +1,7 @@
 {:port 7888
 
  ;;-------------- Resources (There is also dynamically created DB_SCHEMA.md.)
+ :resources
  {"PROJECT_SUMMARY.md"
   {:description "SchedMCP project summary document providing LLM context about the manufacturing scheduling interview system and its MCP components"
    :file-path "PROJECT_SUMMARY.md"}

@@ -39,6 +39,9 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
     (alog! (str "conduct_interview " pid " " cid " " ds-id " budget=" budget))
 
     (try
+      ;; Set active DS-id before starting interview
+      (pdb/put-active-DS-id pid cid ds-id)
+
       ;; Create initial interview state
       (let [initial-state (istate/make-interview-state
                            {:ds-id ds-id
@@ -54,7 +57,15 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
         (pdb/put-ASCR! pid ds-id ascr)
         (when complete?
           (pdb/mark-ASCR-complete! pid ds-id))
-        ;; Store messages in project DB
+
+        ;; Store messages in project DB with pursuing-DS
+        (doseq [msg messages]
+          (pdb/add-msg! {:pid pid
+                         :cid cid
+                         :from (:from msg)
+                         :content (:content msg)
+                         :pursuing-DS ds-id}))
+
         (log! :info (str "Completed autonomous interview for " ds-id
                          ". Complete: " complete?
                          ", Messages: " (count messages)

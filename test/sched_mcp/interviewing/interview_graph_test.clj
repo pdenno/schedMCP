@@ -148,7 +148,7 @@
 
     (.compile graph)))
 
-(defn run-mock-interview
+#_(defn run-mock-interview
   "Run an interview loop with MOCK nodes for fast testing.
    Returns the final InterviewState."
   [initial-interview-state]

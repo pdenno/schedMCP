@@ -213,7 +213,7 @@
   "Get an answer from the surrogate expert. Returns a map containing keyword :response."
   [pid question]
   ;; Ensure project-id is a keyword for comparison with session
-  (log! :info (str "Surrogate asked: " question))
+  (log! :info (str "Interviewer asked: " question))
   (let [cid (pdb/get-active-cid pid)
         context "Responding to question."
         system-prompt (get-system-instruction pid)
@@ -223,7 +223,7 @@
 
         response (llm/query-llm [{:role "system" :content system-prompt}
                                  {:role "user" :content user-prompt}]
-                                :model-class :chat ; <========================================== Investigate!
+                                :model-class :reason
                                 :llm-provider @sutil/default-llm-provider)
         q-table (separate-table question)
         a-table (separate-table response)]

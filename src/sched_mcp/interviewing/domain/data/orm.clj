@@ -107,6 +107,7 @@
         "We will initiate a more comprehensive interview only after demonstrating a simple prototype.\n"
         "We provide an enumeration of potential areas of inquiry in the DS below.\n"
         "You are encouraged to use this enumeration, but you can use DS annotations to add categories if needed.\n"
+        "You might use planning or a scratch pad to remember what areas of inquiry qualify for Task 2 and Task 3 discussion.\n"
         "\n"
         "In Task 2, we are particularly interested in capturing domain semantics of each area of inquiry in the viewpoint of Object Role Modeling (ORM).\n"
         "Specifically, Task 2 is about defining all the ORM fact types of the subject area of inquiry.\n"
@@ -369,7 +370,7 @@
   "The ORM ASCR is complete when the interviewer sets :exhausted to true.
    We trust the interviewer on this one."
   [ascr]
-  (:exhausted? ascr))
+  (true? (:exhausted? ascr)))
 
 (defmethod dsu/ds-complete? :data/orm
   [_tag ascr]
