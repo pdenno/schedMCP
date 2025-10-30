@@ -210,25 +210,31 @@
 
 ;;; This gets called by interview_nodes.clj
 (defn surrogate-answer-question
-  "Get an answer from the surrogate expert. Returns a map containing keyword :response."
-  [pid question]
-  ;; Ensure project-id is a keyword for comparison with session
-  (log! :info (str "Interviewer asked: " question))
-  (let [cid (pdb/get-active-cid pid)
-        context "Responding to question."
-        system-prompt (get-system-instruction pid)
-        user-prompt (str context "\n\n"
-                         "Current question: " question
-                         "\n\nRemember to be specific and consistent with previous answers.")
+  "Get an answer from the surrogate expert. Returns a map containing keyword :response.
+   Args:
+   - pid: project ID
+   - question: the question to answer
+   - cid (optional): conversation ID, will try to get from DB if not provided
+   - system-prompt (optional): system instruction, will try to get from DB if not provided"
+  ([pid question] (surrogate-answer-question pid question nil nil))
+  ([pid question cid] (surrogate-answer-question pid question cid nil))
+  ([pid question cid system-prompt]
+   (log! :info (str "Interviewer asked: " question))
+   (let [cid (or cid (pdb/get-active-cid pid))
+         context "Responding to question."
+         system-prompt (or system-prompt (get-system-instruction pid))
+         user-prompt (str context "\n\n"
+                          "Current question: " question
+                          "\n\nRemember to be specific and consistent with previous answers.")
 
-        response (llm/query-llm [{:role "system" :content system-prompt}
-                                 {:role "user" :content user-prompt}]
-                                :model-class :reason
-                                :llm-provider @sutil/default-llm-provider)
-        q-table (separate-table question)
-        a-table (separate-table response)]
-    ;; ToDo: Does the response answer the question? LangGraph stuff should know???
-    (let [q-msg-id (pdb/add-msg! {:pid pid :cid cid :content question :table q-table :from :system})]
-      (pdb/add-msg! {:pid pid :cid cid :content response :table a-table :from :surrogate :answers-question q-msg-id}))
-    (log! :info (str "Surrogate responds: " response))
-    {:response response}))
+         response (llm/query-llm [{:role "system" :content system-prompt}
+                                  {:role "user" :content user-prompt}]
+                                 :model-class :reason
+                                 :llm-provider @sutil/default-llm-provider)
+         q-table (separate-table question)
+         a-table (separate-table response)]
+     ;; ToDo: Does the response answer the question? LangGraph stuff should know???
+     (let [q-msg-id (pdb/add-msg! {:pid pid :cid cid :content question :table q-table :from :system})]
+       (pdb/add-msg! {:pid pid :cid cid :content response :table a-table :from :surrogate :answers-question q-msg-id}))
+     (log! :info (str "Surrogate responds: " response))
+     {:response response})))

@@ -22,11 +22,12 @@
             budget-left ; Number - 10.0 initially, decrements per question
             complete? ; Boolean - false until DS completion criteria met
             pid ; Keyword - :craft-beer-123
-            cid]) ; Keyword - :process
+            cid ; Keyword - :process, :data, :resources, :optimality
+            surrogate-instruction]) ; String (optional) - system instruction for surrogate expert ; Keyword - :process
 
 (defn make-interview-state
   "Create a new InterviewState with sensible defaults."
-  [{:keys [ds-id pid cid budget-left]
+  [{:keys [ds-id pid cid budget-left surrogate-instruction]
     :or {budget-left 1.0}}]
   (map->InterviewState
    {:ds-id ds-id
@@ -35,7 +36,8 @@
     :budget-left budget-left
     :complete? false
     :pid pid
-    :cid cid}))
+    :cid cid
+    :surrogate-instruction surrogate-instruction}))
 
 ;;; ============================================================================
 ;;; Schema Definition
@@ -44,22 +46,31 @@
 (defn interview-state-schema
   "Create the channel schema for interview state.
 
-   - :ds-id, :pid, :cid, :budget-left, :complete? use last-write
-   - :ascr uses reducer to merge SCRs (converts Java maps to Clojure first)
+   - :ds-id, :pid, :cid, :budget-left, :complete?, :surrogate-instruction use last-write
+   - :ascr uses reducer to merge SCRs via ds-combine (converts Java maps to Clojure first)
    - :messages uses appender for message history"
   []
-  {:ds-id (lgu/make-last-write-channel)
-   :ascr (lgu/make-reducer-channel
-          (fn [current-val new-val]
-            ;; Always convert to Clojure maps before merging
-            ;; (handles both Java HashMaps and Clojure maps)
-            (merge (into {} (or current-val {}))
-                   (into {} (or new-val {})))))
-   :messages (lgu/make-appender-channel)
-   :budget-left (lgu/make-last-write-channel)
-   :complete? (lgu/make-last-write-channel)
-   :pid (lgu/make-last-write-channel)
-   :cid (lgu/make-last-write-channel)})
+  (let [ds-id-atom (atom nil)]
+    {:ds-id (lgu/make-reducer-channel
+             (fn [_current-val new-val]
+               (reset! ds-id-atom new-val)
+               new-val))
+     :ascr (lgu/make-reducer-channel
+            (fn [current-val new-val]
+              (let [current-clj (into {} (or current-val {}))
+                    new-clj (into {} (or new-val {}))
+                    ds-id @ds-id-atom]
+                (if (and ds-id (not-empty new-clj))
+                  (do
+                    (require '[sched-mcp.interviewing.ds-util :as dsu])
+                    ((resolve 'dsu/ds-combine) ds-id new-clj current-clj))
+                  (merge current-clj new-clj)))))
+     :messages (lgu/make-appender-channel)
+     :budget-left (lgu/make-last-write-channel)
+     :complete? (lgu/make-last-write-channel)
+     :pid (lgu/make-last-write-channel)
+     :cid (lgu/make-last-write-channel)
+     :surrogate-instruction (lgu/make-last-write-channel)}))
 
 ;;; ============================================================================
 ;;; Conversion Functions
@@ -73,7 +84,8 @@
    "budget-left" (:budget-left istate)
    "complete?" (:complete? istate)
    "pid" (:pid istate)
-   "cid" (:cid istate)})
+   "cid" (:cid istate)
+   "surrogate-instruction" (:surrogate-instruction istate)})
 
 (defn interview-state->agent-state
   "Convert InterviewState to Java AgentState for LangGraph."
@@ -91,7 +103,8 @@
     :budget-left (lgu/get-state-value state :budget-left)
     :complete? (lgu/get-state-value state :complete?)
     :pid (lgu/get-state-value state :pid)
-    :cid (lgu/get-state-value state :cid)}))
+    :cid (lgu/get-state-value state :cid)
+    :surrogate-instruction (lgu/get-state-value state :surrogate-instruction)}))
 
 ;;; ============================================================================
 ;;; Helper Functions

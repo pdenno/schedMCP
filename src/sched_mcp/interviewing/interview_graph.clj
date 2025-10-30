@@ -1,9 +1,11 @@
 (ns sched-mcp.interviewing.interview-graph
   "Interview graph construction and execution."
   (:require
+   [sched-mcp.interviewing.checkpoint :as ckpt]
    [sched-mcp.interviewing.interview-state :as istate]
    [sched-mcp.interviewing.interview-nodes :as nodes]
    [sched-mcp.interviewing.lg-util :as lg]
+   [sched-mcp.project-db :as pdb]
    [sched-mcp.util :refer [log!]])
   (:import [org.bsc.langgraph4j StateGraph CompileConfig RunnableConfig]
            [org.bsc.langgraph4j.checkpoint MemorySaver]))
@@ -108,14 +110,20 @@
   "Run an interview loop with LLM and surrogate integration.
    Returns the final InterviewState with completed ASCR.
 
+   Persists ASCR and messages to project DB after completion.
+   Optionally captures checkpoints to disk for debugging (controlled by checkpoint/enable-checkpoints? atom).
+
    Options:
    - :checkpointer - Optional MemorySaver for state debugging
-   - :thread-id - Thread ID for checkpointing (required if checkpointer provided)"
+   - :thread-id - Thread ID for checkpointing (required if checkpointer provided)
+   - :file-checkpointer - Optional FileCheckpointer for persisting to disk"
   ([initial-interview-state]
    (run-interview initial-interview-state {}))
-  ([initial-interview-state {:keys [checkpointer thread-id]}]
+  ([initial-interview-state {:keys [checkpointer thread-id file-checkpointer]}]
    (let [graph (build-interview-graph {:checkpointer checkpointer})
          init-data (istate/interview-state->map initial-interview-state)
+         {:keys [ds-id pid cid]} initial-interview-state
+         file-cp (or file-checkpointer (ckpt/file-checkpointer))
          results (if (and checkpointer thread-id)
                    (let [config (-> (RunnableConfig/builder)
                                     (.threadId thread-id)
@@ -123,5 +131,39 @@
                      (log! :info (str "Running interview with checkpointer, thread-id: " thread-id))
                      (vec (.stream graph init-data config)))
                    (vec (.stream graph init-data)))
-         final-agent-state (-> results last .state)]
-     (istate/agent-state->interview-state final-agent-state))))
+
+         ;; Capture checkpoints after each step
+         _ (when @ckpt/enable-checkpoints?
+             (log! :info "Capturing checkpoints to disk...")
+             (doseq [[idx result] (map-indexed vector results)]
+               (let [agent-state (.state result)
+                     istate (istate/agent-state->interview-state agent-state)
+                     cp-map (ckpt/make-checkpoint
+                             {:state istate
+                              :project-id pid
+                              :ds-id ds-id
+                              :iteration idx
+                              :thread-id (or thread-id "default")
+                              :metadata {:step (str "iteration-" idx)}})]
+                 (ckpt/save-checkpoint! file-cp cp-map))))
+
+         final-agent-state (-> results last .state)
+         final-state (istate/agent-state->interview-state final-agent-state)
+         {:keys [ascr messages complete?]} final-state]
+
+     ;; Persist ASCR and messages to project DB
+     (when (and pid ds-id)
+       (when-not (pdb/ASCR-exists? pid ds-id)
+         (pdb/init-ASCR! pid ds-id))
+       (pdb/put-ASCR! pid ds-id ascr)
+       (when complete?
+         (pdb/mark-ASCR-complete! pid ds-id))
+
+       (doseq [msg messages]
+         (pdb/add-msg! {:pid pid
+                        :cid cid
+                        :from (:from msg)
+                        :content (:content msg)
+                        :pursuing-DS ds-id})))
+
+     final-state)))

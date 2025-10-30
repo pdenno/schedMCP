@@ -1,13 +1,13 @@
 (ns sched-mcp.sutil
   "Server utilities."
   (:require
-   [cheshire.core :as ches]
+   [clojure.data.json :as json]
    [clojure.java.basis]
    [clojure.java.io :as io]
    [clojure.string :as str]
    [datahike.api :as d]
    [datahike.pull-api :as dp]
-   [sched-mcp.util :refer [log! alog!]])
+   [sched-mcp.util :refer [log!]])
   (:import ; ToDo: Why does clj-kondo complain?
    java.net.URI
    java.nio.file.StandardCopyOption
@@ -274,12 +274,13 @@
   "Return a pprinted string for given clojure object."
   [obj]
   (assert (not (nil? obj)))
-  (ches/generate-string obj {:pretty true}))
+  (json/write-str obj :indent true))
 
 #_(defn clj2json-pretty
-    "Return a pprinted string for given clojure object."
-    [obj]
-    (if (nil? obj) nil (ches/generate-string obj {:pretty true})))
+  "Return a pprinted string for given clojure object."
+  [obj]
+  (assert (not (nil? obj)))
+  (ches/generate-string obj {:pretty true}))
 
 (defn update-resources-DS-json! [& _] (throw (ex-info "This should no longer be needed." {})))
 

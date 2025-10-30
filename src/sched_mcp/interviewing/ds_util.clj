@@ -7,16 +7,17 @@
    [sched-mcp.sutil :as sutil]
    [sched-mcp.system-db :as sdb]))
 
-;;; Discovery Schema Prompt Templates
+;;; Interviewing
 
 (defn formulate-question-prompt
-  "Create a prompt for generating questions from DS + ASCR according to base-iviewr-instructions.
+  "Create a vector of maps having keys #{:system :examples :context :user :format},
+   a prompt for generating questions from DS + ASCR according to base-iviewr-instructions.
    The DS object contains the interview-objective, so we extract it from there."
   [{:keys [ds-instructions ascr message-history budget-remaining]
     :or {budget-remaining 0}}]
   (let [{:keys [DS interview-objective]} ds-instructions]
     (llm/build-prompt
-     :system (sdb/get-agent-prompt :interviewer)
+     :system (sdb/get-agent-prompt :iviewr-formulate-question) ; This gets resources/agents/base-iviewr-instructions.md
      :user (str "Interview Objective:\n" interview-objective
                 "\n\nTask Input:\n"
                 (json/write-str
@@ -35,7 +36,7 @@
     :or {budget-remaining 0}}]
   (let [{:keys [DS interview-objective]} ds-instructions]
     (llm/build-prompt
-     :system (sdb/get-agent-prompt :interviewer)
+     :system (sdb/get-agent-prompt :iviewr-interpret-response) ; This gets resources/agents/base-iviewr-instructions.md
      :user (str "Interview Objective:\n" interview-objective
                 "\n\nTask Input:\n"
                 (json/write-str

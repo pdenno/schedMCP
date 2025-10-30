@@ -20,46 +20,51 @@ dutil/learn-schema!
 
 (def alias-map
   {;'ches        'cheshire.core
-   'io           'clojure.java.io
-   's            'clojure.spec.alpha
+   'io 'clojure.java.io
+   's 'clojure.spec.alpha
    ;'uni         'clojure.core.unify
-   'edn          'clojure.edn
-   'str          'clojure.string
-   'd            'datahike.api
-   'dp           'datahike.pull-api
+   'edn 'clojure.edn
+   'str 'clojure.string
+   'd 'datahike.api
+   'dp 'datahike.pull-api
    ;'dutil       'develop.dutil
    ;'repl        'develop.repl
-   'mount        'mount.core
-   'p            'promesa.core
+   'mount 'mount.core
+   'p 'promesa.core
    ;;'px         'promesa.exec
-   'iviewr       'sched-mcp.tools.iviewr.core
-   'iviewrt      'sched-mcp.tools.iviewr.core-test
+   'iviewr 'sched-mcp.tools.iviewr.core
+   'iviewrt 'sched-mcp.tools.iviewr.core-test
    ;;'main       'sched-mcp.main ; This isn't used in development
-   'dsu          'sched-mcp.interviewing.ds-util
-   'orm          'sched-mcp.interviewing.domain.data.orm
-   'lgu          'sched-mcp.interviewing.lg-util
-   'ig           'sched-mcp.interviewing.interview-graph
-   'igt          'sched-mcp.interviewing.interview-graph-test
-   'is           'sched-mcp.interviewing.interview-state
-   'ist          'sched-mcp.interviewing.interview-state-test
-   'lgut         'sched-mcp.interviewing.lg-util-test
-   'llm          'sched-mcp.llm
-   'mcore        'sched-mcp.mcp-core
-   'pdb          'sched-mcp.project-db
-   'res          'sched-mcp.resources
-   'sutil        'sched-mcp.sutil
-   'schema       'sched-mcp.schema
-   'sdb          'sched-mcp.system-db
-   'orch         'sched-mcp.tools.orch.core
-   'orcht        'sched-mcp.tools.orch.core-test
-   'surt         'sched-mcp.tools.surrogate.core-test
-   'itools       'sched-mcp.tools.iviewr-tools
-   'sur          'sched-mcp.tools.surrogate.core
-   'suru         'sched-mcp.tools.surrogate.sur-util
-   'tool-system  'sched-mcp.tool-system
-   'util         'sched-mcp.util
-   'tel          'taoensso.telemere
-   'openai       'wkok.openai-clojure.api})
+
+   'dsu  'sched-mcp.interviewing.ds-util
+   'orm  'sched-mcp.interviewing.domain.data.orm
+   'lgu  'sched-mcp.interviewing.lg-util
+   'ckpt 'sched-mcp.interviewing.checkpoint
+   'ig   'sched-mcp.interviewing.interview-graph
+   'igt  'sched-mcp.interviewing.interview-graph-test
+   'in   'sched-mcp.interviewing.interview-nodes
+   'is   'sched-mcp.interviewing.interview-state
+   'ist  'sched-mcp.interviewing.interview-state-test
+   'lgut 'sched-mcp.interviewing.lg-util-test
+   'stat 'sched-mcp.interviewing.static.static-prompt
+
+   'llm 'sched-mcp.llm
+   'mcore 'sched-mcp.mcp-core
+   'pdb 'sched-mcp.project-db
+   'res 'sched-mcp.resources
+   'sutil 'sched-mcp.sutil
+   'schema 'sched-mcp.schema
+   'sdb 'sched-mcp.system-db
+   'orch 'sched-mcp.tools.orch.core
+   'orcht 'sched-mcp.tools.orch.core-test
+   'surt 'sched-mcp.tools.surrogate.core-test
+   'itools 'sched-mcp.tools.iviewr-tools
+   'sur 'sched-mcp.tools.surrogate.core
+   'suru 'sched-mcp.tools.surrogate.sur-util
+   'tool-system 'sched-mcp.tool-system
+   'util 'sched-mcp.util
+   'tel 'taoensso.telemere
+   'openai 'wkok.openai-clojure.api})
 
 (defn ^:diag ns-setup!
   "Use this to setup useful aliases for working in this NS."

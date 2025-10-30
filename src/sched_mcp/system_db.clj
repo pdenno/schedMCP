@@ -261,11 +261,14 @@
   [agent-id pathname]
   (assert (keyword? agent-id))
   (if (.exists (io/file pathname))
-    (do (d/transact (connect-atm :system)
-                    {:tx-data [{:system/agent-prompts
-                                {:agent-prompt/id agent-id
-                                 :agent-prompt/str (slurp pathname)}}]})
-        true)
+    (if-let [eid (system-exists?)]
+      (do (d/transact (connect-atm :system)
+                      {:tx-data [{:db/id eid
+                                  :system/agent-prompts
+                                  {:agent-prompt/id agent-id
+                                   :agent-prompt/str (slurp pathname)}}]})
+          true)
+      (throw (ex-info "Could not find system." {})))
     (throw (ex-info "No such agent-prompt." {:agent-id agent-id :pathname pathname}))))
 
 (defn get-agent-prompt

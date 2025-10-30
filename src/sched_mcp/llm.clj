@@ -74,7 +74,7 @@
    Options:
    - :model-class - :reason (default), :mini, :extract, :reason
    - :provider - :openai (default) or :azure
-   - :temperature - 0-2, default 0.7
+   - :temperature - 0-2, default 0.7 (ignored for reasoning models like gpt-5)
    - :response-format - nil or {:type 'json_object'}
    - :max-tokens - max response length
 
@@ -85,12 +85,16 @@
                     temperature 0.7}}]
   (let [creds (api-credentials provider)
         model (pick-model model-class provider)
+        reasoning-model? (or (= model "gpt-5")
+                             (= model "gpt-5-mini")
+                             (.startsWith model "o1"))
         params (cond-> {:model model
-                        :messages messages
-                        :temperature temperature}
+                        :messages messages}
+                 (and temperature (not reasoning-model?)) (assoc :temperature temperature)
                  response-format (assoc :response_format response-format)
                  max-tokens (assoc :max_tokens max-tokens))]
-    (log! :info (str "LLM call to " model " with " (count messages) " messages"))
+    (log! :info (str "LLM call to " model " with " (count messages) " messages"
+                     (when reasoning-model? " (reasoning model)")))
     (try
       (-> (openai/create-chat-completion params creds)
           :choices
@@ -102,7 +106,6 @@
         (throw e)))))
 
 ;;; JSON-structured responses
-
 (defn complete-json
   "Like complete but parses JSON response
    Adds instruction to return JSON and uses json_object response format"
@@ -139,13 +142,14 @@
 
 ;;; ToDo: Really? Can't do better than this???
 (defn build-prompt
-  "Build a complete prompt from components
+  "Build a complete prompt (a vector???) from components
    Args can include:
    - :system - system message content
    - :examples - vector of {:user :assistant} maps
    - :context - context to include before main message
    - :user - main user message
-   - :format - format instructions to append"
+   - :format - format instructions to append.
+  Values should be JSON."
   [& {:keys [system examples context user format]}]
   (cond-> []
     system (conj (system-message system))
@@ -174,7 +178,9 @@
   []
   ;; Load agent prompts
   (sdb/ensure-system-db!) ; ToDo: For some reason, on clj -M:test, the system-db won't have been registered.
-  (sdb/store-agent-prompt! :interviewer  "resources/agents/base-iviewr-instructions.md")
+  (sdb/store-agent-prompt! :iviewr "resources/agents/base-iviewr-instructions.md")
+  (sdb/store-agent-prompt! :iviewr-formulate-question "resources/agents/interviewer-formulate.md")
+  (sdb/store-agent-prompt! :iviewr-interpret-response "resources/agents/interviewer-interpret.md")
   ;; Verify credentials
   (when-not (api-credentials @default-provider)
     (throw (ex-info "No API credentials available"

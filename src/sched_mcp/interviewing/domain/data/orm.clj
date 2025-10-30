@@ -92,29 +92,30 @@
    :interview-objective
    (str "You, the data interviewer, discover and document information that interviewees use to do their work (scheduling production or providing a service to customers).\n"
         "The interview you lead reveals characteristics of their data and creates example data of the sorts that they described to you.\n"
-        "We will use these data to together (humans and AI) define a simple prototype of the interviewees' MiniZinc-based production scheduling system.\n"
+        "You are called upon either to **formulate-question** or **interpret-response**.\n"
         "\n"
-        "There are three tasks to be achieved in this interview:\n"
+        "There are three tasks to be achieved in this interview. Each time you are called, you determine what has been achieved and perform one of the tasks:\n"
         "    Task 1: enumerating the areas of inquiry that are involved in making scheduling decisions in the interviewees' work,\n"
         "    Task 2: determining the relationships and constraints among the data of these areas of inquiry and expressing these as Object Role Modeling (ORM) fact types, and,\n"
         "    Task 3: for each ORM fact type, creating a table of example data that the interviewees would deem realistic.\n"
+        "Don't talk about what 'Task' you are doing; just do the work.\n"
         "\n"
-        "Task 1 is performed once, after which Tasks 2 and 3 are repeated for each area of inquiry and its fact types, until all the areas of inquiry are covered."
+        "Task 1 is performed once, when the ASCR is empty, after which Tasks 2 and 3 are repeated for each area of inquiry and its fact types listed in the ASCR, until all the areas of inquiry are covered."
         "Working this way, you will help keep the interviewees focused.\n"
         "\n"
-        "In Task 1, the goal is to categorize their elementary quantitative and structured data into 'areas of inquiry'.\n"
-        "We use the word 'elementary' to emphasize that this interview should only discuss the data essential to creating a simple prototype of the scheduling system.\n"
-        "We will initiate a more comprehensive interview only after demonstrating a simple prototype.\n"
-        "We provide an enumeration of potential areas of inquiry in the DS below.\n"
-        "You are encouraged to use this enumeration, but you can use DS annotations to add categories if needed.\n"
-        "You might use planning or a scratch pad to remember what areas of inquiry qualify for Task 2 and Task 3 discussion.\n"
+        "The goal of Task 1 is to enumerate 'areas of inquiry'.\n"
+        "Task 1 is a warm-up question; use this text verbatim:\n\n"
+        "   'To get started, could you list the kinds of data that you use to schedule production?\n"
+        "    For example, do you have speadsheets containing customer orders, raw material delivery, process plans, materials on hand, task durations, worker skills, etc.?\n"
         "\n"
-        "In Task 2, we are particularly interested in capturing domain semantics of each area of inquiry in the viewpoint of Object Role Modeling (ORM).\n"
-        "Specifically, Task 2 is about defining all the ORM fact types of the subject area of inquiry.\n"
-        "The best way to do this might be, for each area of inquiry, to first elicit from the interviewees all the concepts (ORM objects) relevant to the area of inquiry and then suggest to them (as verbalization of a \n"
-        "Because you are working under a budget for questioning, choose the order in which you discuss areas of inquiry carefully; work on the most fundamental areas of inquiry to support scheduling first.\n"
-        "The most fundamental areas are typically customer orders, equipment, workforce, and products\n"
-        "hypothesized fact types) how the concepts interrelate.\n"
+        "After Task 1, the ASCR will provide *areas-we-intend-to-discuss*, a list of areas of inquiry described by the interviewees.\n"
+        "In Task 2 you must **prioritize discussion from this list** towards creating a **simple** scheduling system.\n"
+        "Task 2 is about defining all the Object Role Modeling (ORM) fact types of the subject area of inquiry.\n"
+        "Look at the **conversation-history** to determine what area of inquiry (if any) you have been discussing, and whether there is more about that area to discuss.\n"
+        "If discussion of the last area of inquiry is exhausted, decide what area of inquiry in the ASCR is next highest priority and move discussion to that:\n"
+        "For example, 'It looks like we've discussed enough about customer orders; shall we move on to raw material inventory?`\n"
+        "\n"
+        "In Task 3, create a table for each fact type revealed in Task 2 discussion.\n"
         "For example, if interviewees have indicated that they maintain records of employee skills and skill certification dates, you might ask:\n"
         "'As you have pointed out, in your business employees have an employee number. Do you similarly use a code of some sort to describe the skill?'\n"
         "Also you might ask: 'For each employee (employee number) and skill (skill code) do you keep every certification date, or just the most recent?\n"
@@ -180,55 +181,10 @@
           :source-object "professor"
           :target-object "academic"})
         "\n"
-        "\n"
-        "SUMMARY RECOMMENDATIONS\n"
-        "We encourage you to start the interview (start Task 1) with an open-ended question about the kinds of data the interviewees use, for example, for interviewees involved in manufacturing you might ask:\n"
-        "\n"
-        "   'To get started, could you list the kinds of data that you use to schedule production?\n"
-        "    For example, do you have speadsheets containing customer orders, raw material delivery, process plans, materials on hand, task durations, worker skills, etc.?\n"
-        "\n"
-        "Given the response from this, you can set the 'areas-we-intend-to-discuss' property (see below) to a list of strings naming what areas the interviewees' response suggest are important to discuss.\n"
-        "Because this interview should be scoped to the needs of creating a simple prototype of the scheduling system, it should not wander into areas of inquiry that are "
-        "unnecessary to discuss in the context of a simple prototype.\n"
-        "We will extend the prototype system incrementally as we go.\n"
-        "Once you have established what you would like to discuss (setting areas-we-intend-to-discuss in Task 1), you can then discuss (a possible subset of) these area starting with fundamental facts first, \n"
-        "repeating Task 2 and Task 3 for each fact type of the area of inquiry.\n"
-        "Set 'exhausted?' to true (see the DS below) when you are have discussed everthing you intend to discuss.\n"
-        "Setting 'exhuasted?' to true should cause us to stop sending you SUPPLY-QUESTION messages.\n"
-        "\n"
-        "You have choices as to how you communicate back to us in DATA-STRUCTURE-REFINEMENT (DSR) messages. You can\n"
-        "   (1) accumulate results from several inquiry areas into one ever-growing DSR message, as is shown in the DS below,\n"
-        "   (2) limit what is in a DSR message to just one or a few inquiry areas (thus one or a few elements in the :areas-we-intend-to-discuss), or\n"
-        "   (3) limit what is in a DSR message to just one or more fact-types in an inquiry area.\n"
-        "In order for us to index DSR message of type (3) into our database, it is essential that you provide the 'inquiry-area-id' to which you are committing a fact type.\n"
-        "For example, if you just wanted to commit the 'ORDER-is-for-CUSTOMER' fact type of the 'customer-orders' area of inquiry, in the DS example below, 'data-structure' property of your DSR message would be:\n"
-        (clj2json-pretty
-         {:inquiry-area-id "customer-orders"
-          :fact-types [{:fact-type-id "ORDER-is-for-CUSTOMER"
-                        :objects ["order" "customer"]
-                        :reference-modes ["order-number" "customer-id"]
-                        :mandatory? ["must" ""]
-                        :uniqueness [["key1" ""]]
-                        :examples {:column-headings ["order-number" "customer-id"]
-                                   :rows [["CO-865204" "CID-8811"]
-                                          ["CO-863393" "CID-8955"]
-                                          ["CO-865534" "CID-0013"]]}}]})
-        "Note that\n"
-        "    (1) the example conforms to the structure of the complete DS defined below, for example 'fact-types' is a list even though only one is provided, and,\n"
-        "    (2) the example assumes that 'customer-orders' already defined the 'order' and 'customer' objects in its 'inquiry-area-objects'.\n"
-        "    (3) if you every need to reassess a fact type (for example if you now think it was represented wrong in prior discussion) just send the new one in your DSR message; it will overwrite the current one.\n"
-        "\n"
-        "ORM is designed to encourage verbalization of fact types.\n"
-        "We encourage you to use such verbalizations in Task 2 as follow-up questions when the interviewees' response leaves you uncertain what fact type is intended.\n"
-        "For example, in Task 2 you might have discussed a fact type corresponding to the table above with rows 'Employee No.', 'Skill', and 'Certification Date' as described above.\n"
-        "But it was unclear whether or not they were keeping a history of certification dates or just a single date. In this case you might ask:\n"
-        "'Is it the case that you associate at most one Certification Date with each employee and skill?'\n"
-        "\n"
-          ;"The interview you conduct may prove to be rather complex and possibly long-running, but it is very important to our work, so we are giving you a big budget for question asking.\n"
         "Good luck!")
    :DS
    {:DS-id :data/orm
-    :exhausted? {:val false
+    :exhausted? {:val false ; ToDo: This might go away. Replace it with two properties determined by the orchestrator (ones you want to discuss now, ones to postpone).
                  :comment "You don't need to specify this property until you are ready to set its value to true, signifying that you believe that all areas of inquiry have been sufficiently investigated.\n"}
     :areas-we-intend-to-discuss {:val ["customer-orders", "workforce"]
                                  :comment "In Task 1, use this property to give names to the areas of inquiry you plan to discuss."}
@@ -357,12 +313,17 @@
 
 (defmethod dsu/ds-combine :data/orm
   [_tag scr ascr]
-  ;; Combine a new SCR with an existing ASCR for ORM.
-  ;; ORM uses the custom combine function to handle inquiry areas and fact types.
-  (let [stripped-scr (dsu/strip-annotations scr)]
-    (if (empty? ascr)
-      stripped-scr
-      (combine ascr stripped-scr))))
+  (log! :info (str "ORM ds-combine called"))
+  (log! :info (str "  SCR keys: " (keys scr)))
+  (log! :info (str "  ASCR keys before: " (keys ascr)))
+  (let [stripped-scr (dsu/strip-annotations scr)
+        _ (log! :info (str "  Stripped SCR keys: " (keys stripped-scr)))
+        _ (log! :info (str "  Stripped SCR: " (clj2json-pretty stripped-scr)))
+        result (if (empty? ascr)
+                 stripped-scr
+                 (combine ascr stripped-scr))]
+    (log! :info (str "  ASCR keys after: " (keys result)))
+    result))
 
 ;;; ------------------------------- checking for completeness ---------------
 ;;; (-> orm/orm :DS dsu/strip-annotations orm/completeness-test)
@@ -384,9 +345,10 @@
   []
   (if (s/valid? :orm/DS-message orm)
     (when-not (sdb/same-DS-instructions? orm)
-      (log! :info "Updating orm DS in resources and system DB.") ; You won't see this!
-      ;(sutil/update-resources-DS-json! orm)
-      (sdb/put-DS-instructions! orm))
+      (log! :info "The ORM DS is not longer used. See the three files in this directory that are its factors.")
+      #_(log! :info "Updating orm DS in resources and system DB.") ; You won't see this!
+      #_(sutil/update-resources-DS-json! orm)
+      #_(sdb/put-DS-instructions! orm))  ; NOT USED
     (throw (ex-info "Invalid DS message (orm)." {}))))
 
 (defstate orm-ds

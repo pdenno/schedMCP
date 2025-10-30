@@ -65,15 +65,76 @@
                ;; Handle both Clojure maps and Java Maps (including HashMap)
                (or (map? x) (instance? java.util.Map x))
                (into {} (map (fn [[k v]]
-                              [(if (string? k) (keyword k) k)
-                               (keywordize-keys v)])
-                            x))
+                               [(if (string? k) (keyword k) k)
+                                (keywordize-keys v)])
+                             x))
                (vector? x) (mapv keywordize-keys x)
                (instance? java.util.List x) (mapv keywordize-keys x)
                :else x))]
      (let [val (-> (.value state (name k))
                    (.orElse default-val))]
        (keywordize-keys val)))))
+
+(defn apply-node-update
+  "Apply a node update map to an AgentState, simulating LangGraph's state update.
+   Useful for testing nodes in isolation outside of graph execution.
+
+   Args:
+     state - The current AgentState
+     update-map - The Clojure map returned by a node (with keyword keys)
+
+   Returns:
+     A new AgentState with the updates merged in via the reducer channels.
+
+   Note: This manually applies reducers based on channel types. For ASCR, it uses
+   the ds-combine logic. For messages, it appends. For other fields, it overwrites.
+
+   Example:
+     (let [state (istate/interview-state->agent-state initial-state)
+           update-map (nodes/interpret-response state)  ; Returns {:ascr {...}}
+           new-state (apply-node-update state update-map)]
+       ;; new-state is an AgentState with ASCR merged in
+       ...)"
+  [^AgentState state update-map]
+  (let [;; Get current values
+        ds-id (get-state-value state :ds-id)
+        current-ascr (get-state-value state :ascr)
+        current-messages (get-state-value state :messages)
+        budget-left (get-state-value state :budget-left)
+        complete? (get-state-value state :complete?)
+        pid (get-state-value state :pid)
+        cid (get-state-value state :cid)
+        surrogate-instruction (get-state-value state :surrogate-instruction)
+
+        ;; Apply updates with proper reducer logic
+        new-ascr (if-let [ascr-update (:ascr update-map)]
+                   (if (and ds-id (not-empty ascr-update))
+                     (do
+                       (require '[sched-mcp.interviewing.ds-util :as dsu])
+                       ((resolve 'dsu/ds-combine) ds-id ascr-update current-ascr))
+                     (merge current-ascr ascr-update))
+                   current-ascr)
+
+        new-messages (if-let [msg-update (:messages update-map)]
+                       (vec (concat current-messages
+                                    (if (vector? msg-update) msg-update [msg-update])))
+                       current-messages)
+
+        new-budget (or (:budget-left update-map) budget-left)
+        new-complete? (if (contains? update-map :complete?) (:complete? update-map) complete?)
+
+        ;; Create new state map
+        state-map {"ds-id" ds-id
+                   "ascr" new-ascr
+                   "messages" new-messages
+                   "budget-left" new-budget
+                   "complete?" new-complete?
+                   "pid" pid
+                   "cid" cid
+                   "surrogate-instruction" surrogate-instruction}]
+
+    ;; Create new AgentState with updated values
+    (proxy [AgentState] [state-map])))
 
 (defn make-node-action
   "Wrap a Clojure function as a NodeAction.

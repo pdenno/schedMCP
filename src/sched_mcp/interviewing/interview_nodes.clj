@@ -5,6 +5,7 @@
    [sched-mcp.interviewing.ds-util :as dsu]
    [sched-mcp.interviewing.interview-state :as istate]
    [sched-mcp.llm :as llm]
+   [sched-mcp.sutil :as sutil]
    [sched-mcp.system-db :as sdb]
    [sched-mcp.tools.surrogate.sur-util :as suru]
    [sched-mcp.util :refer [log!]]))
@@ -54,10 +55,10 @@
                                       messages)
                                 (remove nil?))
            prompt (dsu/formulate-question-prompt
-                   {:ds-instructions (sdb/get-DS-instructions ds-id)
-                    :ascr ascr
+                   {:ascr ascr
                     :message-history message-history
-                    :budget-remaining budget-left})
+                    :budget-remaining budget-left
+                    :ds-instructions (sdb/get-DS-instructions ds-id)})
            result (llm/complete-json prompt :model-class :reason)
            question-text (get result :question-to-ask (:question result))]
 
@@ -72,9 +73,9 @@
    "get-answer-from-expert"
    (fn [state]
      (let [istate (istate/agent-state->interview-state state)
-           {:keys [messages pid]} istate
+           {:keys [messages pid cid surrogate-instruction]} istate
            last-question (when (seq messages) (:content (last messages)))
-           result (suru/surrogate-answer-question pid last-question)
+           result (suru/surrogate-answer-question pid last-question cid surrogate-instruction)
            answer-text (if (:error result)
                          (str "Error: " (:error result))
                          (:response result))]
@@ -92,7 +93,6 @@
    (fn [state]
      (let [istate (istate/agent-state->interview-state state)
            {:keys [ds-id ascr messages budget-left]} istate
-           ;; Build message history - LLM will look at the last entry for Q&A
            message-history (mapv (fn [msg]
                                    (cond
                                      (= (:from msg) :system) {:interviewer (:content msg)}
@@ -106,10 +106,14 @@
                     :ascr ascr
                     :budget-remaining budget-left})
            result (llm/complete-json prompt :model-class :interpret)
-           scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)] ; remove metadata from SCRs
+           scr (dissoc result :iviewr-failure :ascr/budget-left :ascr/id :ascr/dstruct)]
        (if (:iviewr-failure result)
-         (log! :warn (str "Interviewer reported failure: " (:iviewr-failure result)))
-         (log! :info (str "LangGraph interpreted response, extracted " (count (keys scr)) " fields")))
+         (do
+           (log! :warn (str "Interviewer reported failure: " (:iviewr-failure result)))
+           (log! :warn (str "SCR with failure: " (sutil/clj2json-pretty scr))))
+         (do
+           (log! :info (str "LangGraph interpreted response, extracted " (count (keys scr)) " fields"))
+           (log! :info (str "SCR content: " (sutil/clj2json-pretty scr)))))
        (istate/update-ascr scr)))
    state))
 

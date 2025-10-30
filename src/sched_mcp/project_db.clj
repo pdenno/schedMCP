@@ -342,6 +342,13 @@
     (d/transact (connect-atm pid)
                 {:tx-data [{:db/id eid :conversation/active-DS-id ds-id}]})))
 
+(defn retract-active-DS-id
+  "Retract :conversation/active-DS-id from a conversation"
+  [pid cid]
+  (let [eid (conversation-exists? pid cid)]
+    (d/transact (connect-atm pid)
+                {:tx-data [[:db/retract eid :conversation/active-DS-id]]})))
+
 (defn get-interview-progress
   "Get overall interview progress across all DS"
   [pid]
