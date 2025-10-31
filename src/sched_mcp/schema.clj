@@ -9,8 +9,7 @@
      - The project's name and db directory
      - system-level agents
      - See also db-schema-agent+ which gets merged into this."
-  {
-   ;; ------------------------------- Agent prompts
+  {;; ------------------------------- Agent prompts
    :agent-prompt/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword, :unique :db.unique/identity
         :doc "a keyword naming the agent using the prompt"}
@@ -25,7 +24,7 @@
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
         :doc "A unique ID for each Discovery Schema. The namespace of the keyword is the cid, e.g. :process/flow-shop."}
    :DS/interview-objective
-      #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "The objective of interviewing with this DS, (the string is also part of :DS/obj-str, but using this attribute, you can get just the objective, without all the detail."}
    :DS/obj-str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
@@ -90,9 +89,13 @@
         :doc "true if no more interviewing required on this ASCR."}
    :ascr/id
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword :unique :db.unique/identity
-        :doc "the discovery schema ID (DS-id) uniquely identifying the summary data structure."}
+        :doc "unique identifier for this ASCR instance, e.g. :area-of-inquiry/customer-demand for a specific ORM modeling ASCR."}
+   :ascr/type
+   #:db{:cardinality :db.cardinality/one, :valueType :db.type/keyword
+        :doc "the discovery schema ID (DS-id) that this ASCR follows, e.g. :data/orm-modeling. Validated against (sdb/discovery-schema?)."}
    :ascr/str
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+        :ext/edn-readable? true
         :doc "a string that can be edn/read-string to the data structure."}
 
    ;; ---------------------- box
@@ -171,6 +174,7 @@
         :doc "The DS-id of the discovery schema for which this question or answer is based."}
    :message/SCR
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
+        :ext/edn-readable? true
         :doc "a string that can be edn/read-string into a Schema-Conforming Response (SCR)."}
    :message/tags
    #:db{:cardinality :db.cardinality/many, :valueType :db.type/keyword
@@ -237,7 +241,6 @@
    :surrogate/system-instruction
    #:db{:cardinality :db.cardinality/one, :valueType :db.type/string
         :doc "the system instruction to the expert surrogate."}})
-
 
 (def db-schema-sys
   "Complete system database schema as Datahike schema list"

@@ -29,7 +29,7 @@
 
 ### Nesting
 - Minimize nesting levels by using proper control flow constructs
-- Use threading macros (`->`, `->>`) for sequential operations
+- Use threading macros (`->`, `->>`, `as->`) for sequential operations
 
 ### Function Design
 - Functions should generally do one thing
@@ -44,12 +44,12 @@
   - Use `str/starts-with?` instead of `.startsWith`
   - Use `str/includes?` instead of `.contains`
   - Use `str/blank?` instead of checking `.isEmpty` or `.trim`
-- Follow Clojure naming conventions (predicates end with `?`)
+- Follow Clojure naming conventions: predicates end with `?`, functions that change state end with `!`
 - Favor built-in Clojure functions that are more expressive and idiomatic
 
 ### REPL best pratices
 - Always reload namespaces with `:reload` flag: `(require '[namespace] :reload)`
-- Always change into namespaces that you are working on
+- Use namespace aliases found in `develop.repl/alias-map`; add to that map as new files are created
 
 ### Testing Best Practices
 - Always reload namespaces before running tests with `:reload` flag: `(require '[namespace] :reload)`
@@ -81,9 +81,9 @@
         "comment"
         ...) ; It is not like common-lisp!
       ```
-- **Use :diag or :admin metadata** on function definitions that are not referenced by other code and are only used at by developers and in the REPL.
+- **Use :diag or :admin metadata** on function definitions that are only used at by developers and in the REPL.
   ```clojure
     (defn ^:diag run-me-in-repl
     []
-    "Hi, Peter! No code calls me.")
+    "Hi, Peter! No ordinary code calls me.")
     ```

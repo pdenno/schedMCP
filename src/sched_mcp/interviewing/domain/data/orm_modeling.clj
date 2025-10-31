@@ -78,6 +78,7 @@
   {:message-type :DS-INSTRUCTIONS
    :budget-decrement 0.15
    :interviewer-agent :data
+   :multiple-instance? true
    :interview-objective
    (str "You are conducting Object-Role Modeling (ORM) for a SINGLE area of inquiry.\n"
         "The focus-area property tells you which area you are modeling.\n"

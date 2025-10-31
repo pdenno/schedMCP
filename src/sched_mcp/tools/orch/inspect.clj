@@ -8,6 +8,7 @@
    [malli.error :as me]
    [malli.util :as mu]
    [sched-mcp.project-db :as pdb]
+   [sched-mcp.system-db :as sdb]
    [sched-mcp.util :refer [log!]]))
 
 ;;; ============================== Malli Schemas ==============================
@@ -86,7 +87,7 @@
          :conversation-id cid
          :status status
          :message-count msg-count
-         :message (str "Conversation " cid " has status " status                        " but only contains " msg-count " messages")})
+         :message (str "Conversation " cid " has status " status " but only contains " msg-count " messages")})
 
       ;; Unknown status
       {:error :unknown-status
@@ -106,6 +107,86 @@
          :available-ids (vec conversation-ids)
          :message (str "Active conversation " active-id
                        " not found in conversations: " conversation-ids)}))))
+
+(defn preprocess-edn-readable
+  "Pre-process a project to parse EDN-readable string fields and add parsed values.
+   Adds :ascr/edn-read-value and :message/edn-read-value for fields marked :ext/edn-readable?"
+  [project]
+  (letfn [(parse-edn-safe [s]
+            (when (and s (string? s))
+              (try
+                (clojure.edn/read-string s)
+                (catch Exception _e
+                  nil))))
+          (process-ascr [ascr]
+            (if-let [str-val (:ascr/str ascr)]
+              (assoc ascr :ascr/edn-read-value (parse-edn-safe str-val))
+              ascr))
+          (process-message [msg]
+            (if-let [scr-str (:message/SCR msg)]
+              (assoc msg :message/edn-read-value (parse-edn-safe scr-str))
+              msg))
+          (process-conversation [conv]
+            (if-let [messages (:conversation/messages conv)]
+              (assoc conv :conversation/messages (mapv process-message messages))
+              conv))]
+    (cond-> project
+      (:project/ASCRs project)
+      (update :project/ASCRs #(mapv process-ascr %))
+
+      (:project/conversations project)
+      (update :project/conversations #(mapv process-conversation %)))))
+
+(defn validate-ascr-ds-ids
+  "Check that all ASCR types reference valid discovery schemas.
+   Returns vector of issue maps for invalid DS-ids, or empty vector if all valid"
+  [project]
+  (let [ascrs (:project/ASCRs project [])
+        valid-ds-ids (sdb/discovery-schema?)]
+    (->> ascrs
+         (map (fn [ascr]
+                (let [ascr-type (:ascr/type ascr)
+                      ascr-id (:ascr/id ascr)]
+                  (when-not (valid-ds-ids ascr-type)
+                    {:error :invalid-ascr-type
+                     :ascr-id ascr-id
+                     :ascr-type ascr-type
+                     :message (str "ASCR " ascr-id " references unknown discovery schema: " ascr-type)}))))
+         (remove nil?)
+         vec)))
+
+(defn validate-missing-orm-modeling
+  "Check for areas-of-inquiry that don't have corresponding orm-modeling ASCRs.
+   Returns vector of issue maps for missing ORM work, or empty vector if none"
+  [project]
+  (let [ascrs (:project/ASCRs project [])
+        ;; Find the areas-of-inquiry ASCR
+        areas-ascr (->> ascrs
+                        (filter #(= :data/areas-of-inquiry (:ascr/type %)))
+                        first)
+        areas (when areas-ascr
+                (-> areas-ascr :ascr/edn-read-value :areas-of-inquiry))
+
+        ;; Find all orm-modeling ASCR IDs
+        orm-ascr-ids (->> ascrs
+                          (filter #(= :data/orm-modeling (:ascr/type %)))
+                          (map :ascr/id)
+                          set)]
+
+    (if (and areas (seq areas))
+      ;; Check each area has corresponding ORM ASCR
+      (->> areas
+           (map (fn [area-name]
+                  (let [expected-id (keyword "area-of-inquiry" area-name)]
+                    (when-not (orm-ascr-ids expected-id)
+                      {:error :missing-orm-modeling
+                       :area-name area-name
+                       :expected-ascr-id expected-id
+                       :message (str "Area '" area-name "' listed in areas-of-inquiry but no ORM modeling ASCR found (expected " expected-id ")")}))))
+           (remove nil?)
+           vec)
+      ;; No areas-of-inquiry ASCR, so nothing to check
+      [])))
 
 ;;; ============================== Inspection Functions ==============================
 
@@ -143,18 +224,25 @@
     :schema-errors [...] ;; Malli schema violations
     :conversation-issues [...] ;; Status/message mismatches
     :active-conversation-issues [...] ;; Invalid active conversation
+    :ascr-issues [...] ;; Invalid ASCR DS-ids and missing ORM modeling
     :summary string}"
   [project-id]
-  (let [project (pdb/get-project project-id)
+  (let [raw-project (pdb/get-project project-id)
+        project (preprocess-edn-readable raw-project)
         schema-validation (validate-project-schema project)
         conversation-issues (find-conversation-issues project)
         active-conv-issue (find-active-conversation-issues project)
+        ascr-type-issues (validate-ascr-ds-ids project)
+        missing-orm-issues (validate-missing-orm-modeling project)
+
+        ascr-issues (concat ascr-type-issues missing-orm-issues)
 
         all-issues (concat
                     (when-not (:valid? schema-validation)
                       [(:errors schema-validation)])
                     conversation-issues
-                    (when active-conv-issue [active-conv-issue]))
+                    (when active-conv-issue [active-conv-issue])
+                    ascr-issues)
 
         issue-count (count all-issues)]
 
@@ -164,6 +252,7 @@
                       (:errors schema-validation))
      :conversation-issues conversation-issues
      :active-conversation-issues (when active-conv-issue [active-conv-issue])
+     :ascr-issues (vec ascr-issues)
      :issue-count issue-count
      :summary (if (zero? issue-count)
                 "Project structure is valid"
@@ -193,5 +282,11 @@
       (println "\n--- Active Conversation Issues ---")
       (doseq [issue active-issues]
         (println "  •" (:message issue))))
+
+    (when-let [ascr-issues (:ascr-issues result)]
+      (when (seq ascr-issues)
+        (println "\n--- ASCR Issues ---")
+        (doseq [issue ascr-issues]
+          (println "  •" (:message issue)))))
 
     result))

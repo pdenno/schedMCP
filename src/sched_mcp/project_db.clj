@@ -586,7 +586,6 @@
              (d/transact sys-conn
                          [{:project/id pid
                            :project/name pname
-                           :project/created-at (java.util.Date.)
                            :project/status :active}])))
 
          ;; Load content

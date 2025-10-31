@@ -215,12 +215,12 @@
       {:pid pid
        :status :deleted})))
 
-(defn ^:admin list-discovery-schema
-  "Administrative tool to list discovery schema."
+(defn discovery-schema?
+  "Return set of all discovery schema DS/id. Can be used as a predicate function."
   []
-  (d/q '[:find [?id ...]
-         :where [_ :DS/id ?id]]
-       @(connect-atm :system)))
+  (set (d/q '[:find [?type ...]
+              :where [_ :DS/id ?type]]
+            @(connect-atm :system))))
 
 (defn get-DS-instructions
   "Return the full discovery-schema instruction object identified by the argument ds-id."
@@ -254,7 +254,6 @@
               (sutil/delete-directory-recursive dir))))
         nil))
     (log! :warn (str "Delete-project: Project not found: " pid))))
-
 
 (defn store-agent-prompt!
   "Add the argument agent prompt to :system/agent-prompts."

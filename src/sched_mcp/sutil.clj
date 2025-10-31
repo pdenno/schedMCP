@@ -111,11 +111,11 @@
       (throw (ex-info (str "No such DB: " k) {:key k})))))
 
 (defn datahike-schema
-  "Create a Datahike-compatible schema from map-type schema with notes such as :mm/info."
+  "Create a Datahike-compatible schema from map-type schema with notes such as :mm/info and :ext/* extension properties."
   [schema]
   (reduce-kv (fn [r k v]
                (conj r (-> v
-                           (dissoc :mm/info)
+                           (dissoc :mm/info :ext/edn-readable?)
                            (assoc :db/ident k))))
              []
              schema))
@@ -215,7 +215,6 @@
                                           [(java.nio.file.StandardCopyOption/ATOMIC_MOVE)
                                            (java.nio.file.StandardCopyOption/REPLACE_EXISTING)]))))
 
-
 (defn markdown2html
   "Do heuristic light modification to the argument text to make it more like HTML.
    Specifically:
@@ -251,24 +250,24 @@
 
 ;;; OpenAI thing. This became complicated once I couldn't use strict schema results.
 #_(defn ai-response2clj
-  "Translate content to a clj object. The content is a string that contains a JSON object, and may wrap the object in unhelpful language
+    "Translate content to a clj object. The content is a string that contains a JSON object, and may wrap the object in unhelpful language
    markup indicating the language in which the object should be interpreted. The function takes an optional second argument which defaults to true.
    If instead, false (not just nil, but false, the boolean)  is provided as second argument, the original string is returned, rather
    than throwing on an error."
-  ([s-in] (ai-response2clj s-in true))
-  ([s-in throw-error?]
-   (try
-     (let [s (remove-preamble s-in)
-           m (ches/parse-string s)]
-       (letfn [(upk [obj]
-                 (cond (map? obj) (reduce-kv (fn [m k v] (assoc m (keyword k) (upk v))) {} obj)
-                       (vector? obj) (mapv upk obj)
-                       :else obj))]
-         (upk m)))
-     (catch Exception _e
-       (if (false? throw-error?)
-         s-in
-         (throw (ex-info "Could not read object returned (should be a string containing JSON):" {:s-in s-in})))))))
+    ([s-in] (ai-response2clj s-in true))
+    ([s-in throw-error?]
+     (try
+       (let [s (remove-preamble s-in)
+             m (ches/parse-string s)]
+         (letfn [(upk [obj]
+                   (cond (map? obj) (reduce-kv (fn [m k v] (assoc m (keyword k) (upk v))) {} obj)
+                         (vector? obj) (mapv upk obj)
+                         :else obj))]
+           (upk m)))
+       (catch Exception _e
+         (if (false? throw-error?)
+           s-in
+           (throw (ex-info "Could not read object returned (should be a string containing JSON):" {:s-in s-in})))))))
 
 (defn clj2json-pretty
   "Return a pprinted string for given clojure object."
@@ -277,10 +276,10 @@
   (json/write-str obj :indent true))
 
 #_(defn clj2json-pretty
-  "Return a pprinted string for given clojure object."
-  [obj]
-  (assert (not (nil? obj)))
-  (ches/generate-string obj {:pretty true}))
+    "Return a pprinted string for given clojure object."
+    [obj]
+    (assert (not (nil? obj)))
+    (ches/generate-string obj {:pretty true}))
 
 (defn update-resources-DS-json! [& _] (throw (ex-info "This should no longer be needed." {})))
 
