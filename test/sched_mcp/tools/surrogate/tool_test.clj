@@ -1,8 +1,7 @@
-(ns sched-mcp.tools.surrogate.core-test
+(ns sched-mcp.tools.surrogate.tool-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
-   [clojure.data.json :as json]
-   [sched-mcp.tools.surrogate.core :as sur]
+   [sched-mcp.tools.surrogate.tool :as sur]
    [sched-mcp.tools.surrogate.sur-util :as suru]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.sutil :as sutil]))

@@ -14,10 +14,10 @@
    [sched-mcp.project-db] ; For mount
    [sched-mcp.prompts :as prompts]
    [sched-mcp.system-db] ; For mount
-   [sched-mcp.tools.iviewr.core :as iviewr]
+   [sched-mcp.tools.iviewr.tool :as iviewr]
    [sched-mcp.tools.iviewr-tools] ; For mount
-   [sched-mcp.tools.orch.core :as orch]
-   [sched-mcp.tools.surrogate.core :as sur] ; For mount
+   [sched-mcp.tools.orch.tool :as orch]
+   [sched-mcp.tools.surrogate.tool :as sur] ; For mount
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.resources :as resources]
    [sched-mcp.util :as util :refer [log!]])

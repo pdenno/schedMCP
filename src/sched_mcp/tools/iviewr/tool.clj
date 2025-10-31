@@ -1,4 +1,4 @@
-(ns sched-mcp.tools.iviewr.core
+(ns sched-mcp.tools.iviewr.tool
   "Core interviewer tools for Discovery Schema based interviews
    These tools use LLMs to formulate questions and interpret responses"
   (:require
@@ -114,7 +114,4 @@ and build up the ASCR until the DS is complete or budget is exhausted. Returns t
 (defn create-iviewr-tools
   "Return a vector of the tool configurations for each tool in this file."
   []
-  [#_{:tool-type :formulate-question}
-   #_{:tool-type :interpret-response}
-   #_{:tool-type :get-current-ds}
-   {:tool-type :conduct-interview}])
+  [{:tool-type :conduct-interview}])

@@ -1,8 +1,9 @@
-(ns sched-mcp.tools.orch.core
+(ns sched-mcp.tools.orch.tool
   "Orchestrator tools for managing Discovery Schema flow"
   (:require
    [clojure.data.json :as json]
    [clojure.edn :as edn]
+   [sched-mcp.tools.orch.inspect :as inspect]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]

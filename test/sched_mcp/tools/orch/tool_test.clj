@@ -1,8 +1,8 @@
-(ns sched-mcp.tools.orch.core-test
+(ns sched-mcp.tools.orch.tool-test
   (:require
    [clojure.test :refer [deftest is testing use-fixtures]]
    [clojure.data.json :as json]
-   [sched-mcp.tools.orch.core :as orch]
+   [sched-mcp.tools.orch.tool :as orch]
    [sched-mcp.tool-system :as tool-system]
    [sched-mcp.project-db :as pdb]
    [sched-mcp.system-db :as sdb]
